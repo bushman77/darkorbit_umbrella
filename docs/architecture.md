@@ -1,4 +1,4 @@
-# Architecture through Milestone E.1
+# Architecture through Milestone E.2.1
 
 ## Umbrella boundaries
 
@@ -150,8 +150,42 @@ the endpoint.
 9. Right-click selection and the target-nearest button remain available as
    alternatives to left-click selection.
 10. All included graphics are original placeholders. A versioned client catalog
-   separates ships, NPCs, lasers, explosions, drones, and backgrounds so later
-   art changes do not alter networking or simulation code.
+    separates ships, NPCs, lasers, explosions, drones, and backgrounds so later
+    art changes do not alter networking or simulation code.
+
+## Cockpit presentation invariants
+
+1. `CockpitWindowManager` is a presentation-only boundary. It owns window
+   position, visibility, collapsed state, focus order, editing lock state, and
+   local persistence; it does not submit or mutate movement, targeting,
+   combat, health, cooldown, or entity state.
+2. Each managed panel has a stable `data-cockpit-window` identifier and one
+   dedicated header handle. Pointer dragging is available only when the HUD is
+   unlocked, uses pointer capture, and is cancelled on pointer cancellation,
+   capture loss, window blur, hidden documents, lock, or teardown.
+3. Cockpit pointer events stop at the panel boundary. Normal panel buttons stay
+   interactive while locked, and the independent space canvas remains the only
+   pointer-navigation input surface.
+4. Layout payload version 1 stores only finite window coordinates, visibility,
+   collapsed state, and HUD lock state under
+   `darkorbit:cockpit-layout:v1:player:<numeric-player-id>`. Authentication
+   tokens and world state are never persisted. Parse, schema, quota, and
+   storage-access failures fall back without interrupting gameplay.
+5. Desktop coordinates are clamped against header and hotbar safe areas on
+   restore, drag, keyboard movement, collapse, visibility changes, and resize.
+   Below 720 CSS pixels or 620 CSS pixels in height, windows enter a
+   horizontally scrollable dock and floating drag input is disabled.
+6. Ship status and target information consume the same authoritative entities
+   already used by the renderer. Collapsing or hiding presentation cannot alter
+   selection, engagement, attacks, movement, cooldowns, or server state.
+7. `MinimapRenderer` owns the sole minimap canvas and its resize-observer
+   lifecycle. It projects interpolated entity positions into authoritative map
+   boundaries at a throttled 20-frame-per-second ceiling; it has no travel or
+   command submission path in E.2.1.
+8. The action hotbar remains outside the managed window stage and anchored at
+   bottom center. The window-manager keyboard handler consumes only arrow keys
+   on focused drag handles while unlocked, leaving combat and hotbar shortcuts
+   to the existing guarded control path.
 
 ## Test baseline
 
@@ -175,12 +209,21 @@ simultaneous players. JavaScript tests cover pointer-navigation preservation,
 left-click selection without movement, render-dimension hit testing, all ten
 number keys, safe empty actions and input guards, combat-facing precedence,
 moving-target rotation, navigation-facing restoration, and authoritative
-health updates.
+health updates. Cockpit tests additionally cover drag lock state, collapse,
+visibility, reset, versioned persistence, corrupt storage fallback, clamping,
+responsive docking, pointer cleanup, canvas isolation, keyboard access,
+reduced motion, and minimap projection, throttling, and lifecycle cleanup. The
+authenticated game-page test asserts three stable cockpit windows and exactly
+one minimap canvas.
 
 ## Known baseline limitations
 
-- The full Milestone E.1 combat acceptance flow and two-player observation have
-  not been manually verified in browser sessions.
+- Milestone E.1 navigation, NPC targeting, persistent laser engagement, combat
+  facing, and circular combat maneuvering were manually verified. Broader
+  two-player observation remains deferred.
+- The E.2.1 cockpit has not been manually verified in a browser at the target
+  desktop and mobile viewport sizes.
+- The minimap remains display-only until E.2.2 adds interactive navigation.
 - Destroyed player respawning, ammunition, loot, rewards, PvP, portals,
   spatial partitioning, persistence/recovery for live map state, and multi-node
   world ownership are not implemented.
@@ -190,6 +233,7 @@ health updates.
 
 ## Next vertical slice
 
-After manual browser acceptance, the next combat slice can add explicit player
-recovery and server-owned rewards/ammunition while retaining map-process
-authority and keeping persistence operations outside the simulation tick.
+After manual E.2.1 browser acceptance, E.2.2 can add interactive minimap
+navigation while retaining map-process movement authority. Multiplayer
+expansion, broader two-browser validation, player recovery, and server-owned
+rewards or ammunition remain deferred.

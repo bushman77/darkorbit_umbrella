@@ -12,10 +12,16 @@ import {
   desiredEntityAngle,
   smoothAngle,
 } from "./combat_controls.mjs"
+import {CockpitWindowManager} from "./cockpit_window_manager.mjs"
+import {MinimapRenderer} from "./minimap_renderer.mjs"
 import {PointerNavigation} from "./pointer_navigation.mjs"
 
 const clamp = (value, minimum, maximum) => Math.min(Math.max(value, minimum), maximum)
 const number = value => new Intl.NumberFormat("en-US", {maximumFractionDigits: 0}).format(value || 0)
+const titleize = value => String(value || "hostile npc")
+  .split(/[_-]+/)
+  .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+  .join(" ")
 
 const seededRandom = seed => {
   let value = seed >>> 0
@@ -61,6 +67,16 @@ class SpaceClient {
       return
     }
 
+    this.cockpit = new CockpitWindowManager({
+      root: this.root.querySelector("#cockpit-interface"),
+      playerId: this.root.dataset.layoutPlayerId,
+    }).start()
+    this.minimap = new MinimapRenderer({
+      canvas: this.root.querySelector("#cockpit-minimap-canvas"),
+      getEntities: () => this.entities.values(),
+      getBoundaries: () => this.boundaries,
+      getSelfId: () => this.selfId,
+    }).start()
     this.assets.preload()
     this.resize()
     window.addEventListener("resize", () => this.resize())
@@ -478,6 +494,7 @@ class SpaceClient {
     this.lastFrame = time
     this.interpolate(deltaSeconds)
     this.draw(time)
+    this.minimap?.draw(time)
     this.updateCoordinates()
     this.updateCombatHud()
     requestAnimationFrame(nextTime => this.frame(nextTime))
@@ -550,7 +567,6 @@ class SpaceClient {
     for (const entity of orderedEntities) this.drawEntity(entity, time)
 
     this.drawCombatEffects(time)
-    this.drawMinimap()
   }
 
   drawStars(time) {
@@ -836,40 +852,6 @@ class SpaceClient {
     context.stroke()
   }
 
-  drawMinimap() {
-    const context = this.context
-    const mapWidth = this.viewport.width < 640 ? 118 : 166
-    const mapHeight = mapWidth * (this.boundaries.height / this.boundaries.width)
-    const x = this.viewport.width - mapWidth - 20
-    const y = this.viewport.width < 640 ? 86 : 98
-    context.save()
-    context.fillStyle = "rgba(2, 6, 23, 0.78)"
-    context.strokeStyle = "rgba(103, 232, 249, 0.35)"
-    context.lineWidth = 1
-    context.beginPath()
-    context.roundRect(x - 8, y - 20, mapWidth + 16, mapHeight + 30, 10)
-    context.fill()
-    context.stroke()
-    context.fillStyle = "rgba(148, 163, 184, 0.8)"
-    context.font = "600 9px ui-sans-serif"
-    context.textAlign = "left"
-    context.fillText("MAP BOUNDARY", x, y - 7)
-    context.strokeStyle = "rgba(103, 232, 249, 0.6)"
-    context.strokeRect(x, y, mapWidth, mapHeight)
-
-    for (const entity of this.entities.values()) {
-      const dotX = x + (entity.render.x / this.boundaries.width) * mapWidth
-      const dotY = y + (entity.render.y / this.boundaries.height) * mapHeight
-      context.fillStyle = entity.kind === "npc"
-        ? "#fb923c"
-        : entity.id === this.selfId ? "#67e8f9" : "#c4b5fd"
-      context.beginPath()
-      context.arc(dotX, dotY, entity.id === this.selfId ? 2.5 : 2, 0, Math.PI * 2)
-      context.fill()
-    }
-    context.restore()
-  }
-
   worldToScreen(position) {
     return {
       x: position.x - this.camera.x + this.viewport.width / 2,
@@ -884,6 +866,8 @@ class SpaceClient {
     this.text("#hud-config", `C-${configuration.number}`)
     this.text("#hud-hp", `${number(stats.hit_points)} / ${number(stats.hit_points)}`)
     this.text("#hud-shields", `${number(stats.shields)} / ${number(stats.shields)}`)
+    this.text("#hud-compact-hp", number(stats.hit_points))
+    this.text("#hud-compact-shields", number(stats.shields))
     this.text("#hud-speed", `${number(stats.speed)} u/s`)
     this.root.querySelector("#hud-hp-bar").style.width = "100%"
     this.root.querySelector("#hud-shield-bar").style.width = stats.shields > 0 ? "100%" : "0%"
@@ -906,6 +890,8 @@ class SpaceClient {
     if (ownShip) {
       this.text("#hud-hp", `${number(ownShip.hull)} / ${number(ownShip.maxHull)}`)
       this.text("#hud-shields", `${number(ownShip.shields)} / ${number(ownShip.maxShields)}`)
+      this.text("#hud-compact-hp", number(ownShip.hull))
+      this.text("#hud-compact-shields", number(ownShip.shields))
       this.setWidth("#hud-hp-bar", healthPercent(ownShip.hull, ownShip.maxHull))
       this.setWidth("#hud-shield-bar", healthPercent(ownShip.shields, ownShip.maxShields))
     }
@@ -914,12 +900,16 @@ class SpaceClient {
 
     const target = this.entities.get(this.selectedTargetId)
     const panel = this.root.querySelector("#combat-target-panel")
+    const empty = this.root.querySelector("#combat-target-empty")
     if (!panel) return
 
     if (target?.kind === "npc") {
       panel.classList.remove("hidden")
+      empty?.classList.add("hidden")
       this.text("#combat-target-name", target.displayName || "Hostile")
       const engagement = ownShip?.engagedTargetId === target.id ? "ENGAGED" : "SELECTED"
+      this.text("#combat-target-summary", `${target.displayName || "Hostile"} · ${engagement}`)
+      this.text("#combat-target-type", `Hostile NPC · ${titleize(target.npcTypeId)}`)
       this.text(
         "#combat-target-state",
         `${engagement} · ${(target.state || "idle").toUpperCase()} · ${number(target.attackRange)}u weapons`
@@ -930,6 +920,8 @@ class SpaceClient {
       this.setWidth("#combat-target-shield-bar", healthPercent(target.shields, target.maxShields))
     } else {
       panel.classList.add("hidden")
+      empty?.classList.remove("hidden")
+      this.text("#combat-target-summary", "No target")
     }
   }
 

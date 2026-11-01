@@ -36,6 +36,7 @@ test("combat keys ignore repeat, modifiers, and editable controls", () => {
   assert.equal(combatKeyIntent({code: "Digit1", ctrlKey: true}), null)
   assert.equal(combatKeyIntent({code: "Digit1", target: target("input")}), null)
   assert.equal(combatKeyIntent({code: "Space", target: {isContentEditable: true}}), null)
+  assert.equal(combatKeyIntent({code: "Space", target: target("data-cockpit-drag-handle")}), null)
 })
 
 test("engaged target facing overrides movement and follows target movement", () => {

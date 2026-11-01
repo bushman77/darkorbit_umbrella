@@ -89,9 +89,39 @@
 - `mix compile --warnings-as-errors`, `mix precommit`, `mix assets.build`, and `git diff --check` pass.
 - `mix test` passes with 84 tests: 37 Core, 30 persistence, and 17 web/channel tests.
 - The JavaScript suite passes 21 tests across 16 top-level cases, including all prior pointer-navigation regressions.
-- Manual browser verification was not performed; the acceptance flow and two-browser observation remain required before graphical sign-off.
+- Manual browser verification confirmed navigation, NPC targeting, persistent laser engagement, combat facing, and circular combat maneuvering.
+- Broader two-browser observation remains deferred.
 
 #### Limitations
 
 - Slots 2 through 0 intentionally have no assigned action. Ammunition, rockets, abilities, consumables, and equipment assignment remain future work.
 - Destroyed player recovery, rewards, loot, PvP, and persistent/multi-node live world state remain out of scope.
+
+### Milestone E.2.1 — Modular cockpit HUD, movable windows, and persistent layouts
+
+#### Added
+
+- Added a reusable cockpit window manager with unique window IDs, desktop defaults, title-bar-only Pointer Event dragging, pointer capture, focus ordering, viewport clamping, lock/unlock mode, collapse/expand, hide/restore, reset, and keyboard arrow positioning.
+- Added versioned, failure-safe local layout persistence namespaced by the non-sensitive numeric player ID. Position, visibility, collapsed state, and HUD lock state survive refreshes; incompatible or malformed data safely falls back to current defaults.
+- Converted ship telemetry and authoritative target/combat telemetry into standardized cyan/blue and hostile orange cockpit windows while preserving every existing combat action and health indicator.
+- Replaced the minimap painted into the main space canvas with one dedicated, resize-aware, throttled minimap canvas that consumes the same interpolated entity collection and authoritative map boundaries.
+- Added a compact cockpit settings surface, window visibility menu, narrow-screen horizontal dock, reduced-motion behavior, and pointer boundaries that prevent cockpit interactions from reaching the navigation canvas.
+- Kept the ten-slot action hotbar anchored at bottom center and outside the window manager, preserving number-row, Space, Esc, click, empty-slot, and authoritative cooldown behavior.
+
+#### Tests
+
+- Added JavaScript coverage for unlocked and locked dragging, title-bar capture cleanup, collapse/expand, hide/restore, defaults reset, persistence/restoration, corrupted or unavailable storage, viewport clamping, resize docking, canvas input isolation, keyboard movement, hotbar-key preservation, reduced motion, minimap projection, render throttling, and lifecycle cleanup.
+- Extended the authenticated game-page test to verify the per-player layout namespace, exactly three cockpit windows, one minimap canvas, the HUD controls, and the unchanged hotbar surface.
+
+#### Verification
+
+- `mix compile --warnings-as-errors`, `mix test`, `mix precommit`, `mix assets.build`, and `git diff --check` pass.
+- `mix test` passes with 84 tests: 37 Core, 30 persistence, and 17 web/channel tests.
+- `npm test` passes 38 JavaScript tests across 29 top-level cases, including all existing navigation and combat regressions.
+- Manual browser verification of the E.2.1 cockpit has not been performed. The complete layout-editing, persistence, resize, navigation, and combat acceptance flow remains required before graphical sign-off.
+
+#### Limitations
+
+- The E.2.1 minimap is intentionally display-only. Click-to-travel is planned for E.2.2.
+- Layouts are local to one browser profile and are not synchronized through the account database.
+- Broader multiplayer validation, multiplayer expansion, recovery, rewards, ammunition, loot, PvP, and persistent or multi-node live world state remain deferred.

@@ -14,7 +14,9 @@ const HOTBAR_CODES = Object.freeze({
 export const hotbarSlotForCode = code => HOTBAR_CODES[code] || null
 
 export const inputControl = target => Boolean(
-  target?.matches?.("input, textarea, select, button, [contenteditable='true']") ||
+  target?.matches?.(
+    "input, textarea, select, button, [contenteditable='true'], [data-cockpit-drag-handle]"
+  ) ||
   target?.isContentEditable
 )
 

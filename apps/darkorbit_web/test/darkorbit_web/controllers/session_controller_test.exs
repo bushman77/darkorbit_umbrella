@@ -27,13 +27,26 @@ defmodule DarkorbitWeb.SessionControllerTest do
 
     conn = get(conn, ~p"/play")
     response = html_response(conn, 200)
-    assert response =~ ~s(id="game-client")
-    assert response =~ ~s(id="space-viewport")
-    assert response =~ ~s(data-map-id="1-1")
-    assert response =~ ~s(id="action-hotbar")
-    assert response =~ ~s(id="hotbar-slot-1")
-    assert response =~ ~s(data-action-id="pulse_emitter")
-    assert response =~ ~s(id="hotbar-slot-10")
+    document = LazyHTML.from_document(response)
+
+    assert Enum.count(
+             LazyHTML.query(
+               document,
+               "#game-client[data-map-id='1-1'][data-layout-player-id='#{account.id}']"
+             )
+           ) == 1
+
+    assert Enum.count(LazyHTML.query(document, "#space-viewport")) == 1
+    assert Enum.count(LazyHTML.query(document, "#action-hotbar")) == 1
+
+    assert Enum.count(LazyHTML.query(document, "#hotbar-slot-1[data-action-id='pulse_emitter']")) ==
+             1
+
+    assert Enum.count(LazyHTML.query(document, "#hotbar-slot-10")) == 1
+    assert Enum.count(LazyHTML.query(document, "[data-cockpit-window]")) == 3
+    assert Enum.count(LazyHTML.query(document, "#cockpit-minimap-canvas")) == 1
+    assert Enum.count(LazyHTML.query(document, "#cockpit-lock-toggle")) == 1
+    assert Enum.count(LazyHTML.query(document, "#cockpit-reset-layout")) == 1
 
     conn = delete(conn, ~p"/logout")
     assert redirected_to(conn) == ~p"/login"

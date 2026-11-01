@@ -119,7 +119,18 @@ Inspired by:
 - Responsive bottom-center slots `1` through `0` use server-defined action data, with the pulse emitter in slot 1 and safe empty placeholders in slots 2 through 0
 - Space, number-row keys, click activation, Esc cancellation, active/selected/empty/cooldown states, and input-control/key-repeat guards are implemented
 
-Graphical ship flight and continuous mouse navigation were manually verified during Milestone D.1. The complete Milestone E.1 browser encounter and two-player browser observation flow are covered by automated tests but have not yet been manually verified.
+Manual browser verification confirmed navigation, NPC targeting, persistent laser engagement, combat facing, and circular combat maneuvering for Milestone E.1. Broader multiplayer browser validation remains deferred.
+
+### Milestone E.2.1 — Modular cockpit HUD and persistent layouts
+
+- Ship status, target information, and the minimap now use one reusable cockpit-window system with unique identifiers, dedicated drag handles, focus ordering, collapse controls, and a window visibility menu
+- Unlock/lock editing, Pointer Events with capture cleanup, keyboard positioning, viewport clamping, reset-to-default behavior, and versioned per-player browser persistence are implemented without changing authoritative simulation behavior
+- The previous main-canvas minimap was replaced by one dedicated, resize-aware minimap canvas driven by the existing interpolated world entities and authoritative map boundaries
+- The ten-slot action hotbar remains anchored at bottom center, outside the movable window layer, with its existing click, number-row, Space, Esc, and cooldown behavior preserved
+- Narrow viewports use a horizontally scrollable cockpit dock instead of free-floating windows, keeping panels recoverable after resize
+- Automated coverage exercises drag lock state, collapse, visibility, reset, persistence, malformed storage, clamping, resize mode, pointer cleanup/input isolation, keyboard behavior, reduced motion, and minimap projection/lifecycle
+
+The E.2.1 code and automated verification are complete. Manual browser verification of the new cockpit at the target viewport sizes has not yet been performed.
 
 ---
 
@@ -147,6 +158,7 @@ Graphical ship flight and continuous mouse navigation were manually verified dur
 - Continuous click-and-hold client navigation ✅
 - NPC spawning, AI, combat, destruction, and respawning ✅
 - Persistent tick-owned player combat engagement and independent combat facing ✅
+- Modular local cockpit layout and standalone minimap rendering ✅
 
 ### 5. Real-Time Layer (movement and PvE slices complete)
 - Authenticated Channels and sockets ✅
@@ -187,7 +199,9 @@ Principles:
 
 ## ⚠️ Known Gaps
 
-- Two-player browser synchronization and the Milestone E.1 combat encounter await manual browser verification
+- The E.2.1 cockpit still requires manual browser verification at 1366×768, 1920×1080, 2560×1440, and mobile-sized viewports
+- Two-player synchronization and broader multiplayer browser validation remain deferred
+- The minimap is display-only; interactive minimap navigation is planned for Milestone E.2.2
 - Destroyed player recovery, ammunition, loot, rewards, and PvP are not implemented
 - Live map state is ephemeral, single-node, and has no crash recovery or spatial partitioning
 - Initial map, NPC, and combat balance values remain provisional
@@ -197,6 +211,7 @@ Principles:
 
 ## ✅ Immediate Next Task
 
-Manually exercise the complete Milestone E.1 acceptance flow in two browser
-sessions, then design player recovery and reward handling without moving combat
-authority out of `Core.World.MapServer`.
+Manually verify the complete E.2.1 cockpit acceptance flow at the supported
+viewport sizes, then implement Milestone E.2.2 interactive minimap navigation
+without moving movement authority out of `Core.World.MapServer`. Multiplayer
+expansion and broader two-browser validation remain deferred.
