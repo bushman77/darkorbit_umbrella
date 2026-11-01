@@ -359,7 +359,8 @@
           <canvas
             id="cockpit-minimap-canvas"
             class="block aspect-[5/3] w-full"
-            aria-label="Sector minimap showing the player, allied pilots, hostile NPCs, and map boundaries."
+            aria-label="Interactive sector minimap. Left-click within the sector boundary to set a server-authoritative travel destination."
+            aria-describedby="minimap-navigation-status"
           >
             Your browser needs Canvas 2D support to display the minimap.
           </canvas>
@@ -367,7 +368,11 @@
             <span><i class="bg-cyan-300"></i>You</span>
             <span><i class="bg-violet-300"></i>Pilots</span>
             <span><i class="bg-orange-400"></i>Hostiles</span>
+            <span><i class="cockpit-minimap-destination-key"></i>Course</span>
           </div>
+          <p id="minimap-navigation-status" class="cockpit-minimap-status" aria-live="polite">
+            Awaiting sector link
+          </p>
         </div>
       </section>
     </div>

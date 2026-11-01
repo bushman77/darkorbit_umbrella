@@ -212,6 +212,19 @@ export class CockpitWindowManager {
     this.persist()
   }
 
+  windowContentInteractive(id) {
+    const state = this.layout?.windows?.[id]
+    const element = this.windows.get(id)
+
+    return Boolean(
+      this.layout?.locked &&
+      state?.visible &&
+      !state.collapsed &&
+      element &&
+      !element.hidden
+    )
+  }
+
   focusWindow(id) {
     const element = this.windows.get(id)
     if (!element) return

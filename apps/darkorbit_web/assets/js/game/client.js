@@ -13,10 +13,18 @@ import {
   smoothAngle,
 } from "./combat_controls.mjs"
 import {CockpitWindowManager} from "./cockpit_window_manager.mjs"
-import {MinimapRenderer} from "./minimap_renderer.mjs"
+import {MinimapNavigation, MinimapRenderer} from "./minimap_renderer.mjs"
 import {PointerNavigation} from "./pointer_navigation.mjs"
 
 const clamp = (value, minimum, maximum) => Math.min(Math.max(value, minimum), maximum)
+const validDestination = (destination, boundaries) =>
+  destination &&
+  Number.isFinite(destination.x) &&
+  Number.isFinite(destination.y) &&
+  destination.x >= 0 &&
+  destination.x <= boundaries.width &&
+  destination.y >= 0 &&
+  destination.y <= boundaries.height
 const number = value => new Intl.NumberFormat("en-US", {maximumFractionDigits: 0}).format(value || 0)
 const titleize = value => String(value || "hostile npc")
   .split(/[_-]+/)
@@ -76,7 +84,17 @@ class SpaceClient {
       getEntities: () => this.entities.values(),
       getBoundaries: () => this.boundaries,
       getSelfId: () => this.selfId,
+      getDestination: () => this.commandDestination,
     }).start()
+    this.minimapNavigation = new MinimapNavigation({
+      canvas: this.root.querySelector("#cockpit-minimap-canvas"),
+      getBoundaries: () => this.boundaries,
+      sendDestination: destination => this.sendDestination(destination),
+      canNavigate: () =>
+        this.cockpit?.windowContentInteractive("minimap") === true &&
+        Boolean(this.selfId) &&
+        this.channel?.state === "joined",
+    }).attach()
     this.assets.preload()
     this.resize()
     window.addEventListener("resize", () => this.resize())
@@ -251,6 +269,13 @@ class SpaceClient {
           : -Math.PI / 2,
       })
     }
+
+    if (id === this.selfId) {
+      this.commandDestination = entity.status !== "destroyed" && validDestination(destination, this.boundaries)
+        ? {...destination}
+        : null
+      this.updateNavigationStatus()
+    }
   }
 
   destinationForPointer(pointer) {
@@ -262,12 +287,21 @@ class SpaceClient {
   }
 
   sendDestination(destination) {
-    if (!this.channel || !this.selfId) return false
+    if (!validDestination(destination, this.boundaries)) return false
+    if (!this.channel || !this.selfId || this.channel.state !== "joined") {
+      this.showError("Navigation is unavailable while the sector relay reconnects.")
+      return false
+    }
 
-    this.commandDestination = destination
     this.channel
       .push("move", destination, 5000)
-      .receive("error", response => this.showError(`Navigation rejected: ${response.reason}`))
+      .receive("ok", response => {
+        if (response.entity) this.upsertEntity(response.entity)
+      })
+      .receive("error", response => {
+        this.showError(`Navigation rejected: ${response.reason}`)
+        this.updateNavigationStatus()
+      })
       .receive("timeout", () => this.showError("Navigation command timed out."))
 
     return true
@@ -883,6 +917,21 @@ class SpaceClient {
     const ownShip = this.entities.get(this.selfId)
     if (!ownShip) return
     this.text("#hud-coordinates", `${number(ownShip.render.x)} / ${number(ownShip.render.y)}`)
+  }
+
+  updateNavigationStatus() {
+    const ownShip = this.entities.get(this.selfId)
+    let status = "Awaiting sector link"
+
+    if (ownShip?.status === "destroyed") {
+      status = "Navigation unavailable"
+    } else if (this.commandDestination) {
+      status = `Course locked · ${number(this.commandDestination.x)} / ${number(this.commandDestination.y)}`
+    } else if (ownShip) {
+      status = "Click sector to set course"
+    }
+
+    this.text("#minimap-navigation-status", status)
   }
 
   updateCombatHud() {
