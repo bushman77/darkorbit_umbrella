@@ -98,6 +98,15 @@ Properties:
 - No ghost items
 - Fully deterministic
 
+### ✅ Milestone D.1 — Continuous Mouse Navigation
+
+- Single-click destination setting remains available
+- Click-and-hold continuously steers toward the pointer at approximately 10 commands per second
+- Pointer destinations are recalculated as the camera follows the ship
+- Pointer capture, cancellation, focus loss, and hidden-tab cleanup are handled safely
+- Near-ship and redundant retargets are suppressed to avoid jitter and unnecessary traffic
+- The client still sends destination intent only; boundary validation, position, and speed remain server-owned
+
 ---
 
 ## 🚧 Next Major Milestones
@@ -122,6 +131,7 @@ Properties:
 - Supervised starting map (1-1)
 - Server-owned player positioning and bounded movement
 - Configurable deterministic simulation ticks
+- Continuous click-and-hold client navigation ✅
 - NPC spawning
 
 ### 5. Real-Time Layer (PubSub foundation complete)

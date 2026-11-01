@@ -1,0 +1,6 @@
+{
+  "private": true,
+  "scripts": {
+    "test": "node --test js/game/pointer_navigation_test.mjs"
+  }
+}

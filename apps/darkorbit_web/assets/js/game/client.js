@@ -1,5 +1,6 @@
 import {Socket} from "phoenix"
 import {GraphicsAssets} from "./asset_catalog"
+import {PointerNavigation} from "./pointer_navigation.mjs"
 
 const clamp = (value, minimum, maximum) => Math.min(Math.max(value, minimum), maximum)
 const entityKey = id => String(id)
@@ -45,7 +46,12 @@ class SpaceClient {
     this.assets.preload()
     this.resize()
     window.addEventListener("resize", () => this.resize())
-    this.canvas.addEventListener("pointerdown", event => this.navigate(event))
+    this.navigation = new PointerNavigation({
+      canvas: this.canvas,
+      destinationForPointer: pointer => this.destinationForPointer(pointer),
+      shipPosition: () => this.entities.get(this.selfId)?.target,
+      sendDestination: destination => this.sendDestination(destination),
+    }).attach()
     this.connect()
     requestAnimationFrame(time => this.frame(time))
   }
@@ -140,20 +146,24 @@ class SpaceClient {
     }
   }
 
-  navigate(event) {
-    if (!this.channel || !this.selfId || event.button !== 0) return
-
+  destinationForPointer(pointer) {
     const rect = this.canvas.getBoundingClientRect()
-    const destination = {
-      x: clamp(event.clientX - rect.left + this.camera.x - this.viewport.width / 2, 0, this.boundaries.width),
-      y: clamp(event.clientY - rect.top + this.camera.y - this.viewport.height / 2, 0, this.boundaries.height),
+    return {
+      x: clamp(pointer.clientX - rect.left + this.camera.x - this.viewport.width / 2, 0, this.boundaries.width),
+      y: clamp(pointer.clientY - rect.top + this.camera.y - this.viewport.height / 2, 0, this.boundaries.height),
     }
+  }
+
+  sendDestination(destination) {
+    if (!this.channel || !this.selfId) return false
 
     this.commandDestination = destination
     this.channel
       .push("move", destination, 5000)
       .receive("error", response => this.showError(`Navigation rejected: ${response.reason}`))
       .receive("timeout", () => this.showError("Navigation command timed out."))
+
+    return true
   }
 
   frame(time) {
