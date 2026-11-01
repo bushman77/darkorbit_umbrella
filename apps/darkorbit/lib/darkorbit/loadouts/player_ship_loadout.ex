@@ -14,12 +14,21 @@ defmodule Darkorbit.Loadouts.PlayerShipLoadout do
   end
 
   @doc false
-  def changeset(player_ship_loadout, attrs) do
+  def creation_changeset(player_ship_loadout, player_ship_id, attrs) do
     player_ship_loadout
-    |> cast(attrs, [:player_ship_id, :config_no, :lasers, :generators, :drones])
+    |> change(player_ship_id: player_ship_id)
+    |> cast(attrs, [:config_no, :lasers, :generators, :drones])
     |> validate_required([:player_ship_id, :config_no, :lasers, :generators, :drones])
     |> validate_inclusion(:config_no, [1, 2])
     |> foreign_key_constraint(:player_ship_id)
     |> unique_constraint([:player_ship_id, :config_no])
+    |> check_constraint(:config_no, name: :player_ship_loadouts_config_no_range)
+  end
+
+  @doc false
+  def equipment_changeset(player_ship_loadout, attrs) do
+    player_ship_loadout
+    |> cast(attrs, [:lasers, :generators, :drones])
+    |> validate_required([:lasers, :generators, :drones])
   end
 end

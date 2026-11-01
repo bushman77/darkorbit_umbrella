@@ -28,7 +28,10 @@ defmodule Darkorbit.DataCase do
   end
 
   setup tags do
-    Darkorbit.DataCase.setup_sandbox(tags)
+    unless tags[:unboxed] do
+      Darkorbit.DataCase.setup_sandbox(tags)
+    end
+
     :ok
   end
 

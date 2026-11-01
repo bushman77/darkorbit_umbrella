@@ -29,6 +29,9 @@ config :darkorbit, Darkorbit.Mailer, adapter: Swoosh.Adapters.Test
 # Disable swoosh api client as it is only required for production adapters
 config :swoosh, :api_client, false
 
+# Keep account tests fast while exercising the same bcrypt code path.
+config :bcrypt_elixir, log_rounds: 4
+
 # Initialize plugs at runtime for faster test compilation
 config :phoenix, :plug_init_mode, :runtime
 

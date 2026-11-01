@@ -1,59 +1,30 @@
 defmodule Darkorbit.PreferencesTest do
   use Darkorbit.DataCase
 
+  import Darkorbit.AccountsFixtures
+
   alias Darkorbit.Preferences
 
-  describe "player_settings" do
-    alias Darkorbit.Preferences.PlayerSetting
+  test "default settings are provisioned idempotently" do
+    account = player_account_fixture()
+    original = Preferences.get_setting_by_user_id(account.id)
 
-    import Darkorbit.PreferencesFixtures
+    assert original.settings == %{"version" => "live"}
+    assert {:ok, same_setting} = Preferences.create_default_settings_for_account(account.id)
+    assert same_setting.id == original.id
+  end
 
-    @invalid_attrs %{settings: nil}
+  test "updates are scoped by the owning account id" do
+    account = player_account_fixture()
+    other_account = player_account_fixture()
 
-    test "list_player_settings/0 returns all player_settings" do
-      player_setting = player_setting_fixture()
-      assert Preferences.list_player_settings() == [player_setting]
-    end
+    assert {:ok, updated} =
+             Preferences.update_settings(account.id, %{
+               "version" => "live",
+               "show_minimap" => false
+             })
 
-    test "get_player_setting!/1 returns the player_setting with given id" do
-      player_setting = player_setting_fixture()
-      assert Preferences.get_player_setting!(player_setting.id) == player_setting
-    end
-
-    test "create_player_setting/1 with valid data creates a player_setting" do
-      valid_attrs = %{settings: %{}}
-
-      assert {:ok, %PlayerSetting{} = player_setting} = Preferences.create_player_setting(valid_attrs)
-      assert player_setting.settings == %{}
-    end
-
-    test "create_player_setting/1 with invalid data returns error changeset" do
-      assert {:error, %Ecto.Changeset{}} = Preferences.create_player_setting(@invalid_attrs)
-    end
-
-    test "update_player_setting/2 with valid data updates the player_setting" do
-      player_setting = player_setting_fixture()
-      update_attrs = %{settings: %{}}
-
-      assert {:ok, %PlayerSetting{} = player_setting} = Preferences.update_player_setting(player_setting, update_attrs)
-      assert player_setting.settings == %{}
-    end
-
-    test "update_player_setting/2 with invalid data returns error changeset" do
-      player_setting = player_setting_fixture()
-      assert {:error, %Ecto.Changeset{}} = Preferences.update_player_setting(player_setting, @invalid_attrs)
-      assert player_setting == Preferences.get_player_setting!(player_setting.id)
-    end
-
-    test "delete_player_setting/1 deletes the player_setting" do
-      player_setting = player_setting_fixture()
-      assert {:ok, %PlayerSetting{}} = Preferences.delete_player_setting(player_setting)
-      assert_raise Ecto.NoResultsError, fn -> Preferences.get_player_setting!(player_setting.id) end
-    end
-
-    test "change_player_setting/1 returns a player_setting changeset" do
-      player_setting = player_setting_fixture()
-      assert %Ecto.Changeset{} = Preferences.change_player_setting(player_setting)
-    end
+    refute updated.settings["show_minimap"]
+    assert Preferences.get_setting_by_user_id(other_account.id).settings == %{"version" => "live"}
   end
 end

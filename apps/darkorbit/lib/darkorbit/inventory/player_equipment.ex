@@ -12,11 +12,19 @@ defmodule Darkorbit.Inventory.PlayerEquipment do
   end
 
   @doc false
-  def changeset(player_equipment, attrs) do
+  def creation_changeset(player_equipment, user_id, attrs) do
     player_equipment
-    |> cast(attrs, [:user_id, :items, :skill_points])
+    |> change(user_id: user_id)
+    |> cast(attrs, [:items, :skill_points])
     |> validate_required([:user_id, :items, :skill_points])
     |> foreign_key_constraint(:user_id)
     |> unique_constraint(:user_id)
+  end
+
+  @doc false
+  def items_changeset(player_equipment, items) when is_map(items) do
+    player_equipment
+    |> change(items: items)
+    |> validate_required([:items])
   end
 end

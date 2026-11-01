@@ -41,7 +41,7 @@ defmodule Darkorbit.MixProject do
       {:ecto_sql, "~> 3.13"},
       {:postgrex, ">= 0.0.0"},
       {:jason, "~> 1.2"},
-{:bcrypt_elixir, "~> 3.3"},
+      {:bcrypt_elixir, "~> 3.3"},
       {:swoosh, "~> 1.16"},
       {:req, "~> 0.5"}
     ]

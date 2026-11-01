@@ -5,6 +5,7 @@ defmodule Darkorbit.Umbrella.MixProject do
     [
       apps_path: "apps",
       version: "0.1.0",
+      elixir: "~> 1.15",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       aliases: aliases(),
@@ -50,7 +51,12 @@ defmodule Darkorbit.Umbrella.MixProject do
     [
       # run `mix setup` in all child apps
       setup: ["cmd mix setup"],
-      precommit: ["compile --warnings-as-errors", "deps.unlock --unused", "format", "test"]
+      precommit: [
+        "compile --warnings-as-errors",
+        "deps.unlock --unused",
+        "format",
+        "test"
+      ]
     ]
   end
 end

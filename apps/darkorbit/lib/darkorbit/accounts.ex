@@ -1,134 +1,64 @@
 defmodule Darkorbit.Accounts do
   @moduledoc """
-  The Accounts context.
+  Account registration, authentication, and server-owned account lifecycle.
+
+  Registration provisions the complete starter state in one database
+  transaction. Player-controlled input is restricted to identity credentials.
   """
 
   import Ecto.Query, warn: false
-  alias Darkorbit.Repo
 
   alias Darkorbit.Accounts.PlayerAccount
   alias Darkorbit.Fleet
+  alias Darkorbit.Inventory
+  alias Darkorbit.Preferences
+  alias Darkorbit.Repo
+  alias Darkorbit.Titles
+  alias Ecto.Multi
 
-  @doc """
-  Returns the list of player_accounts.
+  def list_player_accounts, do: Repo.all(PlayerAccount)
 
-  ## Examples
-
-      iex> list_player_accounts()
-      [%PlayerAccount{}, ...]
-
-  """
-  def list_player_accounts do
-    Repo.all(PlayerAccount)
-  end
-
-  @doc """
-  Gets a single player_account.
-
-  Raises `Ecto.NoResultsError` if the Player account does not exist.
-
-  ## Examples
-
-      iex> get_player_account!(123)
-      %PlayerAccount{}
-
-      iex> get_player_account!(456)
-      ** (Ecto.NoResultsError)
-
-  """
   def get_player_account!(id), do: Repo.get!(PlayerAccount, id)
-
-  def register_account(attrs) do
-    alias Ecto.Multi
-    alias Darkorbit.Inventory
-    alias Darkorbit.Preferences
-    alias Darkorbit.Titles
-
-    verification = %{
-      "verified" => false,
-      "hash" => :crypto.strong_rand_bytes(16) |> Base.encode16(case: :lower)
-    }
-
-    data = %{}
-
-    session_id =
-      :crypto.strong_rand_bytes(32)
-      |> Base.encode16(case: :lower)
-
-    attrs =
-      attrs
-      |> Map.put("password_hash", Bcrypt.hash_pwd_salt(attrs["password"]))
-      |> Map.put("verification", verification)
-      |> Map.put("data", data)
-      |> Map.put("session_id", session_id)
-      |> Map.put("faction_id", 0)
-      |> Map.put("clan_id", 0)
-      |> Map.put("old_pilot_names", %{"history" => []})
-      |> Map.put("ship_id", 1)
-      |> Map.put("rank_id", 1)
-      |> Map.put("experience", 0)
-      |> Map.put("honor", 0)
-      |> Map.put("credits", 0)
-      |> Map.put("uridium", 0)
-      |> Map.put("level", 1)
-      |> Map.put("version", "live")
-
-    Multi.new()
-    |> Multi.insert(
-      :player_account,
-      PlayerAccount.changeset(%PlayerAccount{}, attrs)
-    )
-    |> Multi.run(:player_ships, fn _repo, %{player_account: account} ->
-      Fleet.create_starter_ships_for_account(account.id)
-    end)
-    |> Multi.run(:player_equipment, fn _repo, %{player_account: account} ->
-      Inventory.create_default_equipment_for_account(account.id)
-    end)
-    |> Multi.run(:player_settings, fn _repo, %{player_account: account} ->
-      Preferences.create_default_settings_for_account(account.id)
-    end)
-    |> Multi.run(:player_titles, fn _repo, %{player_account: account} ->
-      Titles.create_default_titles_for_account(account.id)
-    end)
-    |> Repo.transaction()
-    |> case do
-      {:ok,
-       %{
-         player_account: account,
-         player_equipment: _equipment,
-         player_settings: _settings,
-         player_titles: _titles
-       }} ->
-        {:ok, account}
-
-      {:error, :player_account, changeset, _changes_so_far} ->
-        {:error, changeset}
-
-      {:error, _step, reason, _changes_so_far} ->
-        {:error, reason}
-    end
-  end
 
   def get_by_username(username) when is_binary(username) do
     Repo.get_by(PlayerAccount, username: username)
   end
 
   @doc """
-  Updates a player_account.
-
-  ## Examples
-
-      iex> update_player_account(player_account, %{field: new_value})
-      {:ok, %PlayerAccount{}}
-
-      iex> update_player_account(player_account, %{field: bad_value})
-      {:error, %Ecto.Changeset{}}
-
+  Registers an account and atomically provisions its inventory, settings,
+  titles, starter ship, and both starter loadouts.
   """
-  def update_player_account(%PlayerAccount{} = player_account, attrs) do
-    player_account
-    |> PlayerAccount.changeset(attrs)
-    |> Repo.update()
+  def register_account(attrs) when is_map(attrs) do
+    account = %PlayerAccount{
+      session_id: random_token(32),
+      verification: %{"verified" => false, "hash" => random_token(16)}
+    }
+
+    Multi.new()
+    |> Multi.insert(:player_account, PlayerAccount.registration_changeset(account, attrs))
+    |> Multi.run(:player_ships, fn _repo, %{player_account: player_account} ->
+      Fleet.create_starter_ships_for_account(player_account.id)
+    end)
+    |> Multi.run(:player_equipment, fn _repo, %{player_account: player_account} ->
+      Inventory.create_default_equipment_for_account(player_account.id)
+    end)
+    |> Multi.run(:player_settings, fn _repo, %{player_account: player_account} ->
+      Preferences.create_default_settings_for_account(player_account.id)
+    end)
+    |> Multi.run(:player_titles, fn _repo, %{player_account: player_account} ->
+      Titles.create_default_titles_for_account(player_account.id)
+    end)
+    |> Repo.transaction()
+    |> case do
+      {:ok, %{player_account: player_account}} ->
+        {:ok, %{player_account | password: nil}}
+
+      {:error, :player_account, changeset, _changes_so_far} ->
+        {:error, changeset}
+
+      {:error, step, reason, _changes_so_far} ->
+        {:error, {:provisioning_failed, step, reason}}
+    end
   end
 
   def authenticate_by_username_and_password(username, password)
@@ -147,74 +77,91 @@ defmodule Darkorbit.Accounts do
         end
 
       nil ->
+        Bcrypt.no_user_verify()
         {:error, :invalid_credentials}
     end
   end
 
   def verify_account(user_id, hash) when is_integer(user_id) and is_binary(hash) do
-    case Repo.get(PlayerAccount, user_id) do
-      %PlayerAccount{} = account ->
-        verification = account.verification || %{}
+    Repo.transaction(fn ->
+      account = lock_account(user_id)
 
-        cond do
-          verification["verified"] == true ->
-            {:error, :already_verified}
-
-          verification["hash"] != hash ->
-            {:error, :invalid_hash}
-
-          true ->
-            new_verification =
-              verification
-              |> Map.put("verified", true)
-
-            account
-            |> PlayerAccount.changeset(%{"verification" => new_verification})
-            |> Repo.update()
-        end
-
-      nil ->
-        {:error, :not_found}
-    end
+      if account do
+        verify_locked_account(account, hash)
+      else
+        Repo.rollback(:not_found)
+      end
+    end)
   end
 
   def login_account(username, password)
       when is_binary(username) and is_binary(password) do
-    case authenticate_by_username_and_password(username, password) do
-      {:ok, %PlayerAccount{} = account} ->
-        new_session_id =
-          :crypto.strong_rand_bytes(32)
-          |> Base.encode16(case: :lower)
-
-        account
-        |> PlayerAccount.changeset(%{"session_id" => new_session_id})
-        |> Repo.update()
-
-      {:error, reason} ->
-        {:error, reason}
+    with {:ok, %PlayerAccount{} = account} <-
+           authenticate_by_username_and_password(username, password) do
+      account
+      |> PlayerAccount.system_changeset(%{"session_id" => random_token(32)})
+      |> Repo.update()
     end
   end
 
-  def select_company(%PlayerAccount{} = account, company) when is_binary(company) do
-    faction_id =
-      case company do
-        "mmo" -> 1
-        "eic" -> 2
-        "vru" -> 3
-        _ -> nil
-      end
+  def select_company(user_id, company) when is_integer(user_id) and is_binary(company) do
+    faction_id = Map.get(%{"mmo" => 1, "eic" => 2, "vru" => 3}, company)
+
+    if is_nil(faction_id) do
+      {:error, :invalid_company}
+    else
+      Repo.transaction(fn ->
+        case lock_account(user_id) do
+          nil ->
+            Repo.rollback(:not_found)
+
+          %PlayerAccount{faction_id: current_faction} when current_faction in [1, 2, 3] ->
+            Repo.rollback(:already_selected)
+
+          %PlayerAccount{} = account ->
+            account
+            |> PlayerAccount.system_changeset(%{"faction_id" => faction_id})
+            |> Repo.update()
+            |> case do
+              {:ok, updated_account} -> updated_account
+              {:error, changeset} -> Repo.rollback(changeset)
+            end
+        end
+      end)
+    end
+  end
+
+  defp verify_locked_account(account, hash) do
+    verification = account.verification || %{}
 
     cond do
-      faction_id == nil ->
-        {:error, :invalid_company}
+      verification["verified"] == true ->
+        Repo.rollback(:already_verified)
 
-      account.faction_id in [1, 2, 3] ->
-        {:error, :already_selected}
+      verification["hash"] != hash ->
+        Repo.rollback(:invalid_hash)
 
       true ->
         account
-        |> PlayerAccount.changeset(%{"faction_id" => faction_id})
+        |> PlayerAccount.system_changeset(%{
+          "verification" => Map.put(verification, "verified", true)
+        })
         |> Repo.update()
+        |> case do
+          {:ok, verified_account} -> verified_account
+          {:error, changeset} -> Repo.rollback(changeset)
+        end
     end
+  end
+
+  defp lock_account(user_id) do
+    from(account in PlayerAccount, where: account.id == ^user_id, lock: "FOR UPDATE")
+    |> Repo.one()
+  end
+
+  defp random_token(bytes) do
+    bytes
+    |> :crypto.strong_rand_bytes()
+    |> Base.encode16(case: :lower)
   end
 end

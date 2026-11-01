@@ -9,8 +9,9 @@ defmodule Core.MixProject do
       config_path: "../../config/config.exs",
       deps_path: "../../deps",
       lockfile: "../../mix.lock",
-      elixir: "~> 1.20-rc",
+      elixir: "~> 1.15",
       start_permanent: Mix.env() == :prod,
+      aliases: aliases(),
       deps: deps()
     ]
   end
@@ -30,5 +31,9 @@ defmodule Core.MixProject do
       # {:dep_from_git, git: "https://github.com/elixir-lang/my_dep.git", tag: "0.1.0"},
       # {:sibling_app_in_umbrella, in_umbrella: true}
     ]
+  end
+
+  defp aliases do
+    [setup: ["deps.get"]]
   end
 end

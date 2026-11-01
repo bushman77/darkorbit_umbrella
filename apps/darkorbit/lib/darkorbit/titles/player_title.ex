@@ -11,11 +11,19 @@ defmodule Darkorbit.Titles.PlayerTitle do
   end
 
   @doc false
-  def changeset(player_title, attrs) do
+  def creation_changeset(player_title, user_id, attrs) do
     player_title
-    |> cast(attrs, [:user_id, :titles])
+    |> change(user_id: user_id)
+    |> cast(attrs, [:titles])
     |> validate_required([:user_id, :titles])
     |> foreign_key_constraint(:user_id)
     |> unique_constraint(:user_id)
+  end
+
+  @doc false
+  def titles_changeset(player_title, attrs) do
+    player_title
+    |> cast(attrs, [:titles])
+    |> validate_required([:titles])
   end
 end

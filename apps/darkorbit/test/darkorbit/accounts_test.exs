@@ -1,77 +1,123 @@
 defmodule Darkorbit.AccountsTest do
   use Darkorbit.DataCase
 
+  import Darkorbit.AccountsFixtures
+
   alias Darkorbit.Accounts
+  alias Darkorbit.Accounts.PlayerAccount
+  alias Darkorbit.Fleet
+  alias Darkorbit.Inventory
+  alias Darkorbit.Loadouts
+  alias Darkorbit.Preferences
+  alias Darkorbit.Repo
+  alias Darkorbit.Titles
 
-  describe "player_accounts" do
-    alias Darkorbit.Accounts.PlayerAccount
+  describe "register_account/1" do
+    test "atomically provisions all starter state" do
+      attrs = unique_account_attributes()
 
-    import Darkorbit.AccountsFixtures
+      assert {:ok, %PlayerAccount{} = account} = Accounts.register_account(attrs)
+      assert account.username == attrs.username
+      assert account.faction_id == 0
+      assert account.ship_id == 1
+      assert account.credits == 0
+      assert account.uridium == 0
+      assert account.level == 1
+      assert account.password == nil
+      assert Bcrypt.verify_pass(attrs.password, account.password_hash)
 
-    @invalid_attrs %{data: nil, username: nil, session_id: nil, verification: nil, email: nil, password_hash: nil, pilot_name: nil, faction_id: nil, clan_id: nil, old_pilot_names: nil}
+      assert Inventory.get_equipment_by_user_id(account.id)
+      assert Preferences.get_setting_by_user_id(account.id)
+      assert Titles.get_title_by_user_id(account.id)
 
-    test "list_player_accounts/0 returns all player_accounts" do
-      player_account = player_account_fixture()
-      assert Accounts.list_player_accounts() == [player_account]
+      assert [starter_ship] = Fleet.list_ships_for_user(account.id)
+      assert starter_ship.ship_id == 1
+
+      assert [configuration_one, configuration_two] =
+               Loadouts.list_loadouts_for_player_ship(starter_ship.id)
+
+      assert configuration_one.config_no == 1
+      assert configuration_two.config_no == 2
     end
 
-    test "get_player_account!/1 returns the player_account with given id" do
-      player_account = player_account_fixture()
-      assert Accounts.get_player_account!(player_account.id) == player_account
+    test "ignores client attempts to set authoritative state" do
+      attrs =
+        unique_account_attributes(%{
+          credits: 99_999,
+          uridium: 99_999,
+          experience: 99_999,
+          faction_id: 3,
+          ship_id: 999,
+          password_hash: "client-controlled"
+        })
+
+      assert {:ok, account} = Accounts.register_account(attrs)
+      assert account.credits == 0
+      assert account.uridium == 0
+      assert account.experience == 0
+      assert account.faction_id == 0
+      assert account.ship_id == 1
+      refute account.password_hash == "client-controlled"
     end
 
-    test "create_player_account/1 with valid data creates a player_account" do
-      valid_attrs = %{data: %{}, username: "some username", session_id: "some session_id", verification: %{}, email: "some email", password_hash: "some password_hash", pilot_name: "some pilot_name", faction_id: 42, clan_id: 42, old_pilot_names: %{}}
+    test "returns a changeset and persists nothing for invalid input" do
+      before_count = Repo.aggregate(PlayerAccount, :count)
 
-      assert {:ok, %PlayerAccount{} = player_account} = Accounts.create_player_account(valid_attrs)
-      assert player_account.data == %{}
-      assert player_account.username == "some username"
-      assert player_account.session_id == "some session_id"
-      assert player_account.verification == %{}
-      assert player_account.email == "some email"
-      assert player_account.password_hash == "some password_hash"
-      assert player_account.pilot_name == "some pilot_name"
-      assert player_account.faction_id == 42
-      assert player_account.clan_id == 42
-      assert player_account.old_pilot_names == %{}
+      assert {:error, changeset} =
+               Accounts.register_account(%{
+                 username: "bad value",
+                 email: "not-an-email",
+                 pilot_name: "x",
+                 password: "short"
+               })
+
+      refute changeset.valid?
+      assert Repo.aggregate(PlayerAccount, :count) == before_count
     end
 
-    test "create_player_account/1 with invalid data returns error changeset" do
-      assert {:error, %Ecto.Changeset{}} = Accounts.create_player_account(@invalid_attrs)
+    test "rejects passwords longer than bcrypt's byte limit" do
+      attrs = unique_account_attributes(%{password: String.duplicate("🚀", 19)})
+
+      assert {:error, changeset} = Accounts.register_account(attrs)
+      assert "should be at most 72 bytes" in errors_on(changeset).password
     end
 
-    test "update_player_account/2 with valid data updates the player_account" do
-      player_account = player_account_fixture()
-      update_attrs = %{data: %{}, username: "some updated username", session_id: "some updated session_id", verification: %{}, email: "some updated email", password_hash: "some updated password_hash", pilot_name: "some updated pilot_name", faction_id: 43, clan_id: 43, old_pilot_names: %{}}
+    test "enforces unique identity fields" do
+      attrs = unique_account_attributes()
+      assert {:ok, _account} = Accounts.register_account(attrs)
+      assert {:error, changeset} = Accounts.register_account(attrs)
+      assert "has already been taken" in errors_on(changeset).username
+    end
+  end
 
-      assert {:ok, %PlayerAccount{} = player_account} = Accounts.update_player_account(player_account, update_attrs)
-      assert player_account.data == %{}
-      assert player_account.username == "some updated username"
-      assert player_account.session_id == "some updated session_id"
-      assert player_account.verification == %{}
-      assert player_account.email == "some updated email"
-      assert player_account.password_hash == "some updated password_hash"
-      assert player_account.pilot_name == "some updated pilot_name"
-      assert player_account.faction_id == 43
-      assert player_account.clan_id == 43
-      assert player_account.old_pilot_names == %{}
+  describe "authentication and onboarding" do
+    test "requires verification, validates credentials, and rotates the session on login" do
+      attrs = unique_account_attributes()
+      account = player_account_fixture(attrs)
+
+      assert {:error, :unverified} =
+               Accounts.authenticate_by_username_and_password(attrs.username, attrs.password)
+
+      assert {:error, :invalid_credentials} =
+               Accounts.authenticate_by_username_and_password(attrs.username, "wrong-password")
+
+      hash = account.verification["hash"]
+      assert {:ok, verified} = Accounts.verify_account(account.id, hash)
+      assert verified.verification["verified"]
+      assert {:error, :already_verified} = Accounts.verify_account(account.id, hash)
+
+      old_session_id = verified.session_id
+      assert {:ok, logged_in} = Accounts.login_account(attrs.username, attrs.password)
+      refute logged_in.session_id == old_session_id
     end
 
-    test "update_player_account/2 with invalid data returns error changeset" do
-      player_account = player_account_fixture()
-      assert {:error, %Ecto.Changeset{}} = Accounts.update_player_account(player_account, @invalid_attrs)
-      assert player_account == Accounts.get_player_account!(player_account.id)
-    end
+    test "selects a company only once" do
+      account = player_account_fixture()
 
-    test "delete_player_account/1 deletes the player_account" do
-      player_account = player_account_fixture()
-      assert {:ok, %PlayerAccount{}} = Accounts.delete_player_account(player_account)
-      assert_raise Ecto.NoResultsError, fn -> Accounts.get_player_account!(player_account.id) end
-    end
-
-    test "change_player_account/1 returns a player_account changeset" do
-      player_account = player_account_fixture()
-      assert %Ecto.Changeset{} = Accounts.change_player_account(player_account)
+      assert {:error, :invalid_company} = Accounts.select_company(account.id, "unknown")
+      assert {:ok, selected} = Accounts.select_company(account.id, "eic")
+      assert selected.faction_id == 2
+      assert {:error, :already_selected} = Accounts.select_company(selected.id, "mmo")
     end
   end
 end

@@ -1,65 +1,109 @@
 defmodule Darkorbit.LoadoutsTest do
   use Darkorbit.DataCase
 
+  import Darkorbit.AccountsFixtures
+
+  alias Darkorbit.Fleet
+  alias Darkorbit.Inventory
   alias Darkorbit.Loadouts
 
-  describe "player_ship_loadouts" do
-    alias Darkorbit.Loadouts.PlayerShipLoadout
+  test "equipping, replacing, and unequipping preserve equipment" do
+    account = player_account_fixture()
+    [ship] = Fleet.list_ships_for_user(account.id)
+    [configuration_one, _configuration_two] = Loadouts.list_loadouts_for_player_ship(ship.id)
 
-    import Darkorbit.LoadoutsFixtures
+    assert {:ok, _equipment} = Inventory.add_lasers(account.id, "lf1", 1)
 
-    @invalid_attrs %{generators: nil, config_no: nil, lasers: nil, drones: nil}
+    assert {:ok, equipped} =
+             Loadouts.equip_laser_from_inventory(
+               account.id,
+               configuration_one.id,
+               "ship",
+               0,
+               "lf1"
+             )
 
-    test "list_player_ship_loadouts/0 returns all player_ship_loadouts" do
-      player_ship_loadout = player_ship_loadout_fixture()
-      assert Loadouts.list_player_ship_loadouts() == [player_ship_loadout]
-    end
+    assert Enum.at(equipped.lasers["ship"], 0) == "lf1"
+    assert Inventory.laser_count(account.id, "lf1") == 0
 
-    test "get_player_ship_loadout!/1 returns the player_ship_loadout with given id" do
-      player_ship_loadout = player_ship_loadout_fixture()
-      assert Loadouts.get_player_ship_loadout!(player_ship_loadout.id) == player_ship_loadout
-    end
+    assert {:ok, _equipment} = Inventory.add_lasers(account.id, "lf2", 1)
 
-    test "create_player_ship_loadout/1 with valid data creates a player_ship_loadout" do
-      valid_attrs = %{generators: %{}, config_no: 42, lasers: %{}, drones: %{}}
+    assert {:ok, replaced} =
+             Loadouts.equip_laser_from_inventory(
+               account.id,
+               configuration_one.id,
+               "ship",
+               0,
+               "lf2"
+             )
 
-      assert {:ok, %PlayerShipLoadout{} = player_ship_loadout} = Loadouts.create_player_ship_loadout(valid_attrs)
-      assert player_ship_loadout.generators == %{}
-      assert player_ship_loadout.config_no == 42
-      assert player_ship_loadout.lasers == %{}
-      assert player_ship_loadout.drones == %{}
-    end
+    assert Enum.at(replaced.lasers["ship"], 0) == "lf2"
+    assert Inventory.laser_count(account.id, "lf1") == 1
+    assert Inventory.laser_count(account.id, "lf2") == 0
 
-    test "create_player_ship_loadout/1 with invalid data returns error changeset" do
-      assert {:error, %Ecto.Changeset{}} = Loadouts.create_player_ship_loadout(@invalid_attrs)
-    end
+    assert {:ok, unequipped} =
+             Loadouts.unequip_laser_to_inventory(
+               account.id,
+               configuration_one.id,
+               "ship",
+               0
+             )
 
-    test "update_player_ship_loadout/2 with valid data updates the player_ship_loadout" do
-      player_ship_loadout = player_ship_loadout_fixture()
-      update_attrs = %{generators: %{}, config_no: 43, lasers: %{}, drones: %{}}
+    assert Enum.at(unequipped.lasers["ship"], 0) == nil
+    assert Inventory.laser_count(account.id, "lf2") == 1
+  end
 
-      assert {:ok, %PlayerShipLoadout{} = player_ship_loadout} = Loadouts.update_player_ship_loadout(player_ship_loadout, update_attrs)
-      assert player_ship_loadout.generators == %{}
-      assert player_ship_loadout.config_no == 43
-      assert player_ship_loadout.lasers == %{}
-      assert player_ship_loadout.drones == %{}
-    end
+  test "validates slot bounds and capacity before consuming inventory" do
+    account = player_account_fixture()
+    [ship] = Fleet.list_ships_for_user(account.id)
+    [loadout | _rest] = Loadouts.list_loadouts_for_player_ship(ship.id)
+    assert {:ok, _equipment} = Inventory.add_lasers(account.id, "lf1", 1)
 
-    test "update_player_ship_loadout/2 with invalid data returns error changeset" do
-      player_ship_loadout = player_ship_loadout_fixture()
-      assert {:error, %Ecto.Changeset{}} = Loadouts.update_player_ship_loadout(player_ship_loadout, @invalid_attrs)
-      assert player_ship_loadout == Loadouts.get_player_ship_loadout!(player_ship_loadout.id)
-    end
+    assert {:error, :invalid_slot} =
+             Loadouts.equip_laser_from_inventory(account.id, loadout.id, "ship", -1, "lf1")
 
-    test "delete_player_ship_loadout/1 deletes the player_ship_loadout" do
-      player_ship_loadout = player_ship_loadout_fixture()
-      assert {:ok, %PlayerShipLoadout{}} = Loadouts.delete_player_ship_loadout(player_ship_loadout)
-      assert_raise Ecto.NoResultsError, fn -> Loadouts.get_player_ship_loadout!(player_ship_loadout.id) end
-    end
+    assert {:error, :slot_locked} =
+             Loadouts.equip_laser_from_inventory(account.id, loadout.id, "ship", 1, "lf1")
 
-    test "change_player_ship_loadout/1 returns a player_ship_loadout changeset" do
-      player_ship_loadout = player_ship_loadout_fixture()
-      assert %Ecto.Changeset{} = Loadouts.change_player_ship_loadout(player_ship_loadout)
-    end
+    assert {:error, :invalid_location} =
+             Loadouts.equip_laser_from_inventory(account.id, loadout.id, "cargo", 0, "lf1")
+
+    assert Inventory.laser_count(account.id, "lf1") == 1
+  end
+
+  test "requires the acting account to own the loadout" do
+    owner = player_account_fixture()
+    attacker = player_account_fixture()
+    [ship] = Fleet.list_ships_for_user(owner.id)
+    [loadout | _rest] = Loadouts.list_loadouts_for_player_ship(ship.id)
+    assert {:ok, _equipment} = Inventory.add_lasers(attacker.id, "lf1", 1)
+
+    assert {:error, :loadout_not_found} =
+             Loadouts.equip_laser_from_inventory(
+               attacker.id,
+               loadout.id,
+               "ship",
+               0,
+               "lf1"
+             )
+
+    assert Inventory.laser_count(attacker.id, "lf1") == 1
+    persisted = Loadouts.get_player_ship_loadout!(loadout.id)
+    assert Enum.at(persisted.lasers["ship"], 0) == nil
+  end
+
+  test "re-equipping the same laser is idempotent" do
+    account = player_account_fixture()
+    [ship] = Fleet.list_ships_for_user(account.id)
+    [loadout | _rest] = Loadouts.list_loadouts_for_player_ship(ship.id)
+    assert {:ok, _equipment} = Inventory.add_lasers(account.id, "lf1", 1)
+
+    assert {:ok, _loadout} =
+             Loadouts.equip_laser_from_inventory(account.id, loadout.id, "ship", 0, "lf1")
+
+    assert {:ok, _loadout} =
+             Loadouts.equip_laser_from_inventory(account.id, loadout.id, "ship", 0, "lf1")
+
+    assert Inventory.laser_count(account.id, "lf1") == 0
   end
 end

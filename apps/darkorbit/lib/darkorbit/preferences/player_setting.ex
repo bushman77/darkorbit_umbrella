@@ -11,11 +11,19 @@ defmodule Darkorbit.Preferences.PlayerSetting do
   end
 
   @doc false
-  def changeset(player_setting, attrs) do
+  def creation_changeset(player_setting, user_id, attrs) do
     player_setting
-    |> cast(attrs, [:user_id, :settings])
+    |> change(user_id: user_id)
+    |> cast(attrs, [:settings])
     |> validate_required([:user_id, :settings])
     |> foreign_key_constraint(:user_id)
     |> unique_constraint(:user_id)
+  end
+
+  @doc false
+  def settings_changeset(player_setting, attrs) do
+    player_setting
+    |> cast(attrs, [:settings])
+    |> validate_required([:settings])
   end
 end
