@@ -1,6 +1,6 @@
 {
   "private": true,
   "scripts": {
-    "test": "node --test js/game/pointer_navigation_test.mjs js/game/combat_client_test.mjs"
+    "test": "node --test js/game/*_test.mjs"
   }
 }

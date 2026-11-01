@@ -7,7 +7,7 @@
   <canvas
     id="space-viewport"
     class="absolute inset-0 size-full cursor-crosshair touch-none"
-    aria-label="Interactive sector 1-1 space viewport. Left-click or hold to navigate. Right-click an NPC to target it."
+    aria-label="Interactive sector 1-1 space viewport. Left-click an NPC to target it, or left-click and hold empty space to navigate."
   >
     Your browser needs Canvas 2D support to run the space client.
   </canvas>
@@ -64,7 +64,7 @@
           Combat relay
         </p>
         <p id="combat-status" role="status" class="mt-1.5 text-xs text-slate-400">
-          Right-click a hostile or target the nearest signal.
+          Left-click a hostile, then press Space to engage.
         </p>
       </div>
       <div class="grid size-9 shrink-0 place-items-center rounded-xl bg-orange-300/10 text-orange-200">
@@ -136,15 +136,72 @@
         type="button"
         class="flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-orange-500 to-rose-500 px-3 py-2.5 text-xs font-bold text-white shadow-lg shadow-orange-950/40 transition hover:-translate-y-0.5 hover:from-orange-400 hover:to-rose-400 focus:outline-none focus:ring-2 focus:ring-orange-300/60 active:translate-y-0"
       >
-        <.icon name="hero-bolt" class="size-4" /> Fire
+        <.icon name="hero-bolt" class="size-4" /> Engage
         <kbd class="rounded bg-black/20 px-1.5 py-0.5 font-mono text-[0.58rem]">Space</kbd>
       </button>
     </div>
   </aside>
 
+  <nav
+    id="action-hotbar"
+    aria-label="Action hotbar"
+    class="pointer-events-auto absolute bottom-3 left-1/2 z-20 w-[min(42rem,calc(100%-1rem))] -translate-x-1/2 sm:bottom-5"
+  >
+    <div class="mb-1.5 flex items-center justify-center gap-2 text-[0.52rem] font-semibold uppercase tracking-[0.24em] text-slate-500">
+      <span>Action matrix</span>
+      <span class="size-1 rounded-full bg-slate-700"></span>
+      <span id="hotbar-mode" class="text-cyan-300/75">Standby</span>
+    </div>
+    <div class="grid grid-cols-10 gap-1 rounded-2xl border border-cyan-300/15 bg-slate-950/85 p-1.5 shadow-2xl shadow-black/50 backdrop-blur-xl sm:gap-1.5 sm:p-2">
+      <%= for slot <- @action_hotbar do %>
+        <button
+          id={"hotbar-slot-#{slot.slot}"}
+          type="button"
+          data-hotbar-slot={slot.slot}
+          data-action-id={slot.action && slot.action.id}
+          aria-label={
+            if slot.action,
+              do: "Slot #{slot.key}: #{slot.action.label}",
+              else: "Slot #{slot.key}: empty"
+          }
+          aria-pressed="false"
+          class={[
+            "hotbar-slot group relative aspect-square min-w-0 overflow-hidden rounded-lg border bg-slate-900/90 text-slate-500 transition duration-150 focus:outline-none focus:ring-2 focus:ring-cyan-300/60 active:scale-95 sm:rounded-xl",
+            if(slot.action,
+              do:
+                "border-cyan-300/25 text-cyan-100 hover:-translate-y-0.5 hover:border-cyan-200/55",
+              else: "hotbar-slot-empty border-slate-800/90 hover:border-slate-700"
+            )
+          ]}
+        >
+          <span
+            data-hotbar-cooldown
+            class="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-0 bg-slate-950/75 transition-[height] duration-100"
+          >
+          </span>
+          <span class="absolute left-1 top-0.5 z-20 font-mono text-[0.5rem] font-bold text-slate-500 sm:left-1.5 sm:top-1 sm:text-[0.58rem]">
+            {slot.key}
+          </span>
+          <span class="relative z-20 grid h-full place-items-center">
+            <%= if slot.action do %>
+              <span class="grid size-5 place-items-center rounded-md bg-cyan-300/10 text-cyan-200 sm:size-8 sm:rounded-lg">
+                <.icon name="hero-bolt" class="size-3.5 sm:size-5" />
+              </span>
+            <% else %>
+              <span class="size-1 rounded-full bg-slate-700"></span>
+            <% end %>
+          </span>
+          <span class="pointer-events-none absolute inset-x-1 bottom-0.5 z-20 hidden truncate text-[0.42rem] font-semibold text-cyan-100 sm:block">
+            {if slot.action, do: slot.action.label, else: "Empty"}
+          </span>
+        </button>
+      <% end %>
+    </div>
+  </nav>
+
   <aside
     id="ship-hud"
-    class="pointer-events-none absolute bottom-4 left-4 z-10 w-[min(23rem,calc(100%-2rem))] rounded-2xl border border-cyan-300/15 bg-slate-950/80 p-4 shadow-2xl shadow-black/40 backdrop-blur-xl sm:bottom-6 sm:left-6 sm:p-5"
+    class="pointer-events-none absolute bottom-28 left-4 z-10 w-[min(23rem,calc(100%-2rem))] rounded-2xl border border-cyan-300/15 bg-slate-950/80 p-4 shadow-2xl shadow-black/40 backdrop-blur-xl sm:bottom-32 sm:left-6 sm:p-5 2xl:bottom-6"
   >
     <div class="flex items-start justify-between gap-4 border-b border-slate-800/90 pb-4">
       <div>
@@ -212,8 +269,8 @@
     </div>
   </aside>
 
-  <div class="pointer-events-none absolute bottom-5 right-5 z-10 hidden rounded-xl border border-slate-700/70 bg-slate-950/70 px-3 py-2 text-[0.65rem] text-slate-400 backdrop-blur lg:block">
-    Left-click to fly · Hold to steer · Right-click hostile to target · Space to fire
+  <div class="pointer-events-none absolute bottom-28 right-5 z-10 hidden rounded-xl border border-slate-700/70 bg-slate-950/70 px-3 py-2 text-[0.65rem] text-slate-400 backdrop-blur xl:block">
+    Left-click hostile to target · Hold empty space to steer · Space to engage · Esc to clear
   </div>
 
   <div

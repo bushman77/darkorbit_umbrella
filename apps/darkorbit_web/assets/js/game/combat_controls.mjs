@@ -1,0 +1,50 @@
+const HOTBAR_CODES = Object.freeze({
+  Digit1: 1,
+  Digit2: 2,
+  Digit3: 3,
+  Digit4: 4,
+  Digit5: 5,
+  Digit6: 6,
+  Digit7: 7,
+  Digit8: 8,
+  Digit9: 9,
+  Digit0: 10,
+})
+
+export const hotbarSlotForCode = code => HOTBAR_CODES[code] || null
+
+export const inputControl = target => Boolean(
+  target?.matches?.("input, textarea, select, button, [contenteditable='true']") ||
+  target?.isContentEditable
+)
+
+export const combatKeyIntent = event => {
+  if (event.repeat || event.altKey || event.ctrlKey || event.metaKey || inputControl(event.target)) {
+    return null
+  }
+
+  if (event.code === "Escape") return {type: "disengage"}
+  if (event.code === "Space") return {type: "engage"}
+
+  const slot = hotbarSlotForCode(event.code)
+  return slot ? {type: "activate_slot", slot} : null
+}
+
+export const angleToTarget = (source, target) => {
+  if (!source || !target) return null
+  return Math.atan2(target.y - source.y, target.x - source.x)
+}
+
+const wrappedAngleDelta = (from, to) => Math.atan2(Math.sin(to - from), Math.cos(to - from))
+
+export const smoothAngle = (current, desired, blend) => {
+  if (!Number.isFinite(desired)) return current
+  if (!Number.isFinite(current)) return desired
+  return current + wrappedAngleDelta(current, desired) * Math.min(1, Math.max(0, blend))
+}
+
+export const desiredEntityAngle = (entity, entities) => {
+  const combatTarget = entity?.engagedTargetId && entities.get(entity.engagedTargetId)
+  const combatAngle = angleToTarget(entity?.render, combatTarget?.render)
+  return combatAngle ?? entity?.navigationAngle ?? entity?.angle ?? -Math.PI / 2
+}

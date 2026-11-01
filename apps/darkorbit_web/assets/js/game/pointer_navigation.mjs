@@ -16,6 +16,7 @@ export class PointerNavigation {
     destinationForPointer,
     shipPosition,
     sendDestination,
+    interceptPointerDown = () => false,
     windowTarget = globalThis.window,
     documentTarget = globalThis.document,
     now = () => performance.now(),
@@ -29,6 +30,7 @@ export class PointerNavigation {
     this.destinationForPointer = destinationForPointer
     this.shipPosition = shipPosition
     this.sendDestination = sendDestination
+    this.interceptPointerDown = interceptPointerDown
     this.windowTarget = windowTarget
     this.documentTarget = documentTarget
     this.now = now
@@ -86,9 +88,13 @@ export class PointerNavigation {
   handlePointerDown(event) {
     if (event.button !== 0 || this.pointerId !== null) return
 
-    this.pointerId = event.pointerId
-    this.pointer = this.pointerFrom(event)
+    const pointer = this.pointerFrom(event)
     event.preventDefault()
+
+    if (this.interceptPointerDown(pointer) === true) return
+
+    this.pointerId = event.pointerId
+    this.pointer = pointer
 
     try {
       this.canvas.setPointerCapture(event.pointerId)

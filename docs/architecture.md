@@ -1,4 +1,4 @@
-# Architecture through Milestone E
+# Architecture through Milestone E.1
 
 ## Umbrella boundaries
 
@@ -75,6 +75,9 @@ the endpoint.
 5. `Core.NPC.AI` is pure and bounded. Its `idle`, `patrol`, `pursue`, `attack`,
    and `destroyed` transitions use deterministic patrol points and tick-based
    attack readiness, with no pathfinding or wall-clock dependency.
+6. `Core.Combat.ActionCatalog` defines the ten-slot action surface as data.
+   Slot 1 is the built-in pulse emitter and the remaining slots are empty;
+   activating an empty slot has no inventory or ammunition side effect.
 
 ## Authoritative world invariants
 
@@ -85,8 +88,9 @@ the endpoint.
    boundaries. Each tick advances linearly by the connected ship's derived
    speed without overshooting.
 3. A player has at most one live in-memory session. Every movement, targeting,
-   and attack command resolves the session-bound entity. Disconnect removes
-   the player and immediately clears NPC pursuit of that entity.
+   engagement, action, and attack command resolves the session-bound entity.
+   Disconnect removes the player and immediately clears NPC pursuit of that
+   entity.
 4. Tick duration, automatic ticking, map definitions, and the event sink are
    runtime configuration. Tests disable timers and drive ticks synchronously.
 5. NPC IDs use the reserved `npc:<map>:<type>:<spawn-slot>` namespace. Joins
@@ -97,9 +101,20 @@ the endpoint.
 7. The map GenServer serializes simultaneous attacks, so a successful attack
    updates the cooldown before another command can run. Destroyed targets are
    removed or marked dead before subsequent commands are evaluated.
-8. Core emits transport-neutral movement, NPC-state, targeting, laser, damage,
-   destruction, respawn, and world-state events. `Darkorbit.World.PubSub`
-   publishes them on `world:<map-id>` topics.
+8. Player `target_id` is selection only; `engaged_target_id` is the explicit
+   combat lifecycle. Engaging never creates a timer or process. Each bounded
+   map tick attempts at most one eligible attack per engaged player, preserves
+   engagement through cooldown or temporary range failure, and clears it when
+   either participant or the target identity becomes invalid.
+9. Combat does not replace movement state. Players retain destinations and
+   continue moving at normal server-owned speed while engaged; firing never
+   teleports or steers a ship into range.
+10. NPC destruction clears every matching selection and engagement before the
+    deterministic spawn slot can respawn. The recreated NPC cannot inherit the
+    previous lock even though its catalog spawn-slot ID is stable.
+11. Core emits transport-neutral movement, NPC-state, targeting, engagement,
+    laser, damage, destruction, respawn, and world-state events.
+    `Darkorbit.World.PubSub` publishes them on `world:<map-id>` topics.
 
 ## Browser transport invariants
 
@@ -110,18 +125,31 @@ the endpoint.
    one Core session, binds movement and combat to that session, and disconnects
    it when the channel terminates.
 3. Movement payloads contain destination coordinates; targeting contains only
-   an NPC ID; firing contains no combat values. Client-provided entity,
-   session, damage, range, position, and cooldown values are ignored.
+   an NPC ID; engagement/disengagement contains no combat values; action
+   activation contains a bounded slot number. Client-provided entity, session,
+   damage, range, position, and cooldown values are ignored.
 4. Channel join returns a full authoritative snapshot and persisted HUD data.
    Core PubSub events are forwarded to all joined clients; multiple clients
    therefore render the same tick-owned player positions.
 5. The Canvas renderer interpolates displayed positions toward the latest
    server snapshots. Mouse input never changes an entity position locally, and
    visual damage updates consume authoritative laser/world events.
-6. Left-click and click-and-hold remain dedicated to pointer navigation.
-   Right-click selects a rendered NPC, the target-nearest button is the
-   accessible alternative, and Space or the fire button submits a laser intent.
-7. All included graphics are original placeholders. A versioned client catalog
+6. Primary pointer-down first hit-tests live NPCs with the same world-to-screen
+   transform and catalog dimensions used by rendering. An NPC hit submits only
+   target selection; empty-space clicks enter the existing pointer-capture
+   navigation path, including click-and-hold retargeting.
+7. The renderer reads replicated `engaged_target_id` for every player. Combat
+   facing is recalculated from interpolated player/target positions each frame
+   and smoothed across angle wrap; navigation facing remains independently
+   tracked and becomes authoritative visually as soon as engagement clears.
+8. The hotbar is rendered from structured server definitions. Number-row keys
+   and clicks submit the same slot activation, Space explicitly engages slot
+   1's primary weapon, and Esc disengages/clears. Repeats and editable controls
+   are ignored. Cooldown shading derives from replicated simulation ticks and
+   server-owned next-attack values.
+9. Right-click selection and the target-nearest button remain available as
+   alternatives to left-click selection.
+10. All included graphics are original placeholders. A versioned client catalog
    separates ships, NPCs, lasers, explosions, drones, and backgrounds so later
    art changes do not alter networking or simulation code.
 
@@ -137,16 +165,22 @@ or equipped twice. Pure tests cover catalogs, stat aggregation, equipment
 constraints, boundaries, movement, combat calculations, NPC definitions, and
 AI transitions. Headless tests cover deterministic NPC spawning/movement,
 range and cooldown enforcement, damage/destruction/respawn, repeated and
-concurrent attacks, dead-player rejection, and disconnect cleanup. Channel
-integration tests additionally cover signed socket authentication, map
-authorization, spoofed combat values, multiplayer combat broadcasts, and
+concurrent attacks, persistent engagement, automatic cooldown cadence,
+out-of-range pause/resume, movement during combat, destruction/respawn lock
+clearing, dead-player rejection, action validation, cancellation, and
+disconnect cleanup. Channel integration tests additionally cover signed socket
+authentication, map authorization, spoofed combat values, structured hotbar
+commands, multiplayer engagement replication, combat broadcasts, and
 simultaneous players. JavaScript tests cover pointer-navigation preservation,
-target filtering/hit testing, and authoritative health updates.
+left-click selection without movement, render-dimension hit testing, all ten
+number keys, safe empty actions and input guards, combat-facing precedence,
+moving-target rotation, navigation-facing restoration, and authoritative
+health updates.
 
 ## Known baseline limitations
 
-- The full combat acceptance flow and two-player observation have not been
-  manually verified in browser sessions.
+- The full Milestone E.1 combat acceptance flow and two-player observation have
+  not been manually verified in browser sessions.
 - Destroyed player respawning, ammunition, loot, rewards, PvP, portals,
   spatial partitioning, persistence/recovery for live map state, and multi-node
   world ownership are not implemented.

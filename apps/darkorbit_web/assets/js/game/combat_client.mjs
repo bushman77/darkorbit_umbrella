@@ -25,13 +25,31 @@ export const nearestNpc = (entities, origin) => {
     })[0] || null
 }
 
-export const findNpcAtScreenPoint = (entities, point, worldToScreen, radius = 42) => {
-  const radiusSquared = radius * radius
-
+export const findNpcAtScreenPoint = (
+  entities,
+  point,
+  worldToScreen,
+  dimensionsForEntity = () => ({width: 84, height: 84})
+) => {
   return [...entities]
     .filter(selectableNpc)
-    .map(entity => ({entity, distance: distanceSquared(worldToScreen(entity.render), point)}))
-    .filter(candidate => candidate.distance <= radiusSquared)
+    .map(entity => {
+      const screen = worldToScreen(entity.render)
+      const dimensions = typeof dimensionsForEntity === "function"
+        ? dimensionsForEntity(entity)
+        : {width: dimensionsForEntity * 2, height: dimensionsForEntity * 2}
+      const halfWidth = Math.max(1, Number(dimensions?.width) || 0) / 2
+      const halfHeight = Math.max(1, Number(dimensions?.height) || 0) / 2
+      const deltaX = point.x - screen.x
+      const deltaY = point.y - screen.y
+
+      return {
+        entity,
+        inside: Math.abs(deltaX) <= halfWidth && Math.abs(deltaY) <= halfHeight,
+        distance: deltaX * deltaX + deltaY * deltaY,
+      }
+    })
+    .filter(candidate => candidate.inside)
     .sort((left, right) => left.distance - right.distance)[0]?.entity || null
 }
 

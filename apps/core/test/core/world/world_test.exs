@@ -172,6 +172,142 @@ defmodule Core.WorldTest do
     assert damaged.hull == 784
   end
 
+  test "selection is distinct from persistent tick-owned combat engagement", context do
+    assert {:ok, session} = World.connect(:engaged_pilot, context.stats, context.world_options)
+    npc_id = "npc:1-1:rift_skirmisher:1"
+
+    assert {:ok, %{selection: %{target_id: ^npc_id}}} =
+             World.select_target(session.id, npc_id, context.world_options)
+
+    assert {:ok, selected} = World.snapshot("1-1", context.world_options)
+    selected_player = Enum.find(selected.entities, &(&1.id == :engaged_pilot))
+    selected_npc = Enum.find(selected.entities, &(&1.id == npc_id))
+    assert selected_player.target_id == npc_id
+    assert selected_player.engaged_target_id == nil
+    assert selected_npc.shields == 400
+
+    assert {:ok, %{target_id: ^npc_id, changed: true}} =
+             World.engage_combat(session.id, context.world_options)
+
+    assert {:ok, engaged} = World.snapshot("1-1", context.world_options)
+    engaged_player = Enum.find(engaged.entities, &(&1.id == :engaged_pilot))
+    assert engaged_player.engaged_target_id == npc_id
+    assert engaged_player.destination == nil
+
+    assert {:ok, first_tick} = World.tick("1-1", context.world_options)
+    first_target = Enum.find(first_tick.entities, &(&1.id == npc_id))
+    assert first_target.shields == 376
+    assert first_target.hull == 784
+    assert_receive {"1-1", :laser_fired, %{attacker_id: :engaged_pilot, target_id: ^npc_id}}
+
+    for expected_tick <- 2..7 do
+      assert {:ok, %{tick: ^expected_tick}} = World.tick("1-1", context.world_options)
+    end
+
+    assert {:ok, cooling_down} = World.snapshot("1-1", context.world_options)
+    cooling_target = Enum.find(cooling_down.entities, &(&1.id == npc_id))
+    assert cooling_target.shields == 376
+    assert cooling_target.hull == 784
+
+    assert {:ok, eighth_tick} = World.tick("1-1", context.world_options)
+    eighth_target = Enum.find(eighth_tick.entities, &(&1.id == npc_id))
+    assert eighth_target.shields == 352
+    assert eighth_target.hull == 768
+  end
+
+  test "out-of-range engagement pauses while navigation remains independent", context do
+    assert {:ok, session} = World.connect(:mobile_gunner, context.stats, context.world_options)
+    far_npc_id = "npc:1-1:rift_skirmisher:2"
+
+    assert {:ok, _selection} =
+             World.select_target(session.id, far_npc_id, context.world_options)
+
+    assert {:ok, %{changed: true}} =
+             World.engage_combat(session.id, context.world_options)
+
+    assert {:ok, _movement} =
+             World.move(session.id, %{x: 1_128.0, y: 1_000.0}, context.world_options)
+
+    assert {:ok, tick} = World.tick("1-1", context.world_options)
+    player = Enum.find(tick.entities, &(&1.id == :mobile_gunner))
+    untouched = Enum.find(tick.entities, &(&1.id == far_npc_id))
+
+    assert player.position == %{x: 1_032.0, y: 1_000.0}
+    assert player.destination == %{x: 1_128.0, y: 1_000.0}
+    assert player.target_id == far_npc_id
+    assert player.engaged_target_id == far_npc_id
+    assert untouched.shields == untouched.max_shields
+    assert untouched.hull == untouched.max_hull
+
+    assert {:ok, resumed_tick} = World.tick("1-1", context.world_options)
+    resumed = Enum.find(resumed_tick.entities, &(&1.id == far_npc_id))
+    assert resumed.shields < resumed.max_shields
+    assert resumed.hull < resumed.max_hull
+  end
+
+  test "repeated engagement, empty actions, invalid actions, and cancellation are safe",
+       context do
+    assert {:ok, session} = World.connect(:action_pilot, context.stats, context.world_options)
+    npc_id = "npc:1-1:rift_skirmisher:1"
+
+    assert {:ok, %{slot: 2, status: :empty, action: nil}} =
+             World.activate_action(session.id, 2, context.world_options)
+
+    assert {:error, :invalid_action_slot} =
+             World.activate_action(session.id, 0, context.world_options)
+
+    assert {:error, :no_target} = World.engage_combat(session.id, context.world_options)
+    assert {:error, :no_target} = World.activate_action(session.id, 1, context.world_options)
+    assert {:ok, _selection} = World.select_target(session.id, npc_id, context.world_options)
+
+    assert {:ok, %{slot: 1, status: :activated, engagement: %{changed: true}}} =
+             World.activate_action(session.id, 1, context.world_options)
+
+    assert {:ok, %{changed: false}} = World.engage_combat(session.id, context.world_options)
+
+    assert {:ok, _movement} =
+             World.move(session.id, %{x: 1_064.0, y: 1_000.0}, context.world_options)
+
+    assert {:ok, %{reason: :cancelled, previous_target_id: ^npc_id}} =
+             World.disengage_combat(session.id, context.world_options)
+
+    assert {:ok, cancelled} = World.snapshot("1-1", context.world_options)
+    player = Enum.find(cancelled.entities, &(&1.id == :action_pilot))
+    assert player.target_id == nil
+    assert player.engaged_target_id == nil
+    assert player.destination == %{x: 1_064.0, y: 1_000.0}
+  end
+
+  test "automatic destruction clears engagement and respawn does not inherit target lock",
+       context do
+    lethal_stats = %{context.stats | damage: 1_200}
+    assert {:ok, session} = World.connect(:automatic_hunter, lethal_stats, context.world_options)
+    npc_id = "npc:1-1:rift_skirmisher:1"
+
+    assert {:ok, _selection} = World.select_target(session.id, npc_id, context.world_options)
+    assert {:ok, _engagement} = World.engage_combat(session.id, context.world_options)
+    assert {:ok, destroyed_tick} = World.tick("1-1", context.world_options)
+
+    player = Enum.find(destroyed_tick.entities, &(&1.id == :automatic_hunter))
+    assert player.target_id == nil
+    assert player.engaged_target_id == nil
+    refute Enum.any?(destroyed_tick.entities, &(&1.id == npc_id))
+
+    assert_receive {"1-1", :combat_disengaged,
+                    %{player_id: :automatic_hunter, reason: :target_destroyed}}
+
+    for expected_tick <- 2..31 do
+      assert {:ok, %{tick: ^expected_tick}} = World.tick("1-1", context.world_options)
+    end
+
+    assert {:ok, respawned} = World.snapshot("1-1", context.world_options)
+    respawned_player = Enum.find(respawned.entities, &(&1.id == :automatic_hunter))
+    respawned_npc = Enum.find(respawned.entities, &(&1.id == npc_id))
+    assert respawned_player.target_id == nil
+    assert respawned_player.engaged_target_id == nil
+    assert respawned_npc.status == :alive
+  end
+
   test "destroys, removes, and respawns an NPC on deterministic ticks", context do
     lethal_stats = %{context.stats | damage: 1_200}
     assert {:ok, session} = World.connect(:npc_hunter, lethal_stats, context.world_options)
@@ -231,6 +367,15 @@ defmodule Core.WorldTest do
              &(&1.kind == :npc and &1.target_id == :departing_pilot)
            )
 
+    assert {:ok, _selection} =
+             World.select_target(
+               session.id,
+               "npc:1-1:rift_skirmisher:1",
+               context.world_options
+             )
+
+    assert {:ok, _engagement} = World.engage_combat(session.id, context.world_options)
+
     assert :ok = World.disconnect(session.id, context.world_options)
     assert {:error, :session_not_found} = World.attack(session.id, context.world_options)
     assert {:ok, after_disconnect} = World.snapshot("1-1", context.world_options)
@@ -253,6 +398,8 @@ defmodule Core.WorldTest do
                context.world_options
              )
 
+    assert {:ok, _engagement} = World.engage_combat(session.id, context.world_options)
+
     for _tick <- 1..5 do
       assert {:ok, _snapshot} = World.tick("1-1", context.world_options)
     end
@@ -261,6 +408,8 @@ defmodule Core.WorldTest do
     player = Enum.find(snapshot.entities, &(&1.id == :fragile_pilot))
     assert player.status == :destroyed
     assert player.hull == 0
+    assert player.target_id == nil
+    assert player.engaged_target_id == nil
 
     assert Enum.all?(
              Enum.filter(snapshot.entities, &(&1.kind == :npc)),

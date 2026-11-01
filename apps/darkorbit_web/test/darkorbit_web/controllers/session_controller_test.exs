@@ -30,6 +30,10 @@ defmodule DarkorbitWeb.SessionControllerTest do
     assert response =~ ~s(id="game-client")
     assert response =~ ~s(id="space-viewport")
     assert response =~ ~s(data-map-id="1-1")
+    assert response =~ ~s(id="action-hotbar")
+    assert response =~ ~s(id="hotbar-slot-1")
+    assert response =~ ~s(data-action-id="pulse_emitter")
+    assert response =~ ~s(id="hotbar-slot-10")
 
     conn = delete(conn, ~p"/logout")
     assert redirected_to(conn) == ~p"/login"

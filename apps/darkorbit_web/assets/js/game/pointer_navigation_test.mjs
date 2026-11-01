@@ -94,7 +94,7 @@ class FakeScheduler {
   }
 }
 
-const setup = ({ship = {x: 0, y: 0}} = {}) => {
+const setup = ({ship = {x: 0, y: 0}, interceptPointerDown = () => false} = {}) => {
   const canvas = new FakeCanvas()
   const windowTarget = new FakeEventTarget()
   const documentTarget = new FakeEventTarget()
@@ -116,6 +116,7 @@ const setup = ({ship = {x: 0, y: 0}} = {}) => {
     }),
     shipPosition: () => shipPosition,
     sendDestination: destination => commands.push(destination),
+    interceptPointerDown,
   }).attach()
 
   return {
@@ -143,6 +144,39 @@ test("a single left click sets a destination and release does not stop the ship"
 
   assert.equal(canvas.hasPointerCapture(7), false)
   assert.deepEqual(commands, [{x: 120, y: 80}])
+})
+
+test("an intercepted NPC press selects without issuing click or hold navigation", () => {
+  const targeted = []
+  const context = setup({
+    interceptPointerDown: pointer => {
+      const hit = pointer.clientX >= 90 && pointer.clientX <= 150
+      if (hit) targeted.push(pointer)
+      return hit
+    },
+  })
+
+  const down = context.canvas.dispatch("pointerdown", {
+    clientX: 120,
+    clientY: 80,
+    pointerId: 7,
+  })
+  context.scheduler.advance(400)
+  context.canvas.dispatch("pointermove", {
+    clientX: 300,
+    clientY: 200,
+    pointerId: 7,
+  })
+  context.canvas.dispatch("pointerup", {buttons: 0, pointerId: 7})
+
+  assert.equal(down.defaultPrevented, true)
+  assert.deepEqual(targeted, [{clientX: 120, clientY: 80}])
+  assert.deepEqual(context.commands, [])
+  assert.equal(context.canvas.hasPointerCapture(7), false)
+
+  context.canvas.dispatch("pointerdown", {clientX: 300, clientY: 200, pointerId: 8})
+  context.scheduler.advance(100)
+  assert.deepEqual(context.commands, [{x: 300, y: 200}])
 })
 
 test("holding retargets at most every 100ms and follows pointer and camera changes", () => {

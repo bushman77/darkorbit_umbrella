@@ -7,6 +7,11 @@ import {
   healthPercent,
   nearestNpc,
 } from "./combat_client.mjs"
+import {
+  combatKeyIntent,
+  desiredEntityAngle,
+  smoothAngle,
+} from "./combat_controls.mjs"
 import {PointerNavigation} from "./pointer_navigation.mjs"
 
 const clamp = (value, minimum, maximum) => Math.min(Math.max(value, minimum), maximum)
@@ -39,6 +44,9 @@ class SpaceClient {
     this.player = null
     this.commandDestination = null
     this.selectedTargetId = null
+    this.selectedHotbarSlot = 1
+    this.worldTick = 0
+    this.tickMs = 100
     this.beams = []
     this.impacts = []
     this.explosions = []
@@ -61,11 +69,15 @@ class SpaceClient {
       destinationForPointer: pointer => this.destinationForPointer(pointer),
       shipPosition: () => this.entities.get(this.selfId)?.target,
       sendDestination: destination => this.sendDestination(destination),
+      interceptPointerDown: pointer => this.selectTargetAtPointer(pointer),
     }).attach()
     this.canvas.addEventListener("contextmenu", event => this.handleTargetPointer(event))
     this.root.querySelector("#combat-target-nearest")?.addEventListener("click", () => this.selectNearestTarget())
-    this.root.querySelector("#combat-clear-target")?.addEventListener("click", () => this.clearTarget())
-    this.root.querySelector("#combat-fire")?.addEventListener("click", () => this.fireLaser())
+    this.root.querySelector("#combat-clear-target")?.addEventListener("click", () => this.disengageCombat())
+    this.root.querySelector("#combat-fire")?.addEventListener("click", () => this.engageCombat())
+    for (const slot of this.root.querySelectorAll("[data-hotbar-slot]")) {
+      slot.addEventListener("click", () => this.activateHotbarSlot(Number(slot.dataset.hotbarSlot)))
+    }
     window.addEventListener("keydown", event => this.handleCombatKey(event))
     this.connect()
     requestAnimationFrame(time => this.frame(time))
@@ -88,6 +100,8 @@ class SpaceClient {
     this.channel.on("npc_state_changed", entity => this.upsertEntity(entity))
     this.channel.on("target_selected", selection => this.targetSelected(selection))
     this.channel.on("target_cleared", selection => this.targetCleared(selection))
+    this.channel.on("combat_engaged", engagement => this.combatEngaged(engagement))
+    this.channel.on("combat_disengaged", engagement => this.combatDisengaged(engagement))
     this.channel.on("laser_fired", attack => this.laserFired(attack))
     this.channel.on("entity_destroyed", destruction => this.entityDestroyed(destruction))
     this.channel.onError(() => this.setConnection("Sector channel lost", "error"))
@@ -113,9 +127,12 @@ class SpaceClient {
     this.player = response.player
     this.selfId = entityKey(response.player.pilot.id)
     this.boundaries = response.map.boundaries
+    this.worldTick = response.map.tick
+    this.tickMs = response.map.tick_ms
     this.pilots = new Map(Object.entries(response.pilots || {}))
 
     for (const entity of response.map.entities) this.upsertEntity(entity, true)
+    this.syncOwnCombatState()
 
     const ownShip = this.entities.get(this.selfId)
     if (ownShip) this.camera = {...ownShip.render}
@@ -126,6 +143,8 @@ class SpaceClient {
 
   applyWorldState(state) {
     this.boundaries = state.boundaries || this.boundaries
+    this.worldTick = state.tick
+    this.tickMs = state.tick_ms || this.tickMs
     const activeIds = new Set()
 
     for (const entity of state.entities) {
@@ -137,6 +156,7 @@ class SpaceClient {
       if (!activeIds.has(id)) this.removeEntity(id)
     }
 
+    this.syncOwnCombatState()
     this.updateCombatHud()
   }
 
@@ -166,10 +186,20 @@ class SpaceClient {
       existing.shieldAbsorption = entity.shield_absorption
       existing.damage = entity.damage
       existing.attackRange = entity.attack_range
+      existing.attackCooldownTicks = entity.attack_cooldown_ticks
+      existing.nextAttackTick = entity.next_attack_tick
       existing.targetId = entity.target_id == null ? null : entityKey(entity.target_id)
+      existing.engagedTargetId = entity.engaged_target_id == null
+        ? null
+        : entityKey(entity.engaged_target_id)
       existing.state = entity.state
       existing.status = entity.status
-      if (destination) existing.angle = Math.atan2(destination.y - existing.render.y, destination.x - existing.render.x)
+      if (destination) {
+        existing.navigationAngle = Math.atan2(
+          destination.y - existing.render.y,
+          destination.x - existing.render.x
+        )
+      }
       if (snap) existing.render = {...target}
     } else {
       this.entities.set(id, {
@@ -189,10 +219,20 @@ class SpaceClient {
         shieldAbsorption: entity.shield_absorption,
         damage: entity.damage,
         attackRange: entity.attack_range,
+        attackCooldownTicks: entity.attack_cooldown_ticks,
+        nextAttackTick: entity.next_attack_tick,
         targetId: entity.target_id == null ? null : entityKey(entity.target_id),
+        engagedTargetId: entity.engaged_target_id == null
+          ? null
+          : entityKey(entity.engaged_target_id),
         state: entity.state,
         status: entity.status,
-        angle: destination ? Math.atan2(destination.y - target.y, destination.x - target.x) : -Math.PI / 2,
+        navigationAngle: destination
+          ? Math.atan2(destination.y - target.y, destination.x - target.x)
+          : -Math.PI / 2,
+        angle: destination
+          ? Math.atan2(destination.y - target.y, destination.x - target.x)
+          : -Math.PI / 2,
       })
     }
   }
@@ -219,20 +259,36 @@ class SpaceClient {
 
   handleTargetPointer(event) {
     event.preventDefault()
+    this.selectTargetAtPointer({clientX: event.clientX, clientY: event.clientY})
+  }
+
+  selectTargetAtPointer(pointer) {
     const rect = this.canvas.getBoundingClientRect()
     const target = findNpcAtScreenPoint(
       this.entities.values(),
-      {x: event.clientX - rect.left, y: event.clientY - rect.top},
-      position => this.worldToScreen(position)
+      {x: pointer.clientX - rect.left, y: pointer.clientY - rect.top},
+      position => this.worldToScreen(position),
+      () => this.npcRenderDimensions()
     )
 
-    if (target) this.selectTarget(target.id)
+    if (!target) return false
+    this.selectTarget(target.id)
+    return true
+  }
+
+  npcRenderDimensions() {
+    const {definition} = this.assets.get("npcs", "sentinel")
+    return {width: definition?.width || 60, height: definition?.height || 60}
   }
 
   handleCombatKey(event) {
-    if (event.code !== "Space" || event.repeat || event.target?.matches?.("input, textarea, select, button")) return
+    const intent = combatKeyIntent(event)
+    if (!intent) return
+
     event.preventDefault()
-    this.fireLaser()
+    if (intent.type === "engage") this.engageCombat()
+    if (intent.type === "disengage") this.disengageCombat()
+    if (intent.type === "activate_slot") this.activateHotbarSlot(intent.slot)
   }
 
   selectNearestTarget() {
@@ -252,31 +308,55 @@ class SpaceClient {
       .receive("timeout", () => this.setCombatMessage("Targeting command timed out."))
   }
 
-  clearTarget() {
+  disengageCombat() {
     if (!this.channel || !this.selfId) return
 
     this.channel
-      .push("clear_target", {}, 5000)
-      .receive("ok", selection => this.targetCleared(selection))
-      .receive("error", response => this.setCombatMessage(`Clear target rejected: ${response.reason}`))
+      .push("disengage_combat", {}, 5000)
+      .receive("ok", engagement => {
+        this.combatDisengaged(engagement)
+        this.targetCleared(engagement)
+      })
+      .receive("error", response => this.setCombatMessage(`Disengage rejected: ${response.reason}`))
   }
 
-  fireLaser() {
+  engageCombat() {
     if (!this.channel || !this.selfId) return
     if (!this.selectedTargetId) {
-      this.setCombatMessage("Select an NPC before firing.")
+      this.setCombatMessage("Select an NPC before engaging.")
       return
     }
 
     this.channel
-      .push("laser_attack", {}, 5000)
+      .push("engage_combat", {}, 5000)
+      .receive("ok", engagement => this.combatEngaged(engagement))
       .receive("error", response => this.setCombatMessage(this.attackError(response.reason)))
-      .receive("timeout", () => this.setCombatMessage("Laser command timed out."))
+      .receive("timeout", () => this.setCombatMessage("Engagement command timed out."))
+  }
+
+  activateHotbarSlot(slot) {
+    if (!this.channel || !this.selfId || !Number.isInteger(slot)) return
+
+    this.selectedHotbarSlot = slot
+    this.updateHotbar()
+    this.channel
+      .push("activate_action", {slot}, 5000)
+      .receive("ok", activation => {
+        if (activation.status === "empty") {
+          this.setCombatMessage(`Action slot ${slot === 10 ? 0 : slot} is empty.`)
+        } else if (activation.engagement) {
+          this.combatEngaged(activation.engagement)
+        }
+      })
+      .receive("error", response => this.setCombatMessage(this.attackError(response.reason)))
+      .receive("timeout", () => this.setCombatMessage("Action activation timed out."))
   }
 
   targetSelected(selection) {
     if (entityKey(selection.player_id) !== this.selfId) return
     this.selectedTargetId = entityKey(selection.target_id)
+    const ownShip = this.entities.get(this.selfId)
+    if (ownShip) ownShip.targetId = this.selectedTargetId
     this.setCombatMessage("Target lock confirmed.")
     this.updateCombatHud()
   }
@@ -284,14 +364,47 @@ class SpaceClient {
   targetCleared(selection) {
     if (entityKey(selection.player_id) !== this.selfId) return
     this.selectedTargetId = null
+    const ownShip = this.entities.get(this.selfId)
+    if (ownShip) {
+      ownShip.targetId = null
+      ownShip.engagedTargetId = null
+    }
     this.setCombatMessage("Target lock cleared.")
     this.updateCombatHud()
+  }
+
+  combatEngaged(engagement) {
+    const player = this.entities.get(entityKey(engagement.player_id))
+    if (player) player.engagedTargetId = entityKey(engagement.target_id)
+    if (entityKey(engagement.player_id) !== this.selfId) return
+
+    this.selectedTargetId = entityKey(engagement.target_id)
+    this.selectedHotbarSlot = 1
+    this.setCombatMessage("Pulse emitter engaged. Automatic fire authorized.")
+    this.updateCombatHud()
+  }
+
+  combatDisengaged(engagement) {
+    const player = this.entities.get(entityKey(engagement.player_id))
+    if (player) player.engagedTargetId = null
+    if (entityKey(engagement.player_id) !== this.selfId) return
+
+    this.setCombatMessage("Combat disengaged.")
+    this.updateCombatHud()
+  }
+
+  syncOwnCombatState() {
+    const ownShip = this.entities.get(this.selfId)
+    if (!ownShip) return
+    this.selectedTargetId = ownShip.targetId
   }
 
   laserFired(attack) {
     const attacker = this.entities.get(entityKey(attack.attacker_id))
     const target = this.entities.get(entityKey(attack.target_id))
     if (target) applyAuthoritativeDamage(target, attack.target)
+    if (attacker) attacker.nextAttackTick = attack.next_attack_tick
+    this.worldTick = Math.max(this.worldTick, Number(attack.tick) || 0)
 
     const startedAt = performance.now()
     if (attacker && target) {
@@ -342,11 +455,15 @@ class SpaceClient {
     const key = entityKey(id)
     this.entities.delete(key)
     if (this.selectedTargetId === key) this.selectedTargetId = null
+    for (const entity of this.entities.values()) {
+      if (entity.targetId === key) entity.targetId = null
+      if (entity.engagedTargetId === key) entity.engagedTargetId = null
+    }
   }
 
   attackError(reason) {
     const messages = {
-      no_target: "Select an NPC before firing.",
+      no_target: "Select an NPC before engaging.",
       target_not_found: "The selected target is no longer active.",
       out_of_range: "Target is outside laser range. Navigate closer.",
       weapon_cooldown: "Laser is recharging.",
@@ -372,6 +489,15 @@ class SpaceClient {
     for (const entity of this.entities.values()) {
       entity.render.x += (entity.target.x - entity.render.x) * positionBlend
       entity.render.y += (entity.target.y - entity.render.y) * positionBlend
+    }
+
+    const rotationBlend = 1 - Math.exp(-deltaSeconds / 0.075)
+    for (const entity of this.entities.values()) {
+      entity.angle = smoothAngle(
+        entity.angle,
+        desiredEntityAngle(entity, this.entities),
+        rotationBlend
+      )
     }
 
     const ownShip = this.entities.get(this.selfId)
@@ -784,6 +910,8 @@ class SpaceClient {
       this.setWidth("#hud-shield-bar", healthPercent(ownShip.shields, ownShip.maxShields))
     }
 
+    this.updateHotbar()
+
     const target = this.entities.get(this.selectedTargetId)
     const panel = this.root.querySelector("#combat-target-panel")
     if (!panel) return
@@ -791,7 +919,11 @@ class SpaceClient {
     if (target?.kind === "npc") {
       panel.classList.remove("hidden")
       this.text("#combat-target-name", target.displayName || "Hostile")
-      this.text("#combat-target-state", `${(target.state || "idle").toUpperCase()} · ${number(target.attackRange)}u weapons`)
+      const engagement = ownShip?.engagedTargetId === target.id ? "ENGAGED" : "SELECTED"
+      this.text(
+        "#combat-target-state",
+        `${engagement} · ${(target.state || "idle").toUpperCase()} · ${number(target.attackRange)}u weapons`
+      )
       this.text("#combat-target-hull", `${number(target.hull)} / ${number(target.maxHull)}`)
       this.text("#combat-target-shields", `${number(target.shields)} / ${number(target.maxShields)}`)
       this.setWidth("#combat-target-hull-bar", healthPercent(target.hull, target.maxHull))
@@ -799,6 +931,31 @@ class SpaceClient {
     } else {
       panel.classList.add("hidden")
     }
+  }
+
+  updateHotbar() {
+    const ownShip = this.entities.get(this.selfId)
+    const engaged = Boolean(ownShip?.engagedTargetId)
+    const nextAttackTick = Number(ownShip?.nextAttackTick) || 0
+    const cooldownTicks = Math.max(1, Number(ownShip?.attackCooldownTicks) || 1)
+    const remainingTicks = Math.max(0, nextAttackTick - this.worldTick)
+    const cooldownPercent = Math.min(100, remainingTicks / cooldownTicks * 100)
+
+    for (const slot of this.root.querySelectorAll("[data-hotbar-slot]")) {
+      const slotNumber = Number(slot.dataset.hotbarSlot)
+      const hasAction = slot.dataset.actionId != null
+      const active = hasAction && engaged && slotNumber === 1
+      const coolingDown = hasAction && remainingTicks > 0
+      slot.classList.toggle("is-selected", slotNumber === this.selectedHotbarSlot)
+      slot.classList.toggle("is-active", active)
+      slot.classList.toggle("is-cooling-down", coolingDown)
+      slot.setAttribute("aria-pressed", active ? "true" : "false")
+
+      const cooldown = slot.querySelector("[data-hotbar-cooldown]")
+      if (cooldown) cooldown.style.height = `${coolingDown ? cooldownPercent : 0}%`
+    }
+
+    this.text("#hotbar-mode", engaged ? "AUTOFIRE" : "STANDBY")
   }
 
   setWidth(selector, percentage) {

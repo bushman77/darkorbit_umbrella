@@ -49,6 +49,9 @@ defmodule DarkorbitWeb.WorldChannelTest do
     assert response.player.stats.damage == 40
     assert Enum.any?(response.map.entities, &(&1.id == account.id))
     assert Enum.count(response.map.entities, &(&1.kind == :npc)) == 3
+    assert Enum.map(response.hotbar, & &1.key) == ~w(1 2 3 4 5 6 7 8 9 0)
+    assert Enum.at(response.hotbar, 0).action.id == "pulse_emitter"
+    assert Enum.all?(Enum.drop(response.hotbar, 1), &is_nil(&1.action))
 
     leave_and_wait(joined_socket)
   end
@@ -197,14 +200,91 @@ defmodule DarkorbitWeb.WorldChannelTest do
 
     assert {:ok, snapshot} = World.snapshot()
     damaged = Enum.find(snapshot.entities, &(&1.id == target.id))
-    assert damaged.shields == 376
-    assert damaged.hull == 784
+    assert damaged.shields == target.shields - 24
+    assert damaged.hull == target.hull - 16
 
     repeated_ref = push(first_socket, "laser_attack", %{})
     assert_reply repeated_ref, :error, %{reason: "weapon_cooldown"}
 
     invalid_ref = push(second_socket, "select_target", %{"target_id" => "npc:1-1:missing"})
     assert_reply invalid_ref, :error, %{reason: "target_not_found"}
+
+    leave_and_wait(first_socket)
+    leave_and_wait(second_socket)
+  end
+
+  test "engagement, action activation, cancellation, and state synchronize to all pilots" do
+    first = verified_player_account_fixture()
+    second = verified_player_account_fixture()
+    {:ok, first_socket} = authenticated_socket(first)
+    {:ok, second_socket} = authenticated_socket(second)
+
+    {:ok, first_response, first_socket} =
+      subscribe_and_join(first_socket, WorldChannel, "world:1-1")
+
+    {:ok, _second_response, second_socket} =
+      subscribe_and_join(second_socket, WorldChannel, "world:1-1")
+
+    target = Enum.find(first_response.map.entities, &(&1.kind == :npc))
+    target_id = target.id
+    first_id = first.id
+
+    empty_ref = push(first_socket, "activate_action", %{"slot" => 2})
+    assert_reply empty_ref, :ok, %{slot: 2, status: :empty, action: nil}
+
+    invalid_ref = push(first_socket, "activate_action", %{"slot" => 0})
+    assert_reply invalid_ref, :error, %{reason: "invalid_action_slot"}
+
+    no_target_ref = push(second_socket, "engage_combat", %{})
+    assert_reply no_target_ref, :error, %{reason: "no_target"}
+
+    select_ref = push(first_socket, "select_target", %{"target_id" => target_id})
+    assert_reply select_ref, :ok, %{selection: %{target_id: ^target_id}}
+    assert_push "target_selected", %{player_id: ^first_id, target_id: ^target_id}
+    assert_push "target_selected", %{player_id: ^first_id, target_id: ^target_id}
+
+    action_ref = push(first_socket, "activate_action", %{"slot" => 1})
+
+    assert_reply action_ref, :ok, %{
+      slot: 1,
+      status: :activated,
+      engagement: %{player_id: ^first_id, target_id: ^target_id, changed: true}
+    }
+
+    assert_push "combat_engaged", %{player_id: ^first_id, target_id: ^target_id}
+    assert_push "combat_engaged", %{player_id: ^first_id, target_id: ^target_id}
+
+    repeated_ref = push(first_socket, "engage_combat", %{})
+    assert_reply repeated_ref, :ok, %{target_id: ^target_id, changed: false}
+
+    assert {:ok, %{entities: synchronized_entities}} = World.tick()
+    synchronized = Enum.find(synchronized_entities, &(&1.id == first.id))
+    assert synchronized.target_id == target_id
+    assert synchronized.engaged_target_id == target_id
+
+    assert_push "world_state", %{entities: first_view}
+    assert_push "world_state", %{entities: second_view}
+    assert Enum.find(first_view, &(&1.id == first.id)).engaged_target_id == target_id
+    assert Enum.find(second_view, &(&1.id == first.id)).engaged_target_id == target_id
+
+    cancel_ref = push(first_socket, "disengage_combat", %{})
+
+    assert_reply cancel_ref, :ok, %{
+      player_id: ^first_id,
+      target_id: nil,
+      previous_target_id: ^target_id,
+      reason: :cancelled
+    }
+
+    assert_push "combat_disengaged", %{player_id: ^first_id, reason: :cancelled}
+    assert_push "combat_disengaged", %{player_id: ^first_id, reason: :cancelled}
+    assert_push "target_cleared", %{player_id: ^first_id, target_id: nil}
+    assert_push "target_cleared", %{player_id: ^first_id, target_id: nil}
+
+    assert {:ok, snapshot} = World.snapshot()
+    cancelled = Enum.find(snapshot.entities, &(&1.id == first.id))
+    assert cancelled.target_id == nil
+    assert cancelled.engaged_target_id == nil
 
     leave_and_wait(first_socket)
     leave_and_wait(second_socket)

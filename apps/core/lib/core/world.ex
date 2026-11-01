@@ -75,6 +75,36 @@ defmodule Core.World do
     end
   end
 
+  @spec engage_combat(pos_integer(), keyword()) :: {:ok, map()} | {:error, term()}
+  def engage_combat(session_id, opts \\ []) do
+    registry = Keyword.get(opts, :registry, Core.World.Registry)
+    sessions = Keyword.get(opts, :sessions, SessionManager)
+
+    with {:ok, session} <- fetch_session(sessions, session_id) do
+      MapServer.engage_combat(registry, session.map_id, session.id, session.entity_id)
+    end
+  end
+
+  @spec disengage_combat(pos_integer(), keyword()) :: {:ok, map()} | {:error, term()}
+  def disengage_combat(session_id, opts \\ []) do
+    registry = Keyword.get(opts, :registry, Core.World.Registry)
+    sessions = Keyword.get(opts, :sessions, SessionManager)
+
+    with {:ok, session} <- fetch_session(sessions, session_id) do
+      MapServer.disengage_combat(registry, session.map_id, session.id, session.entity_id)
+    end
+  end
+
+  @spec activate_action(pos_integer(), term(), keyword()) :: {:ok, map()} | {:error, term()}
+  def activate_action(session_id, slot, opts \\ []) do
+    registry = Keyword.get(opts, :registry, Core.World.Registry)
+    sessions = Keyword.get(opts, :sessions, SessionManager)
+
+    with {:ok, session} <- fetch_session(sessions, session_id) do
+      MapServer.activate_action(registry, session.map_id, session.id, session.entity_id, slot)
+    end
+  end
+
   @spec attack(pos_integer(), keyword()) :: {:ok, map()} | {:error, term()}
   def attack(session_id, opts \\ []) do
     registry = Keyword.get(opts, :registry, Core.World.Registry)

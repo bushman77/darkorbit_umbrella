@@ -8,8 +8,6 @@ defmodule Core.Combat do
   """
 
   @player_attack_range 720.0
-  @player_attack_cooldown_ms 700
-
   @type damage_result :: %{
           requested_damage: non_neg_integer(),
           shield_damage: non_neg_integer(),
@@ -23,10 +21,12 @@ defmodule Core.Combat do
           attack_cooldown_ticks: pos_integer()
         }
   def player_weapon(stats, tick_ms) do
+    action = Core.Combat.ActionCatalog.pulse_emitter()
+
     %{
       damage: non_negative_integer(Map.get(stats, :damage, 0)),
       attack_range: @player_attack_range,
-      attack_cooldown_ticks: cooldown_ticks(@player_attack_cooldown_ms, tick_ms)
+      attack_cooldown_ticks: cooldown_ticks(action.cooldown_ms, tick_ms)
     }
   end
 
@@ -139,8 +139,15 @@ defmodule Core.Combat do
       |> Map.put(:status, :destroyed)
       |> Map.put(:destination, nil)
       |> Map.put(:target_id, nil)
+      |> maybe_clear_engagement()
 
     if Map.has_key?(target, :state), do: Map.put(target, :state, :destroyed), else: target
+  end
+
+  defp maybe_clear_engagement(target) do
+    if Map.has_key?(target, :engaged_target_id),
+      do: Map.put(target, :engaged_target_id, nil),
+      else: target
   end
 
   defp non_negative_integer(value) when is_integer(value), do: max(0, value)

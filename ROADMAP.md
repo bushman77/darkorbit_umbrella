@@ -110,7 +110,16 @@ Inspired by:
 - Right-click and accessible nearest-target selection, target HUD, Space/click firing, laser and hit effects, and explosions
 - Catalog-defined Phoenix pulse emitter so existing development pilots can fight without inventory grants or duplication
 
-Graphical ship flight and continuous mouse navigation have been manually verified. Two-player browser synchronization and the complete Milestone E browser combat encounter are implemented and covered by automated tests, but await manual verification in browser sessions.
+### Milestone E.1 — Classic combat controls and action hotbar
+
+- Left-click NPC selection uses rendered entity dimensions and consumes the pointer gesture before navigation; empty-space click-and-hold flight is preserved
+- Selected and engaged targets are separate authoritative states, with explicit engage/disengage commands and idempotent repeated activation
+- The map tick automatically fires the server-defined pulse emitter when range and cooldown rules permit, pauses while out of range, and clears combat across destruction, removal, disconnect, and respawn lifecycles
+- Engaged player ships visually face their replicated target independently of movement, then smoothly return to navigation facing when combat ends
+- Responsive bottom-center slots `1` through `0` use server-defined action data, with the pulse emitter in slot 1 and safe empty placeholders in slots 2 through 0
+- Space, number-row keys, click activation, Esc cancellation, active/selected/empty/cooldown states, and input-control/key-repeat guards are implemented
+
+Graphical ship flight and continuous mouse navigation were manually verified during Milestone D.1. The complete Milestone E.1 browser encounter and two-player browser observation flow are covered by automated tests but have not yet been manually verified.
 
 ---
 
@@ -137,12 +146,14 @@ Graphical ship flight and continuous mouse navigation have been manually verifie
 - Configurable deterministic simulation ticks
 - Continuous click-and-hold client navigation ✅
 - NPC spawning, AI, combat, destruction, and respawning ✅
+- Persistent tick-owned player combat engagement and independent combat facing ✅
 
 ### 5. Real-Time Layer (movement and PvE slices complete)
 - Authenticated Channels and sockets ✅
 - Connected-player presence and disconnect cleanup ✅
 - Movement synchronization ✅
 - Targeting, laser, damage, destruction, and respawn events ✅
+- Engagement, disengagement, hotbar activation, and replicated combat-facing state ✅
 
 ### 6. Economy System
 - Shop / purchases
@@ -176,7 +187,7 @@ Principles:
 
 ## ⚠️ Known Gaps
 
-- Two-player browser synchronization and the Milestone E combat encounter await manual browser verification
+- Two-player browser synchronization and the Milestone E.1 combat encounter await manual browser verification
 - Destroyed player recovery, ammunition, loot, rewards, and PvP are not implemented
 - Live map state is ephemeral, single-node, and has no crash recovery or spatial partitioning
 - Initial map, NPC, and combat balance values remain provisional
@@ -186,6 +197,6 @@ Principles:
 
 ## ✅ Immediate Next Task
 
-Manually exercise the complete combat acceptance flow in two browser sessions,
-then design player recovery and reward handling without moving combat authority
-out of `Core.World.MapServer`.
+Manually exercise the complete Milestone E.1 acceptance flow in two browser
+sessions, then design player recovery and reward handling without moving combat
+authority out of `Core.World.MapServer`.

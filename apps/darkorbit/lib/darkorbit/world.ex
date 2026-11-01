@@ -27,7 +27,13 @@ defmodule Darkorbit.World do
   defdelegate move(session_id, destination), to: Simulation
   defdelegate select_target(session_id, target_id), to: Simulation
   defdelegate clear_target(session_id), to: Simulation
+  defdelegate engage_combat(session_id), to: Simulation
+  defdelegate disengage_combat(session_id), to: Simulation
+  defdelegate activate_action(session_id, slot), to: Simulation
   defdelegate attack(session_id), to: Simulation
+
+  @spec action_hotbar() :: [Core.Combat.ActionCatalog.slot()]
+  def action_hotbar, do: Core.Combat.ActionCatalog.hotbar()
 
   @spec snapshot(String.t()) :: {:ok, map()} | {:error, term()}
   def snapshot(map_id \\ MapDefinition.starting_map_id()), do: Simulation.snapshot(map_id)

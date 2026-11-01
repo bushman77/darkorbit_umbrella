@@ -21,7 +21,7 @@ defmodule Core.World.Entity do
     :next_attack_tick,
     :status
   ]
-  defstruct @enforce_keys ++ [:destination, :target_id]
+  defstruct @enforce_keys ++ [:destination, :target_id, :engaged_target_id]
 
   @type t :: %__MODULE__{
           id: term(),
@@ -41,6 +41,7 @@ defmodule Core.World.Entity do
           attack_cooldown_ticks: pos_integer(),
           next_attack_tick: non_neg_integer(),
           target_id: term() | nil,
+          engaged_target_id: term() | nil,
           status: :alive | :destroyed
         }
 end

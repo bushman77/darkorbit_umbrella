@@ -54,6 +54,31 @@ defmodule DarkorbitWeb.WorldChannel do
     end
   end
 
+  def handle_in("engage_combat", _payload, socket) do
+    case World.engage_combat(socket.assigns.world_session_id) do
+      {:ok, engagement} -> {:reply, {:ok, engagement}, socket}
+      {:error, reason} -> {:reply, {:error, %{reason: error_reason(reason)}}, socket}
+    end
+  end
+
+  def handle_in("disengage_combat", _payload, socket) do
+    case World.disengage_combat(socket.assigns.world_session_id) do
+      {:ok, engagement} -> {:reply, {:ok, engagement}, socket}
+      {:error, reason} -> {:reply, {:error, %{reason: error_reason(reason)}}, socket}
+    end
+  end
+
+  def handle_in("activate_action", %{"slot" => slot}, socket) when is_integer(slot) do
+    case World.activate_action(socket.assigns.world_session_id, slot) do
+      {:ok, activation} -> {:reply, {:ok, activation}, socket}
+      {:error, reason} -> {:reply, {:error, %{reason: error_reason(reason)}}, socket}
+    end
+  end
+
+  def handle_in("activate_action", _payload, socket) do
+    {:reply, {:error, %{reason: "invalid_action_slot"}}, socket}
+  end
+
   def handle_in("laser_attack", _payload, socket) do
     case World.attack(socket.assigns.world_session_id) do
       {:ok, attack} -> {:reply, {:ok, attack}, socket}
@@ -78,6 +103,8 @@ defmodule DarkorbitWeb.WorldChannel do
              :npc_state_changed,
              :target_selected,
              :target_cleared,
+             :combat_engaged,
+             :combat_disengaged,
              :laser_fired,
              :entity_destroyed
            ] do
@@ -106,6 +133,7 @@ defmodule DarkorbitWeb.WorldChannel do
         response = %{
           map: snapshot,
           player: status,
+          hotbar: World.action_hotbar(),
           pilots: World.player_summaries(player_ids)
         }
 

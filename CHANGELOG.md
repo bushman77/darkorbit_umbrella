@@ -64,3 +64,34 @@
 - The complete browser combat encounter and two-browser observation flow have not yet been manually verified.
 - Destroyed players do not respawn; ammunition, rewards, loot, PvP, spatial partitioning, multi-node ownership, and live-state recovery remain out of scope.
 - Initial NPC and weapon values are provisional balancing data.
+
+### Milestone E.1 — Classic combat controls, persistent target lock, and action hotbar
+
+#### Added
+
+- Added authoritative `engaged_target_id` state alongside selected `target_id`, plus explicit combat engage, disengage, and structured hotbar-action commands.
+- Added a server-defined ten-slot action catalog. Slot 1 contains the existing Phoenix pulse emitter; slots 2 through 0 are safe empty placeholders and do not mutate inventory or ammunition.
+- Added map-tick automatic player attacks with server-owned range, damage, cooldown, destruction, and validity enforcement. Out-of-range engagement pauses without moving the player and resumes when range becomes valid.
+- Added idempotent repeated engagement, automatic target/engagement clearing on invalidation and destruction, preserved movement destinations during combat, and clean respawn/disconnect lifecycle handling.
+- Added left-click rendered-NPC hit testing before navigation capture while preserving empty-space single-click and click-and-hold movement. Existing right-click targeting remains available.
+- Added replicated combat-facing state and smooth shortest-path ship rotation toward moving engaged targets, independent from navigation direction.
+- Added a responsive bottom-center hotbar with number-row and click activation, Space engagement, Esc cancellation, and distinct selected, active, empty, and authoritative-cooldown visuals.
+- Added keyboard guards for repeated keys, modifier chords, form controls, buttons, and content-editable fields.
+
+#### Tests
+
+- Added Core coverage for the action catalog, distinct selection/engagement, tick-owned automatic fire, cooldown enforcement, range pause/resume, concurrent movement, cancellation, invalid/repeated actions, automatic destruction, player destruction, disconnect cleanup, and respawn lock clearing.
+- Added channel coverage for hotbar definitions, explicit engagement/action commands, empty/invalid slots, repeated engagement, cancellation, and multiplayer state synchronization.
+- Added JavaScript coverage for left-click target interception without movement, render-dimension hit testing, slots 1 through 0, input/key-repeat guards, combat-facing precedence, moving targets, navigation-facing restoration, and wrap-safe rotation smoothing.
+
+#### Verification
+
+- `mix compile --warnings-as-errors`, `mix precommit`, `mix assets.build`, and `git diff --check` pass.
+- `mix test` passes with 84 tests: 37 Core, 30 persistence, and 17 web/channel tests.
+- The JavaScript suite passes 21 tests across 16 top-level cases, including all prior pointer-navigation regressions.
+- Manual browser verification was not performed; the acceptance flow and two-browser observation remain required before graphical sign-off.
+
+#### Limitations
+
+- Slots 2 through 0 intentionally have no assigned action. Ammunition, rockets, abilities, consumables, and equipment assignment remain future work.
+- Destroyed player recovery, rewards, loot, PvP, and persistent/multi-node live world state remain out of scope.

@@ -7,6 +7,7 @@ defmodule Core.World.MapServer do
   use GenServer
 
   alias Core.Combat
+  alias Core.Combat.ActionCatalog
   alias Core.NPC.AI
   alias Core.NPC.Catalog, as: NPCCatalog
   alias Core.NPC.Entity, as: NPCEntity
@@ -62,6 +63,24 @@ defmodule Core.World.MapServer do
           {:ok, map()} | {:error, term()}
   def clear_target(registry, map_id, session_id, entity_id) do
     call_map(registry, map_id, {:clear_target, session_id, entity_id})
+  end
+
+  @spec engage_combat(atom(), String.t(), pos_integer(), term()) ::
+          {:ok, map()} | {:error, term()}
+  def engage_combat(registry, map_id, session_id, entity_id) do
+    call_map(registry, map_id, {:engage_combat, session_id, entity_id})
+  end
+
+  @spec disengage_combat(atom(), String.t(), pos_integer(), term()) ::
+          {:ok, map()} | {:error, term()}
+  def disengage_combat(registry, map_id, session_id, entity_id) do
+    call_map(registry, map_id, {:disengage_combat, session_id, entity_id})
+  end
+
+  @spec activate_action(atom(), String.t(), pos_integer(), term(), term()) ::
+          {:ok, map()} | {:error, term()}
+  def activate_action(registry, map_id, session_id, entity_id, slot) do
+    call_map(registry, map_id, {:activate_action, session_id, entity_id, slot})
   end
 
   @spec attack(atom(), String.t(), pos_integer(), term()) ::
@@ -145,6 +164,7 @@ defmodule Core.World.MapServer do
           attack_cooldown_ticks: weapon.attack_cooldown_ticks,
           next_attack_tick: 0,
           target_id: nil,
+          engaged_target_id: nil,
           status: :alive
         }
 
@@ -192,8 +212,24 @@ defmodule Core.World.MapServer do
          :ok <- living_attacker(entity),
          {:ok, target} <- fetch_npc(state, target_id),
          true <- Combat.valid_target?(entity, target) do
-      updated_entity = %{entity | target_id: target.id}
+      changing_target? = entity.target_id != target.id
+
+      updated_entity = %{
+        entity
+        | target_id: target.id,
+          engaged_target_id: if(changing_target?, do: nil, else: entity.engaged_target_id)
+      }
+
       new_state = %{state | entities: Map.put(state.entities, entity.id, updated_entity)}
+
+      if changing_target? and not is_nil(entity.engaged_target_id) do
+        broadcast(
+          new_state,
+          :combat_disengaged,
+          disengagement_payload(entity, :target_changed, state.tick)
+        )
+      end
+
       payload = %{player_id: entity.id, target_id: target.id, tick: state.tick}
       broadcast(new_state, :target_selected, payload)
       {:reply, {:ok, %{target: public_entity(target), selection: payload}}, new_state}
@@ -205,11 +241,54 @@ defmodule Core.World.MapServer do
 
   def handle_call({:clear_target, session_id, entity_id}, _from, state) do
     with {:ok, entity} <- authorized_entity(state, session_id, entity_id) do
-      updated_entity = %{entity | target_id: nil}
+      updated_entity = %{entity | target_id: nil, engaged_target_id: nil}
       new_state = %{state | entities: Map.put(state.entities, entity.id, updated_entity)}
+
+      if not is_nil(entity.engaged_target_id) do
+        broadcast(
+          new_state,
+          :combat_disengaged,
+          disengagement_payload(entity, :target_cleared, state.tick)
+        )
+      end
+
       payload = %{player_id: entity.id, target_id: nil, tick: state.tick}
       broadcast(new_state, :target_cleared, payload)
       {:reply, {:ok, payload}, new_state}
+    else
+      error -> {:reply, error, state}
+    end
+  end
+
+  def handle_call({:engage_combat, session_id, entity_id}, _from, state) do
+    with {:ok, entity} <- authorized_entity(state, session_id, entity_id),
+         :ok <- living_attacker(entity),
+         {:ok, target_id} <- selected_target(entity),
+         {:ok, target} <- fetch_npc(state, target_id),
+         true <- Combat.valid_target?(entity, target),
+         :ok <- armed_weapon(entity) do
+      {new_state, payload} = engage_entity(state, entity, target, ActionCatalog.pulse_emitter())
+      {:reply, {:ok, payload}, new_state}
+    else
+      false -> {:reply, {:error, :invalid_target}, state}
+      error -> {:reply, error, state}
+    end
+  end
+
+  def handle_call({:disengage_combat, session_id, entity_id}, _from, state) do
+    with {:ok, entity} <- authorized_entity(state, session_id, entity_id) do
+      {new_state, payload} = clear_player_combat(state, entity, :cancelled)
+      {:reply, {:ok, payload}, new_state}
+    else
+      error -> {:reply, error, state}
+    end
+  end
+
+  def handle_call({:activate_action, session_id, entity_id, slot}, _from, state) do
+    with {:ok, entity} <- authorized_entity(state, session_id, entity_id),
+         :ok <- living_attacker(entity),
+         {:ok, action} <- ActionCatalog.fetch_slot(slot) do
+      activate_action(state, entity, slot, action)
     else
       error -> {:reply, error, state}
     end
@@ -283,9 +362,46 @@ defmodule Core.World.MapServer do
         resolve_npc_attack(current, action)
       end)
 
-    state = respawn_due_npcs(state)
+    state = state |> resolve_player_engagements() |> respawn_due_npcs()
     broadcast(state, :world_state, public_state(state))
     state
+  end
+
+  defp resolve_player_engagements(state) do
+    state.entities
+    |> Map.keys()
+    |> Enum.sort_by(&inspect/1)
+    |> Enum.reduce(state, fn entity_id, current ->
+      case Map.fetch(current.entities, entity_id) do
+        {:ok, %Entity{engaged_target_id: nil}} ->
+          current
+
+        {:ok, %Entity{} = attacker} ->
+          resolve_player_engagement(current, attacker)
+
+        :error ->
+          current
+      end
+    end)
+  end
+
+  defp resolve_player_engagement(state, attacker) do
+    with :ok <- living_attacker(attacker),
+         {:ok, target} <- fetch_npc(state, attacker.engaged_target_id),
+         true <- attacker.target_id == target.id,
+         :ok <- Combat.validate_attack(attacker, target, state.tick) do
+      {new_state, _payload} = resolve_player_attack(state, attacker, target)
+      new_state
+    else
+      {:error, reason} when reason in [:weapon_cooldown, :out_of_range] ->
+        state
+
+      false ->
+        state |> clear_player_combat(attacker, :target_invalid) |> elem(0)
+
+      {:error, reason} ->
+        state |> clear_player_combat(attacker, engagement_error_reason(reason)) |> elem(0)
+    end
   end
 
   defp resolve_player_attack(state, attacker, target) do
@@ -337,6 +453,22 @@ defmodule Core.World.MapServer do
           {npcs, _cleared} = clear_npc_targets(state.npcs, damaged_target.id)
           destroyed_state = %{state | npcs: npcs}
 
+          if not is_nil(target.engaged_target_id) do
+            broadcast(
+              destroyed_state,
+              :combat_disengaged,
+              disengagement_payload(target, :player_destroyed, destroyed_state.tick)
+            )
+          end
+
+          if not is_nil(target.target_id) do
+            broadcast(destroyed_state, :target_cleared, %{
+              player_id: target.id,
+              target_id: nil,
+              tick: destroyed_state.tick
+            })
+          end
+
           broadcast(destroyed_state, :entity_destroyed, %{
             entity: public_entity(damaged_target),
             attacker_id: updated_attacker.id,
@@ -359,12 +491,13 @@ defmodule Core.World.MapServer do
     due_tick = state.tick + npc.respawn_delay_ticks
     respawn = %{npc_type_id: npc.npc_type_id, spawn_index: npc.spawn_index, due_tick: due_tick}
 
-    entities =
-      Map.new(state.entities, fn {entity_id, entity} ->
-        if entity.target_id == npc.id do
-          {entity_id, %{entity | target_id: nil}}
+    {entities, cleared_entities} =
+      Enum.reduce(state.entities, {%{}, []}, fn {entity_id, entity}, {entities, cleared} ->
+        if entity.target_id == npc.id or entity.engaged_target_id == npc.id do
+          updated = %{entity | target_id: nil, engaged_target_id: nil}
+          {Map.put(entities, entity_id, updated), [entity | cleared]}
         else
-          {entity_id, entity}
+          {Map.put(entities, entity_id, entity), cleared}
         end
       end)
 
@@ -375,6 +508,24 @@ defmodule Core.World.MapServer do
         respawns: Map.put(state.respawns, npc.id, respawn)
     }
 
+    Enum.each(cleared_entities, fn entity ->
+      if not is_nil(entity.engaged_target_id) do
+        broadcast(
+          state,
+          :combat_disengaged,
+          disengagement_payload(entity, :target_destroyed, state.tick)
+        )
+      end
+
+      if not is_nil(entity.target_id) do
+        broadcast(state, :target_cleared, %{
+          player_id: entity.id,
+          target_id: nil,
+          tick: state.tick
+        })
+      end
+    end)
+
     broadcast(state, :entity_destroyed, %{
       entity: public_entity(npc),
       attacker_id: attacker_id,
@@ -384,6 +535,91 @@ defmodule Core.World.MapServer do
 
     {state, Map.put(attack_payload, :respawn_tick, due_tick)}
   end
+
+  defp activate_action(state, _entity, slot, nil) do
+    payload = %{slot: slot, status: :empty, action: nil, tick: state.tick}
+    {:reply, {:ok, payload}, state}
+  end
+
+  defp activate_action(state, entity, slot, %{kind: :weapon} = action) do
+    with {:ok, target_id} <- selected_target(entity),
+         {:ok, target} <- fetch_npc(state, target_id),
+         true <- Combat.valid_target?(entity, target),
+         :ok <- armed_weapon(entity) do
+      {new_state, engagement} = engage_entity(state, entity, target, action)
+
+      {:reply,
+       {:ok,
+        %{
+          slot: slot,
+          status: :activated,
+          action: action,
+          engagement: engagement,
+          tick: state.tick
+        }}, new_state}
+    else
+      false -> {:reply, {:error, :invalid_target}, state}
+      error -> {:reply, error, state}
+    end
+  end
+
+  defp engage_entity(state, entity, target, action) do
+    changed? = entity.engaged_target_id != target.id
+    updated_entity = %{entity | engaged_target_id: target.id}
+    new_state = %{state | entities: Map.put(state.entities, entity.id, updated_entity)}
+
+    payload = %{
+      player_id: entity.id,
+      target_id: target.id,
+      action_id: action.id,
+      changed: changed?,
+      tick: state.tick
+    }
+
+    if changed?, do: broadcast(new_state, :combat_engaged, payload)
+    {new_state, payload}
+  end
+
+  defp clear_player_combat(state, entity, reason) do
+    updated_entity = %{entity | target_id: nil, engaged_target_id: nil}
+    new_state = %{state | entities: Map.put(state.entities, entity.id, updated_entity)}
+
+    if not is_nil(entity.engaged_target_id) do
+      broadcast(new_state, :combat_disengaged, disengagement_payload(entity, reason, state.tick))
+    end
+
+    if not is_nil(entity.target_id) do
+      broadcast(new_state, :target_cleared, %{
+        player_id: entity.id,
+        target_id: nil,
+        tick: state.tick
+      })
+    end
+
+    {new_state,
+     %{
+       player_id: entity.id,
+       target_id: nil,
+       previous_target_id: entity.engaged_target_id || entity.target_id,
+       reason: reason,
+       tick: state.tick
+     }}
+  end
+
+  defp disengagement_payload(entity, reason, tick) do
+    %{
+      player_id: entity.id,
+      target_id: nil,
+      previous_target_id: entity.engaged_target_id,
+      reason: reason,
+      tick: tick
+    }
+  end
+
+  defp engagement_error_reason(:target_not_found), do: :target_removed
+  defp engagement_error_reason(:target_destroyed), do: :target_destroyed
+  defp engagement_error_reason(:attacker_destroyed), do: :player_destroyed
+  defp engagement_error_reason(_reason), do: :target_invalid
 
   defp respawn_due_npcs(state) do
     {due, pending} =
@@ -444,6 +680,9 @@ defmodule Core.World.MapServer do
   defp living_attacker(entity) do
     if Combat.alive?(entity), do: :ok, else: {:error, :attacker_destroyed}
   end
+
+  defp armed_weapon(%{damage: damage}) when is_number(damage) and damage > 0, do: :ok
+  defp armed_weapon(_entity), do: {:error, :weapon_unarmed}
 
   defp valid_stats?(stats) do
     valid_non_negative_number?(Map.get(stats, :speed)) and
@@ -508,7 +747,10 @@ defmodule Core.World.MapServer do
       shield_absorption: entity.shield_absorption,
       damage: entity.damage,
       attack_range: entity.attack_range,
+      attack_cooldown_ticks: entity.attack_cooldown_ticks,
+      next_attack_tick: entity.next_attack_tick,
       target_id: entity.target_id,
+      engaged_target_id: entity.engaged_target_id,
       status: entity.status
     }
   end
@@ -529,6 +771,8 @@ defmodule Core.World.MapServer do
       shield_absorption: entity.shield_absorption,
       damage: entity.damage,
       attack_range: entity.attack_range,
+      attack_cooldown_ticks: entity.attack_cooldown_ticks,
+      next_attack_tick: entity.next_attack_tick,
       target_id: entity.target_id,
       state: entity.state,
       status: entity.status
@@ -554,6 +798,7 @@ defmodule Core.World.MapServer do
         max_shields: target.max_shields,
         status: target.status
       },
+      next_attack_tick: attacker.next_attack_tick,
       tick: tick
     }
   end

@@ -36,15 +36,17 @@ test("target helpers select only live NPCs and break equal distances determinist
   assert.equal(nearestNpc(entities, {x: 0, y: 0}).id, "npc:a")
 })
 
-test("right-click hit testing uses rendered screen positions", () => {
+test("NPC hit testing uses rendered screen positions and entity dimensions", () => {
   const entities = [npc("npc:near", 100, 100), npc("npc:far", 250, 250)]
   const worldToScreen = position => ({x: position.x - 20, y: position.y - 10})
+  const dimensions = () => ({width: 60, height: 40})
 
   assert.equal(
-    findNpcAtScreenPoint(entities, {x: 82, y: 88}, worldToScreen, 20).id,
+    findNpcAtScreenPoint(entities, {x: 82, y: 88}, worldToScreen, dimensions).id,
     "npc:near"
   )
-  assert.equal(findNpcAtScreenPoint(entities, {x: 10, y: 10}, worldToScreen, 20), null)
+  assert.equal(findNpcAtScreenPoint(entities, {x: 111, y: 90}, worldToScreen, dimensions), null)
+  assert.equal(findNpcAtScreenPoint(entities, {x: 80, y: 111}, worldToScreen, dimensions), null)
 })
 
 test("health percentages clamp and authoritative damage never uses local guesses", () => {
