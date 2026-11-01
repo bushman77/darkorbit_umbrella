@@ -13,7 +13,7 @@ import {
   smoothAngle,
 } from "./combat_controls.mjs"
 import {CockpitWindowManager} from "./cockpit_window_manager.mjs"
-import {MinimapNavigation, MinimapRenderer} from "./minimap_renderer.mjs"
+import {MinimapRenderer, minimapWorldPoint} from "./minimap_renderer.mjs"
 import {PointerNavigation} from "./pointer_navigation.mjs"
 
 const clamp = (value, minimum, maximum) => Math.min(Math.max(value, minimum), maximum)
@@ -86,14 +86,22 @@ class SpaceClient {
       getSelfId: () => this.selfId,
       getDestination: () => this.commandDestination,
     }).start()
-    this.minimapNavigation = new MinimapNavigation({
-      canvas: this.root.querySelector("#cockpit-minimap-canvas"),
-      getBoundaries: () => this.boundaries,
-      sendDestination: destination => this.sendDestination(destination),
-      canNavigate: () =>
-        this.cockpit?.windowContentInteractive("minimap") === true &&
-        Boolean(this.selfId) &&
-        this.channel?.state === "joined",
+    const minimapCanvas = this.root.querySelector("#cockpit-minimap-canvas")
+    const canNavigateMinimap = () =>
+      this.cockpit?.windowContentInteractive("minimap") === true &&
+      Boolean(this.selfId) &&
+      this.channel?.state === "joined"
+
+    this.minimapNavigation = new PointerNavigation({
+      canvas: minimapCanvas,
+      destinationForPointer: pointer =>
+        minimapWorldPoint(pointer, minimapCanvas, this.boundaries),
+      shipPosition: () => null,
+      sendDestination: destination =>
+        canNavigateMinimap() && this.sendDestination(destination),
+      interceptPointerDown: pointer =>
+        !canNavigateMinimap() ||
+        !minimapWorldPoint(pointer, minimapCanvas, this.boundaries),
     }).attach()
     this.assets.preload()
     this.resize()
