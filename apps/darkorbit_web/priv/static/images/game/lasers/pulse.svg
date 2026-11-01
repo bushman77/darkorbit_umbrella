@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 12" role="img" aria-label="Original pulse laser placeholder">
+  <defs><linearGradient id="beam"><stop stop-color="#67e8f9" stop-opacity="0"/><stop offset=".35" stop-color="#ecfeff"/><stop offset="1" stop-color="#22d3ee" stop-opacity="0"/></linearGradient></defs>
+  <path d="M2 6h60" stroke="#22d3ee" stroke-width="8" stroke-linecap="round" opacity=".18"/>
+  <path d="M2 6h60" stroke="url(#beam)" stroke-width="3" stroke-linecap="round"/>
+</svg>

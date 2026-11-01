@@ -26,6 +26,20 @@ defmodule Darkorbit.Fleet do
     |> Repo.all()
   end
 
+  def get_active_ship(user_id) when is_integer(user_id) do
+    query =
+      from(player_ship in PlayerShip,
+        join: account in PlayerAccount,
+        on: account.id == player_ship.user_id,
+        where: player_ship.user_id == ^user_id and player_ship.ship_id == account.ship_id
+      )
+
+    case Repo.one(query) do
+      %PlayerShip{} = player_ship -> {:ok, player_ship}
+      nil -> {:error, :active_ship_not_found}
+    end
+  end
+
   def owned_ship?(user_id, ship_id) when is_integer(user_id) and is_integer(ship_id) do
     Repo.exists?(
       from(player_ship in PlayerShip,

@@ -1,0 +1,85 @@
+defmodule DarkorbitWeb.WorldChannel do
+  use DarkorbitWeb, :channel
+
+  alias Darkorbit.World
+
+  @starting_map "1-1"
+
+  @impl true
+  def join("world:" <> map_id, _payload, socket) when map_id == @starting_map do
+    player_id = socket.assigns.current_player_id
+
+    with :ok <- World.subscribe(map_id),
+         {:ok, status} <- World.player_status(player_id, 1),
+         {:ok, session} <- World.connect(player_id, 1) do
+      finish_join(socket, map_id, session, status)
+    else
+      {:error, reason} -> {:error, %{reason: error_reason(reason)}}
+    end
+  end
+
+  def join("world:" <> _map_id, _payload, _socket) do
+    {:error, %{reason: "map_not_found"}}
+  end
+
+  @impl true
+  def handle_in("move", %{"x" => x, "y" => y}, socket)
+      when is_number(x) and is_number(y) do
+    case World.move(socket.assigns.world_session_id, %{x: x, y: y}) do
+      {:ok, entity} -> {:reply, {:ok, %{entity: entity}}, socket}
+      {:error, reason} -> {:reply, {:error, %{reason: error_reason(reason)}}, socket}
+    end
+  end
+
+  def handle_in("move", _payload, socket) do
+    {:reply, {:error, %{reason: "invalid_destination"}}, socket}
+  end
+
+  @impl true
+  def handle_info({:entity_joined, entity}, socket) do
+    payload = Map.put(entity, :pilot, World.player_summary(entity.player_id))
+    :ok = push(socket, "entity_joined", payload)
+    {:noreply, socket}
+  end
+
+  def handle_info({event, payload}, socket)
+      when event in [:entity_left, :movement_started, :world_state] do
+    :ok = push(socket, Atom.to_string(event), payload)
+    {:noreply, socket}
+  end
+
+  @impl true
+  def terminate(_reason, socket) do
+    case socket.assigns[:world_session_id] do
+      nil -> :ok
+      session_id -> World.disconnect(session_id)
+    end
+
+    :ok
+  end
+
+  defp finish_join(socket, map_id, session, status) do
+    case World.snapshot(map_id) do
+      {:ok, snapshot} ->
+        player_ids = Enum.map(snapshot.entities, & &1.player_id)
+
+        response = %{
+          map: snapshot,
+          player: status,
+          pilots: World.player_summaries(player_ids)
+        }
+
+        {:ok, response,
+         socket
+         |> assign(:map_id, map_id)
+         |> assign(:world_session_id, session.id)}
+
+      {:error, reason} ->
+        _result = World.disconnect(session.id)
+        {:error, %{reason: error_reason(reason)}}
+    end
+  end
+
+  defp error_reason(reason) when is_atom(reason), do: Atom.to_string(reason)
+  defp error_reason(reason), do: inspect(reason)
+end

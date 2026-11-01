@@ -24,6 +24,20 @@ defmodule Darkorbit.Accounts do
     Repo.get_by(PlayerAccount, username: username)
   end
 
+  def get_by_session_id(session_id) when is_binary(session_id) do
+    Repo.get_by(PlayerAccount, session_id: session_id)
+  end
+
+  def get_player_accounts(ids) when is_list(ids) do
+    ids = Enum.uniq(ids)
+
+    from(account in PlayerAccount,
+      where: account.id in ^ids,
+      order_by: [asc: account.id]
+    )
+    |> Repo.all()
+  end
+
   @doc """
   Registers an account and atomically provisions its inventory, settings,
   titles, starter ship, and both starter loadouts.
@@ -101,6 +115,19 @@ defmodule Darkorbit.Accounts do
       account
       |> PlayerAccount.system_changeset(%{"session_id" => random_token(32)})
       |> Repo.update()
+    end
+  end
+
+  def logout_account(user_id, session_id)
+      when is_integer(user_id) and is_binary(session_id) do
+    case Repo.get_by(PlayerAccount, id: user_id, session_id: session_id) do
+      %PlayerAccount{} = account ->
+        account
+        |> PlayerAccount.system_changeset(%{"session_id" => random_token(32)})
+        |> Repo.update()
+
+      nil ->
+        {:error, :invalid_session}
     end
   end
 

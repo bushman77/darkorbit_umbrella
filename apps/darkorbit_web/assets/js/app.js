@@ -24,6 +24,23 @@ import {Socket} from "phoenix"
 import {LiveSocket} from "phoenix_live_view"
 import {hooks as colocatedHooks} from "phoenix-colocated/darkorbit_web"
 import topbar from "../vendor/topbar"
+import {startGameClient} from "./game/client"
+
+const setTheme = theme => {
+  if (theme === "system") {
+    localStorage.removeItem("phx:theme")
+    document.documentElement.removeAttribute("data-theme")
+  } else {
+    localStorage.setItem("phx:theme", theme)
+    document.documentElement.setAttribute("data-theme", theme)
+  }
+}
+
+setTheme(localStorage.getItem("phx:theme") || "system")
+window.addEventListener("storage", event => {
+  if (event.key === "phx:theme") setTheme(event.newValue || "system")
+})
+window.addEventListener("phx:set-theme", event => setTheme(event.target.dataset.phxTheme))
 
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 const liveSocket = new LiveSocket("/live", Socket, {
@@ -45,6 +62,8 @@ liveSocket.connect()
 // >> liveSocket.enableLatencySim(1000)  // enabled for duration of browser session
 // >> liveSocket.disableLatencySim()
 window.liveSocket = liveSocket
+
+startGameClient()
 
 // The lines below enable quality of life phoenix_live_reload
 // development features:
@@ -80,4 +99,3 @@ if (process.env.NODE_ENV === "development") {
     window.liveReloader = reloader
   })
 }
-

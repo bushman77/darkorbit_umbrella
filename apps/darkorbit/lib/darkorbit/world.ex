@@ -8,6 +8,10 @@ defmodule Darkorbit.World do
 
   alias Core.World, as: Simulation
   alias Core.World.MapDefinition
+  alias Darkorbit.Accounts
+  alias Darkorbit.Accounts.PlayerAccount
+  alias Darkorbit.Fleet
+  alias Darkorbit.Loadouts
   alias Darkorbit.ShipStats
   alias Darkorbit.World.PubSub
 
@@ -30,5 +34,88 @@ defmodule Darkorbit.World do
   @spec subscribe(String.t()) :: :ok | {:error, term()}
   def subscribe(map_id \\ MapDefinition.starting_map_id()) do
     Phoenix.PubSub.subscribe(Darkorbit.PubSub, PubSub.topic(map_id))
+  end
+
+  @spec player_status(pos_integer(), 1 | 2) :: {:ok, map()} | {:error, term()}
+  def player_status(user_id, config_no \\ 1)
+      when is_integer(user_id) and config_no in [1, 2] do
+    with %PlayerAccount{} = account <- Accounts.get_player_account!(user_id),
+         {:ok, player_ship} <- Fleet.get_active_ship(user_id),
+         %{} = loadout <- Loadouts.get_loadout(player_ship.id, config_no),
+         {:ok, stats} <- ShipStats.calculate(user_id, player_ship.id, config_no),
+         {:ok, ship} <- Core.Ships.Catalog.fetch(player_ship.ship_id) do
+      {:ok,
+       %{
+         pilot: summarize_player(account),
+         ship: %{id: ship.id, name: ship.name},
+         stats: Map.from_struct(stats),
+         configuration: %{
+           number: config_no,
+           lasers: equipment_slots(loadout.lasers),
+           generators: equipment_slots(loadout.generators),
+           drones: equipment_slots(loadout.drones)
+         }
+       }}
+    else
+      nil -> {:error, :loadout_not_found}
+      error -> error
+    end
+  rescue
+    Ecto.NoResultsError -> {:error, :player_not_found}
+  end
+
+  @spec player_summaries([pos_integer()]) :: %{optional(pos_integer()) => map()}
+  def player_summaries(player_ids) when is_list(player_ids) do
+    player_ids
+    |> Accounts.get_player_accounts()
+    |> Map.new(fn account -> {account.id, summarize_player(account)} end)
+  end
+
+  @spec player_summary(pos_integer()) :: map() | nil
+  def player_summary(player_id) when is_integer(player_id) do
+    case Accounts.get_player_accounts([player_id]) do
+      [account] -> summarize_player(account)
+      [] -> nil
+    end
+  end
+
+  defp summarize_player(%PlayerAccount{} = account) do
+    %{
+      id: account.id,
+      pilot_name: account.pilot_name,
+      username: account.username,
+      faction_id: account.faction_id
+    }
+  end
+
+  defp equipment_slots(equipment) when is_map(equipment) do
+    ["ship", "drones", "slots"]
+    |> Enum.flat_map(fn location ->
+      equipment
+      |> Map.get(location, [])
+      |> Enum.with_index(1)
+      |> Enum.flat_map(fn
+        {nil, _slot} -> []
+        {item_id, slot} -> [equipment_slot(item_id, location, slot)]
+      end)
+    end)
+  end
+
+  defp equipment_slots(_slots), do: []
+
+  defp equipment_slot(item_id, location, slot) do
+    case Core.Equipment.Catalog.fetch(item_id) do
+      {:ok, item} ->
+        %{
+          location: location,
+          slot: slot,
+          id: item.id,
+          name: item.name,
+          category: item.category
+        }
+
+      :error ->
+        %{location: location, slot: slot, id: item_id, name: item_id, category: :unknown}
+    end
   end
 end

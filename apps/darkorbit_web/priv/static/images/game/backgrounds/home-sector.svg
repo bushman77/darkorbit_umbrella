@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Original home sector background placeholder">
+  <rect width="512" height="512" fill="#020611"/>
+  <g fill="#bae6fd" opacity=".75">
+    <circle cx="42" cy="88" r="1"/><circle cx="118" cy="31" r="1.4"/><circle cx="196" cy="143" r=".8"/><circle cx="294" cy="76" r="1.1"/><circle cx="451" cy="112" r="1.3"/>
+    <circle cx="76" cy="281" r=".9"/><circle cx="162" cy="377" r="1.2"/><circle cx="276" cy="246" r=".7"/><circle cx="364" cy="338" r="1.4"/><circle cx="473" cy="442" r="1"/>
+  </g>
+  <path d="M-40 410C90 280 184 457 321 307s246-58 246-58" fill="none" stroke="#0ea5e9" stroke-width="80" opacity=".035"/>
+</svg>

@@ -8,6 +8,11 @@ defmodule DarkorbitWeb.Router do
     plug :put_root_layout, html: {DarkorbitWeb.Layouts, :root}
     plug :protect_from_forgery
     plug :put_secure_browser_headers
+    plug DarkorbitWeb.GameAuth, :fetch_current_player
+  end
+
+  pipeline :require_authenticated_player do
+    plug DarkorbitWeb.GameAuth, :require_authenticated_player
   end
 
   pipeline :api do
@@ -18,6 +23,15 @@ defmodule DarkorbitWeb.Router do
     pipe_through :browser
 
     get "/", PageController, :home
+    get "/login", SessionController, :new
+    post "/login", SessionController, :create
+    delete "/logout", SessionController, :delete
+  end
+
+  scope "/", DarkorbitWeb do
+    pipe_through [:browser, :require_authenticated_player]
+
+    get "/play", GameController, :show
   end
 
   # Other scopes may use custom stacks.

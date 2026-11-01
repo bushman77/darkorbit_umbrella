@@ -1,4 +1,4 @@
-# Architecture baseline through Milestone C
+# Architecture baseline through Milestone D
 
 ## Umbrella boundaries
 
@@ -9,9 +9,10 @@
   inventory, loadout, preference, and title domains. It adapts persisted
   loadouts into pure core stats and delivers core events through Phoenix
   PubSub.
-- `apps/darkorbit_web` owns the Phoenix endpoint and browser-facing layer. It
-  currently contains the generated web shell; gameplay Channels and the canvas
-  client have not been implemented yet.
+- `apps/darkorbit_web` owns browser-session authentication, the authenticated
+  game socket and world channel, HTTP routes, and the Canvas 2D client. It
+  translates browser intentions and Core events without owning simulation
+  mechanics.
 
 `Darkorbit.Application` starts the repository, DNS discovery, Phoenix PubSub,
 and then `Core.World.Supervisor`. The world supervisor owns its Registry,
@@ -71,6 +72,26 @@ the endpoint.
    `:entity_joined`, `:entity_left`, `:movement_started`, and `:world_state` on
    `world:<map-id>` topics.
 
+## Browser transport invariants
+
+1. Credential login rotates the persisted account session. The game page
+   issues a short-lived signed token containing that session identity; socket
+   connect verifies both its signature and the still-current database session.
+2. Only authenticated sockets can join `world:1-1`. A channel creates exactly
+   one Core session, binds all movement to that session, and disconnects it
+   when the channel terminates.
+3. Movement payloads contain destination coordinates only. Client-provided
+   entity or session identifiers are ignored, and Core remains responsible for
+   authorization and map-boundary validation.
+4. Channel join returns a full authoritative snapshot and persisted HUD data.
+   Core PubSub events are forwarded to all joined clients; multiple clients
+   therefore render the same tick-owned player positions.
+5. The Canvas renderer interpolates displayed positions toward the latest
+   server snapshots. Mouse input never changes an entity position locally.
+6. All included graphics are original placeholders. A versioned client catalog
+   separates ships, NPCs, lasers, explosions, drones, and backgrounds so later
+   art changes do not alter networking or simulation code.
+
 ## Test baseline
 
 The test suite covers complete registration provisioning, rejection of
@@ -82,12 +103,12 @@ withdrawals and simultaneous equips to prove that one item cannot be consumed
 or equipped twice. Pure tests cover catalogs, stat aggregation, equipment
 constraints, boundaries, and movement. A headless integration test connects a
 persisted player's active ship, moves it across the map, and observes PubSub
-world-state events.
+world-state events. Channel integration tests additionally cover signed socket
+authentication, map authorization, Core-validated movement, map event
+subscriptions, disconnect cleanup, and simultaneous players.
 
 ## Known baseline limitations
 
-- The Phoenix app has no player authentication UI, game socket protocol,
-  Channels, LiveView administration, or canvas client yet.
 - There is no combat, NPC, portal, spatial partitioning, persistence/recovery
   for live map state, or multi-node world ownership yet.
 - Catalog values and the starting map are provisional placeholder game data.
@@ -96,7 +117,6 @@ world-state events.
 
 ## Next vertical slice
 
-The next completed vertical slice should add a minimal authoritative combat
-loop (targeting, cooldowns, and damage) or expose the current movement protocol
-through an authenticated Phoenix Channel. Either slice should continue using
-pure core mechanics and keep clients limited to submitting intentions.
+The next vertical slice can add a minimal authoritative combat loop (targeting,
+cooldowns, lasers, damage, and destruction) while keeping combat mechanics in
+Core and treating the existing graphics catalog as presentation only.

@@ -5,10 +5,9 @@ built as an authoritative game system: clients submit intentions, while
 identity, ownership, inventory, equipment, progression, economy, and world
 state are validated and owned by the server.
 
-The completed server baseline includes persistent player-state domains, a
-deterministic ship-stat engine, and a supervised authoritative starting map.
-It is not yet a playable browser client: combat and a client-facing game
-socket protocol remain future vertical slices.
+The completed vertical slice includes persistent player-state domains, a
+deterministic ship-stat engine, a supervised authoritative starting map, and
+an authenticated multiplayer Canvas 2D browser client for sector 1-1.
 
 ## Requirements
 
@@ -30,8 +29,18 @@ mix phx.server
 ```
 
 The setup alias fetches dependencies, creates and migrates `darkorbit_dev`,
-and installs/builds the browser assets. Open <http://localhost:4000> after the
-server starts.
+seeds two playable pilots, and installs/builds the browser assets. Open
+<http://localhost:4000> after the server starts, choose **Launch browser
+client**, and sign in with either development account:
+
+```text
+demo_pilot / launch-sector-11
+wing_pilot / launch-sector-11
+```
+
+Open a normal and private browser window with one account in each to see both
+ships. Click in the viewport to submit a destination; the server validates the
+command and broadcasts tick-owned positions back to both clients.
 
 Useful commands:
 
@@ -46,6 +55,13 @@ entries, formats the project, and runs the complete umbrella test suite. The
 test aliases create and migrate `darkorbit_test` automatically. Run
 `mix hex.audit` before releases to check the locked Hex packages against current
 retirements and security advisories.
+
+The game transport uses `world:1-1` on `/socket`. Browser sessions issue a
+short-lived signed socket token, and channel commands contain only movement
+intentions (`x` and `y` destinations). Core owns sessions, map bounds, speeds,
+positions, and simulation ticks. Original placeholder graphics live under
+`apps/darkorbit_web/priv/static/images/game`; their categories and dimensions
+are defined in `assets/js/game/asset_catalog.js`.
 
 ## Architecture
 
