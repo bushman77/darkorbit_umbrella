@@ -1,6 +1,12 @@
 export const COCKPIT_LAYOUT_VERSION = 1
 export const COCKPIT_STORAGE_PREFIX = "darkorbit:cockpit-layout:v1"
 export const COCKPIT_COMPACT_BREAKPOINT = 720
+export const MINIMAP_DEFAULT_WIDTH = 272
+export const MINIMAP_MIN_WIDTH = 192
+export const MINIMAP_MAX_WIDTH = 520
+export const MINIMAP_WIDTH_STEP = 40
+
+const MINIMAP_VIEWPORT_INSET = 24
 
 export const DEFAULT_COCKPIT_WINDOWS = Object.freeze({
   ship_status: Object.freeze({
@@ -23,11 +29,21 @@ export const DEFAULT_COCKPIT_WINDOWS = Object.freeze({
     offsetY: 126,
     visible: true,
     collapsed: false,
+    width: MINIMAP_DEFAULT_WIDTH,
   }),
 })
 
 const finite = value => typeof value === "number" && Number.isFinite(value)
 const boolean = value => typeof value === "boolean"
+
+export const clampMinimapWidth = (width, viewportWidth = Number.POSITIVE_INFINITY) => {
+  const requested = finite(width) ? width : MINIMAP_DEFAULT_WIDTH
+  const available = finite(viewportWidth)
+    ? Math.max(MINIMAP_MIN_WIDTH, viewportWidth - MINIMAP_VIEWPORT_INSET)
+    : MINIMAP_MAX_WIDTH
+
+  return Math.min(Math.max(requested, MINIMAP_MIN_WIDTH), MINIMAP_MAX_WIDTH, available)
+}
 
 export const cockpitStorageKey = playerId =>
   `${COCKPIT_STORAGE_PREFIX}:player:${String(playerId || "guest")}`
@@ -63,12 +79,18 @@ export const sanitizeCockpitLayout = (saved, defaults) => {
   const windows = {}
   for (const [id, fallback] of Object.entries(defaults.windows)) {
     const candidate = saved.windows[id]
-    windows[id] = {
+    const window = {
       x: finite(candidate?.x) ? candidate.x : fallback.x,
       y: finite(candidate?.y) ? candidate.y : fallback.y,
       visible: boolean(candidate?.visible) ? candidate.visible : fallback.visible,
       collapsed: boolean(candidate?.collapsed) ? candidate.collapsed : fallback.collapsed,
     }
+    if (finite(fallback.width)) {
+      window.width = clampMinimapWidth(
+        finite(candidate?.width) ? candidate.width : fallback.width
+      )
+    }
+    windows[id] = window
   }
 
   return {
@@ -147,11 +169,17 @@ export class CockpitWindowManager {
 
     for (const [id, element] of this.windows) {
       const definition = this.definitions[id]
-      const position = defaultWindowPosition(definition, this.measure(element), viewport)
+      const measured = this.measure(element)
+      const width = finite(definition.width)
+        ? clampMinimapWidth(definition.width, viewport.width)
+        : null
+      const size = width === null ? measured : {...measured, width}
+      const position = defaultWindowPosition(definition, size, viewport)
       windows[id] = {
-        ...clampWindowPosition(position, this.measure(element), viewport),
+        ...clampWindowPosition(position, size, viewport),
         visible: definition.visible,
         collapsed: definition.collapsed,
+        ...(width === null ? {} : {width}),
       }
     }
 
@@ -241,9 +269,41 @@ export class CockpitWindowManager {
     this.compact = compact
     this.root.classList.toggle("is-compact", compact)
     this.root.dataset.cockpitMode = compact ? "docked" : "floating"
+    this.clampMinimapToViewport(viewport)
 
     if (!compact) this.clampAll()
     if (persist) this.persist()
+  }
+
+  resizeMinimap(direction) {
+    const state = this.layout.windows.minimap
+    const element = this.windows.get("minimap")
+    if (!state || !element || !finite(direction) || direction === 0) return
+
+    const viewport = this.viewport()
+    const previousWidth = clampMinimapWidth(state.width, viewport.width)
+    const nextWidth = clampMinimapWidth(
+      previousWidth + Math.sign(direction) * MINIMAP_WIDTH_STEP,
+      viewport.width
+    )
+
+    state.width = nextWidth
+    if (!this.compact && nextWidth !== previousWidth) {
+      state.x -= nextWidth - previousWidth
+    }
+    this.applyMinimapWidth()
+    if (!this.compact) this.clampWindow("minimap")
+    this.updateMinimapSizeControls()
+    if (nextWidth !== previousWidth) this.persist()
+  }
+
+  clampMinimapToViewport(viewport = this.viewport()) {
+    const state = this.layout.windows.minimap
+    if (!state) return
+
+    state.width = clampMinimapWidth(state.width, viewport.width)
+    this.applyMinimapWidth()
+    this.updateMinimapSizeControls()
   }
 
   clampAll() {
@@ -255,7 +315,7 @@ export class CockpitWindowManager {
     const element = this.windows.get(id)
     if (!state || !element || !state.visible) return
 
-    const position = clampWindowPosition(state, this.measure(element), this.viewport())
+    const position = clampWindowPosition(state, this.measureWindow(id, element), this.viewport())
     state.x = position.x
     state.y = position.y
     this.applyPosition(element, state)
@@ -263,8 +323,10 @@ export class CockpitWindowManager {
 
   applyLayout() {
     this.applyLockState()
+    this.applyMinimapWidth()
     for (const id of this.windows.keys()) this.applyWindowState(id)
     this.updateVisibilityControls()
+    this.updateMinimapSizeControls()
   }
 
   applyLockState() {
@@ -307,6 +369,29 @@ export class CockpitWindowManager {
     element.style.transform = `translate3d(${Math.round(state.x)}px, ${Math.round(state.y)}px, 0)`
   }
 
+  applyMinimapWidth() {
+    const element = this.windows.get("minimap")
+    const width = this.layout?.windows?.minimap?.width
+    if (!element || !finite(width)) return
+
+    element.style.setProperty("--cockpit-minimap-width", `${Math.round(width)}px`)
+  }
+
+  updateMinimapSizeControls() {
+    const element = this.windows.get("minimap")
+    const state = this.layout?.windows?.minimap
+    if (!element || !state) return
+
+    const width = clampMinimapWidth(state.width, this.viewport().width)
+    const maximum = clampMinimapWidth(MINIMAP_MAX_WIDTH, this.viewport().width)
+    for (const control of element.querySelectorAll("[data-cockpit-minimap-resize]")) {
+      const decrease = control.dataset.cockpitMinimapResize === "decrease"
+      const disabled = decrease ? width <= MINIMAP_MIN_WIDTH : width >= maximum
+      control.disabled = disabled
+      control.setAttribute("aria-disabled", String(disabled))
+    }
+  }
+
   updateVisibilityControls() {
     for (const control of this.root.querySelectorAll("[data-cockpit-visibility]")) {
       const id = control.dataset.cockpitVisibility
@@ -323,6 +408,7 @@ export class CockpitWindowManager {
       const header = element.querySelector("[data-cockpit-drag-handle]")
       const collapse = element.querySelector("[data-cockpit-collapse]")
       const hide = element.querySelector("[data-cockpit-hide]")
+      const minimapResize = element.querySelectorAll("[data-cockpit-minimap-resize]")
 
       this.listen(element, "pointerdown", event => {
         event.stopPropagation()
@@ -340,6 +426,10 @@ export class CockpitWindowManager {
       }
       if (collapse) this.listen(collapse, "click", () => this.toggleCollapsed(id))
       if (hide) this.listen(hide, "click", () => this.setVisible(id, false))
+      for (const control of minimapResize) {
+        const direction = control.dataset.cockpitMinimapResize === "increase" ? 1 : -1
+        this.listen(control, "click", () => this.resizeMinimap(direction))
+      }
     }
 
     const lock = this.root.querySelector("[data-cockpit-lock-toggle]")
@@ -449,7 +539,7 @@ export class CockpitWindowManager {
     const state = this.layout.windows[id]
     const position = clampWindowPosition(
       {x: state.x + direction[0] * step, y: state.y + direction[1] * step},
-      this.measure(this.windows.get(id)),
+      this.measureWindow(id, this.windows.get(id)),
       this.viewport()
     )
     state.x = position.x
@@ -474,6 +564,12 @@ export class CockpitWindowManager {
       width: Number(rect.width) || Number(element?.offsetWidth) || 320,
       height: Number(rect.height) || Number(element?.offsetHeight) || 220,
     }
+  }
+
+  measureWindow(id, element) {
+    const measured = this.measure(element)
+    const width = this.layout?.windows?.[id]?.width
+    return finite(width) ? {...measured, width} : measured
   }
 
   listen(target, type, listener, options) {

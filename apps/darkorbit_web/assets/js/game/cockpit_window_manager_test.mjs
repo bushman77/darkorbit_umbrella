@@ -5,7 +5,11 @@ import test from "node:test"
 import {
   COCKPIT_LAYOUT_VERSION,
   CockpitWindowManager,
+  MINIMAP_DEFAULT_WIDTH,
+  MINIMAP_MAX_WIDTH,
+  MINIMAP_MIN_WIDTH,
   clampWindowPosition,
+  clampMinimapWidth,
   cockpitStorageKey,
   sanitizeCockpitLayout,
 } from "./cockpit_window_manager.mjs"
@@ -43,7 +47,15 @@ class FakeEventTarget {
     this.offsetWidth = width
     this.offsetHeight = height
     this.dataset = {...dataset}
-    this.style = {}
+    this.style = {
+      values: new Map(),
+      setProperty(name, value) {
+        this.values.set(name, String(value))
+      },
+      getPropertyValue(name) {
+        return this.values.get(name) || ""
+      },
+    }
     this.hidden = false
     this.classList = new FakeClassList()
     this.attributes = new Map()
@@ -169,6 +181,7 @@ const setup = ({storage = new FakeStorage(), width = 1366, height = 768} = {}) =
   const handles = {}
   const collapseButtons = {}
   const hideButtons = {}
+  const minimapResizeButtons = {}
 
   for (const [id, size] of Object.entries(dimensions)) {
     const element = new FakeEventTarget({dataset: {cockpitWindow: id}, ...size})
@@ -178,6 +191,15 @@ const setup = ({storage = new FakeStorage(), width = 1366, height = 768} = {}) =
     element.register("[data-cockpit-drag-handle]", handle)
     element.register("[data-cockpit-collapse]", collapse)
     element.register("[data-cockpit-hide]", hide)
+    if (id === "minimap") {
+      const decrease = button()
+      decrease.dataset.cockpitMinimapResize = "decrease"
+      const increase = button()
+      increase.dataset.cockpitMinimapResize = "increase"
+      element.registerAll("[data-cockpit-minimap-resize]", [decrease, increase])
+      minimapResizeButtons.decrease = decrease
+      minimapResizeButtons.increase = increase
+    }
     windows[id] = element
     handles[id] = handle
     collapseButtons[id] = collapse
@@ -222,6 +244,7 @@ const setup = ({storage = new FakeStorage(), width = 1366, height = 768} = {}) =
     manager,
     menu,
     menuToggle,
+    minimapResizeButtons,
     reset,
     root,
     storage,
@@ -278,10 +301,38 @@ test("collapse, expansion, hide, restore, and reset update accessible controls",
   context.manager.setLocked(false)
   context.manager.layout.windows.target_info.x = 400
   context.manager.setVisible("minimap", false)
+  context.manager.resizeMinimap(1)
   context.reset.dispatch("click")
   assert.equal(context.manager.layout.locked, true)
   assert.equal(context.manager.layout.windows.minimap.visible, true)
+  assert.equal(context.manager.layout.windows.minimap.width, MINIMAP_DEFAULT_WIDTH)
+  assert.equal(
+    context.windows.minimap.style.getPropertyValue("--cockpit-minimap-width"),
+    `${MINIMAP_DEFAULT_WIDTH}px`
+  )
+  assert.equal(
+    JSON.parse(context.storage.getItem(context.manager.storageKey)).windows.minimap.width,
+    MINIMAP_DEFAULT_WIDTH
+  )
   assert.notEqual(context.manager.layout.windows.target_info.x, 400)
+})
+
+test("locked minimap controls resize by forty pixels and update the rendered width", () => {
+  const context = setup()
+  const minimap = context.manager.layout.windows.minimap
+
+  assert.equal(context.manager.layout.locked, true)
+  assert.equal(minimap.width, MINIMAP_DEFAULT_WIDTH)
+  context.minimapResizeButtons.increase.dispatch("click")
+  assert.equal(minimap.width, MINIMAP_DEFAULT_WIDTH + 40)
+  assert.equal(
+    context.windows.minimap.style.getPropertyValue("--cockpit-minimap-width"),
+    `${MINIMAP_DEFAULT_WIDTH + 40}px`
+  )
+
+  context.minimapResizeButtons.decrease.dispatch("click")
+  assert.equal(minimap.width, MINIMAP_DEFAULT_WIDTH)
+  assert.equal(context.manager.layout.locked, true)
 })
 
 test("versioned per-player layouts persist and restore without sensitive identifiers", () => {
@@ -291,14 +342,37 @@ test("versioned per-player layouts persist and restore without sensitive identif
   first.manager.layout.windows.ship_status.x = 444
   first.manager.toggleCollapsed("ship_status")
   first.manager.setVisible("minimap", false)
-  first.manager.persist()
+  first.manager.resizeMinimap(1)
+  first.manager.resizeMinimap(1)
 
   const restored = setup({storage})
   assert.equal(restored.manager.layout.locked, false)
   assert.equal(restored.manager.layout.windows.ship_status.x, 444)
   assert.equal(restored.manager.layout.windows.ship_status.collapsed, true)
   assert.equal(restored.manager.layout.windows.minimap.visible, false)
+  assert.equal(restored.manager.layout.windows.minimap.width, MINIMAP_DEFAULT_WIDTH + 80)
+  assert.equal(
+    restored.windows.minimap.style.getPropertyValue("--cockpit-minimap-width"),
+    `${MINIMAP_DEFAULT_WIDTH + 80}px`
+  )
   assert.equal(cockpitStorageKey(42), "darkorbit:cockpit-layout:v1:player:42")
+})
+
+test("layouts saved before minimap sizing retain their existing window state", () => {
+  const storage = new FakeStorage()
+  const original = setup({storage, width: 1_920})
+  const saved = structuredClone(original.manager.layout)
+  saved.locked = false
+  saved.windows.minimap.x = 777
+  saved.windows.minimap.visible = false
+  delete saved.windows.minimap.width
+  storage.setItem(original.manager.storageKey, JSON.stringify(saved))
+
+  const restored = setup({storage, width: 1_920})
+  assert.equal(restored.manager.layout.locked, false)
+  assert.equal(restored.manager.layout.windows.minimap.x, 777)
+  assert.equal(restored.manager.layout.windows.minimap.visible, false)
+  assert.equal(restored.manager.layout.windows.minimap.width, MINIMAP_DEFAULT_WIDTH)
 })
 
 test("corrupted, incompatible, and unavailable storage fall back safely", () => {
@@ -354,6 +428,30 @@ test("viewport resize clamps floating windows and enables the narrow dock", () =
   context.windowTarget.innerHeight = 600
   context.windowTarget.dispatch("resize")
   assert.equal(context.root.classList.contains("is-compact"), true)
+})
+
+test("minimap sizing clamps to configured and available viewport bounds", () => {
+  const context = setup({width: 1_920, height: 1_080})
+
+  for (let click = 0; click < 20; click += 1) {
+    context.minimapResizeButtons.increase.dispatch("click")
+  }
+  assert.equal(context.manager.layout.windows.minimap.width, MINIMAP_MAX_WIDTH)
+  assert.equal(context.minimapResizeButtons.increase.disabled, true)
+
+  for (let click = 0; click < 20; click += 1) {
+    context.minimapResizeButtons.decrease.dispatch("click")
+  }
+  assert.equal(context.manager.layout.windows.minimap.width, MINIMAP_MIN_WIDTH)
+  assert.equal(context.minimapResizeButtons.decrease.disabled, true)
+
+  context.manager.layout.windows.minimap.width = MINIMAP_MAX_WIDTH
+  context.windowTarget.innerWidth = 400
+  context.windowTarget.dispatch("resize")
+  assert.equal(context.manager.layout.windows.minimap.width, 376)
+  assert.equal(context.root.dataset.cockpitMode, "docked")
+  assert.equal(clampMinimapWidth(999, 400), 376)
+  assert.equal(clampMinimapWidth(-1, 1_920), MINIMAP_MIN_WIDTH)
 })
 
 test("pointer cleanup releases capture on cancel, blur, visibility, and destroy", async t => {

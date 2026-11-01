@@ -105,7 +105,7 @@ body {
 }
 
 .cockpit-window-minimap {
-  width: min(17rem, calc(100vw - 1.5rem));
+  width: min(var(--cockpit-minimap-width, 17rem), calc(100vw - 1.5rem));
 }
 
 .cockpit-window.is-focused {
@@ -227,6 +227,27 @@ body {
 .cockpit-window-button:focus-visible {
   outline: 2px solid rgb(103 232 249 / 0.64);
   outline-offset: 1px;
+}
+
+.cockpit-minimap-size-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+}
+
+.cockpit-minimap-size-button {
+  width: 1.45rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.9rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.cockpit-minimap-size-button:disabled {
+  cursor: not-allowed;
+  border-color: rgb(51 65 85 / 0.52);
+  color: rgb(100 116 139 / 0.55);
+  background: rgb(15 23 42 / 0.42);
 }
 
 .cockpit-edit-control {

@@ -45,6 +45,8 @@ defmodule DarkorbitWeb.SessionControllerTest do
     assert Enum.count(LazyHTML.query(document, "#hotbar-slot-10")) == 1
     assert Enum.count(LazyHTML.query(document, "[data-cockpit-window]")) == 3
     assert Enum.count(LazyHTML.query(document, "#cockpit-minimap-canvas")) == 1
+    assert Enum.count(LazyHTML.query(document, "#minimap-decrease")) == 1
+    assert Enum.count(LazyHTML.query(document, "#minimap-increase")) == 1
     assert Enum.count(LazyHTML.query(document, "#cockpit-lock-toggle")) == 1
     assert Enum.count(LazyHTML.query(document, "#cockpit-reset-layout")) == 1
 

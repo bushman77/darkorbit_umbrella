@@ -122,6 +122,33 @@
 
 #### Limitations
 
-- The E.2.1 minimap is intentionally display-only. Click-to-travel is planned for E.2.2.
+- At the E.2.1 milestone boundary the minimap was display-only; Milestone E.2.2 supersedes that limitation with server-authoritative minimap navigation.
 - Layouts are local to one browser profile and are not synchronized through the account database.
 - Broader multiplayer validation, multiplayer expansion, recovery, rewards, ammunition, loot, PvP, and persistent or multi-node live world state remain deferred.
+
+### Milestone E.2.2 — Interactive and scalable minimap
+
+#### Added
+
+- Added locked-HUD minimap click and click-and-hold steering through the existing pointer-navigation lifecycle. Minimap gestures project into authoritative map boundaries and submit destination intentions without changing local entity positions, combat state, or server-owned movement rules.
+- Added visible minus and plus controls to the minimap header. Each activation changes the floating minimap width by 40 pixels, bounded from 192 to 520 pixels and clamped to the available viewport.
+- Persisted the minimap width in the existing version-1, per-player cockpit layout payload. Layouts saved before the width field existed retain all coordinates, visibility, collapse, and lock state while adopting the 272-pixel default.
+- Kept size controls interactive while the HUD is locked. The compact horizontal dock continues to own narrow-screen panel sizing while retaining the selected floating width for supported viewports.
+
+#### Tests
+
+- Added JavaScript regression coverage for locked sizing controls, exact 40-pixel steps, rendered width application, automatic persistence and reload restoration, legacy payload compatibility, reset persistence, configured bounds, viewport bounds, and compact-dock behavior.
+- Preserved and reran the existing JavaScript navigation and combat regressions, including continuous minimap steering, projection after CSS resize, active-combat isolation, cancellation cleanup, and server-authoritative destination submission.
+- Extended the authenticated game-page test to require exactly one visible decrease control and one visible increase control.
+
+#### Verification
+
+- `mix precommit` passes with 84 Elixir tests: 37 Core, 30 persistence, and 17 web/channel tests.
+- `npm test` passes 46 JavaScript tests across 37 top-level cases.
+- The focused authenticated game-page test passes 3 tests, `mix assets.build` passes, and `git diff --check` passes.
+- Manual browser verification was not performed. Minimap sizing, persistence across reload, locked-HUD controls, responsive docking, and click-and-hold steering still require graphical acceptance at the supported viewport sizes.
+
+#### Limitations
+
+- Layout size remains local to one browser profile and is not synchronized through the account database.
+- On compact viewports the horizontal dock intentionally overrides the floating minimap width; the persisted width is used again when the cockpit returns to floating mode.

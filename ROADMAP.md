@@ -132,6 +132,17 @@ Manual browser verification confirmed navigation, NPC targeting, persistent lase
 
 The E.2.1 code and automated verification are complete. Manual browser verification of the new cockpit at the target viewport sizes has not yet been performed.
 
+### Milestone E.2.2 — Interactive and scalable minimap
+
+- Locked-HUD minimap clicks and click-and-hold gestures now submit projected destination intentions through the existing pointer-navigation lifecycle while movement positions, speed, validation, and combat remain server-owned
+- Visible minus and plus header controls resize the floating minimap in 40-pixel steps from 192 through 520 pixels, with an additional available-viewport clamp
+- Minimap width uses the existing version-1 per-player cockpit storage; older payloads retain their complete layout and receive the 272-pixel default, while reset restores and persists that default
+- Narrow viewports keep the horizontally scrollable dock sizing, and the selected floating width is retained for the return to floating mode
+- JavaScript regressions cover sizing, automatic persistence/reload, legacy layouts, reset, configured and viewport bounds, responsive docking, continuous minimap steering, combat isolation, and cancellation cleanup
+- `mix precommit` passes 84 Elixir tests, `npm test` passes 46 JavaScript tests across 37 top-level cases, the 3-test authenticated page file passes, and `mix assets.build` passes
+
+The E.2.2 implementation and automated verification are complete. Manual browser verification was not performed; the full sizing, reload, responsive-dock, minimap-steering, and combat-preservation flow remains required at the supported viewport sizes.
+
 ---
 
 ## 🚧 Next Major Milestones
@@ -159,6 +170,7 @@ The E.2.1 code and automated verification are complete. Manual browser verificat
 - NPC spawning, AI, combat, destruction, and respawning ✅
 - Persistent tick-owned player combat engagement and independent combat facing ✅
 - Modular local cockpit layout and standalone minimap rendering ✅
+- Server-authoritative minimap steering and persistent bounded minimap sizing ✅
 
 ### 5. Real-Time Layer (movement and PvE slices complete)
 - Authenticated Channels and sockets ✅
@@ -199,9 +211,8 @@ Principles:
 
 ## ⚠️ Known Gaps
 
-- The E.2.1 cockpit still requires manual browser verification at 1366×768, 1920×1080, 2560×1440, and mobile-sized viewports
+- The E.2.1/E.2.2 cockpit and minimap still require manual browser verification at 1366×768, 1920×1080, 2560×1440, and mobile-sized viewports
 - Two-player synchronization and broader multiplayer browser validation remain deferred
-- The minimap is display-only; interactive minimap navigation is planned for Milestone E.2.2
 - Destroyed player recovery, ammunition, loot, rewards, and PvP are not implemented
 - Live map state is ephemeral, single-node, and has no crash recovery or spatial partitioning
 - Initial map, NPC, and combat balance values remain provisional
@@ -211,7 +222,7 @@ Principles:
 
 ## ✅ Immediate Next Task
 
-Manually verify the complete E.2.1 cockpit acceptance flow at the supported
-viewport sizes, then implement Milestone E.2.2 interactive minimap navigation
-without moving movement authority out of `Core.World.MapServer`. Multiplayer
-expansion and broader two-browser validation remain deferred.
+Manually verify the complete E.2.1/E.2.2 cockpit acceptance flow at the
+supported viewport sizes, including minimap sizing and reload persistence,
+responsive docking, and click-and-hold steering. Multiplayer expansion and
+broader two-browser validation remain deferred.
