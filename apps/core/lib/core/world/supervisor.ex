@@ -7,6 +7,7 @@ defmodule Core.World.Supervisor do
   alias Core.World.MapServer
   alias Core.World.NoopEventSink
   alias Core.World.SessionManager
+  alias Core.NPC.Catalog, as: NPCCatalog
 
   def start_link(opts) do
     Supervisor.start_link(__MODULE__, opts, name: Keyword.get(opts, :name, __MODULE__))
@@ -20,6 +21,7 @@ defmodule Core.World.Supervisor do
     event_sink = Keyword.get(opts, :event_sink, NoopEventSink)
     auto_tick? = Keyword.get(opts, :auto_tick, true)
     maps = Keyword.get(opts, :maps, [MapDefinition.starting_map()])
+    npc_catalog = Keyword.get(opts, :npc_catalog, NPCCatalog.all())
 
     map_children =
       Enum.map(maps, fn definition ->
@@ -28,6 +30,7 @@ defmodule Core.World.Supervisor do
          registry: registry,
          tick_ms: tick_ms,
          event_sink: event_sink,
+         npc_catalog: npc_catalog,
          auto_tick: auto_tick?}
       end)
 

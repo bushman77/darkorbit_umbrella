@@ -1,9 +1,15 @@
 import {Socket} from "phoenix"
 import {GraphicsAssets} from "./asset_catalog"
+import {
+  applyAuthoritativeDamage,
+  entityKey,
+  findNpcAtScreenPoint,
+  healthPercent,
+  nearestNpc,
+} from "./combat_client.mjs"
 import {PointerNavigation} from "./pointer_navigation.mjs"
 
 const clamp = (value, minimum, maximum) => Math.min(Math.max(value, minimum), maximum)
-const entityKey = id => String(id)
 const number = value => new Intl.NumberFormat("en-US", {maximumFractionDigits: 0}).format(value || 0)
 
 const seededRandom = seed => {
@@ -32,6 +38,10 @@ class SpaceClient {
     this.selfId = null
     this.player = null
     this.commandDestination = null
+    this.selectedTargetId = null
+    this.beams = []
+    this.impacts = []
+    this.explosions = []
     this.lastFrame = performance.now()
     this.assets = new GraphicsAssets()
     this.stars = this.createStars()
@@ -52,6 +62,11 @@ class SpaceClient {
       shipPosition: () => this.entities.get(this.selfId)?.target,
       sendDestination: destination => this.sendDestination(destination),
     }).attach()
+    this.canvas.addEventListener("contextmenu", event => this.handleTargetPointer(event))
+    this.root.querySelector("#combat-target-nearest")?.addEventListener("click", () => this.selectNearestTarget())
+    this.root.querySelector("#combat-clear-target")?.addEventListener("click", () => this.clearTarget())
+    this.root.querySelector("#combat-fire")?.addEventListener("click", () => this.fireLaser())
+    window.addEventListener("keydown", event => this.handleCombatKey(event))
     this.connect()
     requestAnimationFrame(time => this.frame(time))
   }
@@ -67,7 +82,14 @@ class SpaceClient {
     this.channel.on("world_state", state => this.applyWorldState(state))
     this.channel.on("movement_started", entity => this.upsertEntity(entity))
     this.channel.on("entity_joined", entity => this.entityJoined(entity))
-    this.channel.on("entity_left", entity => this.entities.delete(entityKey(entity.id)))
+    this.channel.on("entity_left", entity => this.removeEntity(entity.id))
+    this.channel.on("npc_spawned", entity => this.upsertEntity(entity, true))
+    this.channel.on("npc_movement_started", entity => this.upsertEntity(entity))
+    this.channel.on("npc_state_changed", entity => this.upsertEntity(entity))
+    this.channel.on("target_selected", selection => this.targetSelected(selection))
+    this.channel.on("target_cleared", selection => this.targetCleared(selection))
+    this.channel.on("laser_fired", attack => this.laserFired(attack))
+    this.channel.on("entity_destroyed", destruction => this.entityDestroyed(destruction))
     this.channel.onError(() => this.setConnection("Sector channel lost", "error"))
     this.channel.onClose(() => this.setConnection("Sector channel closed", "error"))
 
@@ -112,8 +134,10 @@ class SpaceClient {
     }
 
     for (const id of this.entities.keys()) {
-      if (!activeIds.has(id)) this.entities.delete(id)
+      if (!activeIds.has(id)) this.removeEntity(id)
     }
+
+    this.updateCombatHud()
   }
 
   entityJoined(entity) {
@@ -131,16 +155,43 @@ class SpaceClient {
       existing.target = target
       existing.destination = destination
       existing.speed = entity.speed
+      existing.kind = entity.kind || existing.kind
+      existing.playerId = entity.player_id == null ? existing.playerId : entityKey(entity.player_id)
+      existing.npcTypeId = entity.npc_type_id || existing.npcTypeId
+      existing.displayName = entity.display_name || existing.displayName
+      existing.hull = entity.hull
+      existing.maxHull = entity.max_hull
+      existing.shields = entity.shields
+      existing.maxShields = entity.max_shields
+      existing.shieldAbsorption = entity.shield_absorption
+      existing.damage = entity.damage
+      existing.attackRange = entity.attack_range
+      existing.targetId = entity.target_id == null ? null : entityKey(entity.target_id)
+      existing.state = entity.state
+      existing.status = entity.status
       if (destination) existing.angle = Math.atan2(destination.y - existing.render.y, destination.x - existing.render.x)
       if (snap) existing.render = {...target}
     } else {
       this.entities.set(id, {
         id,
-        playerId: entityKey(entity.player_id),
+        kind: entity.kind || "player",
+        playerId: entity.player_id == null ? null : entityKey(entity.player_id),
+        npcTypeId: entity.npc_type_id,
+        displayName: entity.display_name,
         render: {...target},
         target,
         destination,
         speed: entity.speed,
+        hull: entity.hull,
+        maxHull: entity.max_hull,
+        shields: entity.shields,
+        maxShields: entity.max_shields,
+        shieldAbsorption: entity.shield_absorption,
+        damage: entity.damage,
+        attackRange: entity.attack_range,
+        targetId: entity.target_id == null ? null : entityKey(entity.target_id),
+        state: entity.state,
+        status: entity.status,
         angle: destination ? Math.atan2(destination.y - target.y, destination.x - target.x) : -Math.PI / 2,
       })
     }
@@ -166,12 +217,152 @@ class SpaceClient {
     return true
   }
 
+  handleTargetPointer(event) {
+    event.preventDefault()
+    const rect = this.canvas.getBoundingClientRect()
+    const target = findNpcAtScreenPoint(
+      this.entities.values(),
+      {x: event.clientX - rect.left, y: event.clientY - rect.top},
+      position => this.worldToScreen(position)
+    )
+
+    if (target) this.selectTarget(target.id)
+  }
+
+  handleCombatKey(event) {
+    if (event.code !== "Space" || event.repeat || event.target?.matches?.("input, textarea, select, button")) return
+    event.preventDefault()
+    this.fireLaser()
+  }
+
+  selectNearestTarget() {
+    const ownShip = this.entities.get(this.selfId)
+    const target = nearestNpc(this.entities.values(), ownShip?.target)
+    if (target) this.selectTarget(target.id)
+    else this.setCombatMessage("No hostile signal in sector telemetry.")
+  }
+
+  selectTarget(targetId) {
+    if (!this.channel || !this.selfId) return
+
+    this.channel
+      .push("select_target", {target_id: targetId}, 5000)
+      .receive("ok", response => this.targetSelected(response.selection))
+      .receive("error", response => this.setCombatMessage(`Target rejected: ${response.reason}`))
+      .receive("timeout", () => this.setCombatMessage("Targeting command timed out."))
+  }
+
+  clearTarget() {
+    if (!this.channel || !this.selfId) return
+
+    this.channel
+      .push("clear_target", {}, 5000)
+      .receive("ok", selection => this.targetCleared(selection))
+      .receive("error", response => this.setCombatMessage(`Clear target rejected: ${response.reason}`))
+  }
+
+  fireLaser() {
+    if (!this.channel || !this.selfId) return
+    if (!this.selectedTargetId) {
+      this.setCombatMessage("Select an NPC before firing.")
+      return
+    }
+
+    this.channel
+      .push("laser_attack", {}, 5000)
+      .receive("error", response => this.setCombatMessage(this.attackError(response.reason)))
+      .receive("timeout", () => this.setCombatMessage("Laser command timed out."))
+  }
+
+  targetSelected(selection) {
+    if (entityKey(selection.player_id) !== this.selfId) return
+    this.selectedTargetId = entityKey(selection.target_id)
+    this.setCombatMessage("Target lock confirmed.")
+    this.updateCombatHud()
+  }
+
+  targetCleared(selection) {
+    if (entityKey(selection.player_id) !== this.selfId) return
+    this.selectedTargetId = null
+    this.setCombatMessage("Target lock cleared.")
+    this.updateCombatHud()
+  }
+
+  laserFired(attack) {
+    const attacker = this.entities.get(entityKey(attack.attacker_id))
+    const target = this.entities.get(entityKey(attack.target_id))
+    if (target) applyAuthoritativeDamage(target, attack.target)
+
+    const startedAt = performance.now()
+    if (attacker && target) {
+      this.beams.push({
+        from: {...attacker.render},
+        to: {...target.render},
+        hostile: attacker.kind === "npc",
+        startedAt,
+        expiresAt: startedAt + 230,
+      })
+      this.impacts.push({
+        position: {...target.render},
+        shield: Number(attack.shield_damage) > 0,
+        startedAt,
+        expiresAt: startedAt + 420,
+      })
+    }
+
+    if (entityKey(attack.attacker_id) === this.selfId) {
+      this.setCombatMessage(
+        `${number(attack.shield_damage)} shield · ${number(attack.hull_damage)} hull damage`
+      )
+    }
+
+    this.updateCombatHud()
+  }
+
+  entityDestroyed(destruction) {
+    const id = entityKey(destruction.entity.id)
+    const entity = this.entities.get(id)
+    const position = entity?.render || destruction.entity.position
+    const startedAt = performance.now()
+
+    if (position) {
+      this.explosions.push({position: {...position}, startedAt, expiresAt: startedAt + 850})
+    }
+
+    if (destruction.entity.kind === "npc") this.removeEntity(id)
+    if (this.selectedTargetId === id) this.selectedTargetId = null
+
+    this.setCombatMessage(
+      destruction.entity.kind === "npc" ? "Hostile destroyed. Respawn telemetry queued." : "Ship destroyed."
+    )
+    this.updateCombatHud()
+  }
+
+  removeEntity(id) {
+    const key = entityKey(id)
+    this.entities.delete(key)
+    if (this.selectedTargetId === key) this.selectedTargetId = null
+  }
+
+  attackError(reason) {
+    const messages = {
+      no_target: "Select an NPC before firing.",
+      target_not_found: "The selected target is no longer active.",
+      out_of_range: "Target is outside laser range. Navigate closer.",
+      weapon_cooldown: "Laser is recharging.",
+      attacker_destroyed: "Destroyed ships cannot fire.",
+      weapon_unarmed: "No server-authorized weapon is available.",
+    }
+    return messages[reason] || `Laser rejected: ${reason}`
+  }
+
   frame(time) {
     const deltaSeconds = Math.min((time - this.lastFrame) / 1000, 0.1)
     this.lastFrame = time
     this.interpolate(deltaSeconds)
     this.draw(time)
     this.updateCoordinates()
+    this.updateCombatHud()
     requestAnimationFrame(nextTime => this.frame(nextTime))
   }
 
@@ -226,9 +417,13 @@ class SpaceClient {
     this.drawBoundary()
     this.drawDestination(time)
 
-    const orderedEntities = [...this.entities.values()].sort((left, right) => Number(left.id) - Number(right.id))
-    for (const entity of orderedEntities) this.drawShip(entity, time)
+    const orderedEntities = [...this.entities.values()].sort((left, right) => {
+      const kindOrder = (left.kind === "player" ? 0 : 1) - (right.kind === "player" ? 0 : 1)
+      return kindOrder || left.id.localeCompare(right.id)
+    })
+    for (const entity of orderedEntities) this.drawEntity(entity, time)
 
+    this.drawCombatEffects(time)
     this.drawMinimap()
   }
 
@@ -304,6 +499,11 @@ class SpaceClient {
     context.restore()
   }
 
+  drawEntity(entity, time) {
+    if (entity.kind === "npc") this.drawNpc(entity, time)
+    else this.drawShip(entity, time)
+  }
+
   drawShip(entity, time) {
     const context = this.context
     const screen = this.worldToScreen(entity.render)
@@ -347,6 +547,153 @@ class SpaceClient {
     context.fillText(pilot?.pilot_name || `Pilot ${entity.playerId}`, screen.x, screen.y + height / 2 + 17)
   }
 
+  drawNpc(entity, time) {
+    const context = this.context
+    const screen = this.worldToScreen(entity.render)
+    const {definition, image} = this.assets.get("npcs", "sentinel")
+    const width = definition?.width || 60
+    const height = definition?.height || 60
+    const selected = entity.id === this.selectedTargetId
+
+    context.save()
+    context.translate(screen.x, screen.y)
+
+    if (selected) {
+      const pulse = 39 + Math.sin(time * 0.009) * 4
+      context.strokeStyle = "rgba(251, 146, 60, 0.95)"
+      context.lineWidth = 2
+      context.setLineDash([7, 5])
+      context.beginPath()
+      context.arc(0, 0, pulse, 0, Math.PI * 2)
+      context.stroke()
+      context.setLineDash([])
+    }
+
+    context.rotate(entity.angle + Math.PI / 2)
+    context.shadowColor = selected ? "rgba(251,146,60,0.9)" : "rgba(249,115,22,0.48)"
+    context.shadowBlur = selected ? 22 : 12
+    if (image) {
+      context.drawImage(image, -width / 2, -height / 2, width, height)
+    } else {
+      this.drawFallbackNpc(context, width, height)
+    }
+    context.restore()
+
+    this.drawEntityBars(entity, screen, width)
+    context.textAlign = "center"
+    context.font = selected ? "700 12px ui-sans-serif" : "600 11px ui-sans-serif"
+    context.fillStyle = selected ? "#fed7aa" : "#fdba74"
+    context.fillText(entity.displayName || "Hostile", screen.x, screen.y + height / 2 + 28)
+    context.font = "600 8px ui-sans-serif"
+    context.fillStyle = "rgba(251,146,60,0.68)"
+    context.fillText((entity.state || "idle").toUpperCase(), screen.x, screen.y + height / 2 + 40)
+  }
+
+  drawFallbackNpc(context, width, height) {
+    context.fillStyle = "#431407"
+    context.strokeStyle = "#fb923c"
+    context.lineWidth = 2
+    context.beginPath()
+    context.moveTo(0, -height / 2)
+    context.lineTo(width / 2, 0)
+    context.lineTo(0, height / 2)
+    context.lineTo(-width / 2, 0)
+    context.closePath()
+    context.fill()
+    context.stroke()
+  }
+
+  drawEntityBars(entity, screen, width) {
+    const context = this.context
+    const barWidth = Math.max(46, width)
+    const left = screen.x - barWidth / 2
+    const top = screen.y - width / 2 - 14
+    context.fillStyle = "rgba(2,6,23,0.82)"
+    context.fillRect(left, top, barWidth, 7)
+    context.fillStyle = "#38bdf8"
+    context.fillRect(left, top, barWidth * healthPercent(entity.shields, entity.maxShields) / 100, 2)
+    context.fillStyle = "#34d399"
+    context.fillRect(left, top + 4, barWidth * healthPercent(entity.hull, entity.maxHull) / 100, 3)
+  }
+
+  drawCombatEffects(time) {
+    this.beams = this.beams.filter(beam => beam.expiresAt > time)
+    this.impacts = this.impacts.filter(impact => impact.expiresAt > time)
+    this.explosions = this.explosions.filter(explosion => explosion.expiresAt > time)
+
+    for (const beam of this.beams) this.drawBeam(beam, time)
+    for (const impact of this.impacts) this.drawImpact(impact, time)
+    for (const explosion of this.explosions) this.drawExplosion(explosion, time)
+  }
+
+  drawBeam(beam, time) {
+    const context = this.context
+    const from = this.worldToScreen(beam.from)
+    const to = this.worldToScreen(beam.to)
+    const deltaX = to.x - from.x
+    const deltaY = to.y - from.y
+    const length = Math.hypot(deltaX, deltaY)
+    const progress = clamp((time - beam.startedAt) / (beam.expiresAt - beam.startedAt), 0, 1)
+    const {definition, image} = this.assets.get("lasers", "pulse")
+
+    context.save()
+    context.translate(from.x, from.y)
+    context.rotate(Math.atan2(deltaY, deltaX))
+    context.globalAlpha = 1 - progress * 0.72
+    context.shadowColor = beam.hostile ? "#fb923c" : "#22d3ee"
+    context.shadowBlur = 16 + Math.sin(progress * Math.PI) * 12
+
+    if (image) {
+      context.drawImage(image, 0, -(definition?.height || 8) / 2, length, definition?.height || 8)
+    } else {
+      context.strokeStyle = beam.hostile ? "#fdba74" : "#a5f3fc"
+      context.lineWidth = 3 + Math.sin(progress * Math.PI) * 2
+      context.beginPath()
+      context.moveTo(0, 0)
+      context.lineTo(length, 0)
+      context.stroke()
+    }
+    context.restore()
+  }
+
+  drawImpact(impact, time) {
+    const context = this.context
+    const screen = this.worldToScreen(impact.position)
+    const progress = clamp((time - impact.startedAt) / (impact.expiresAt - impact.startedAt), 0, 1)
+    context.save()
+    context.globalAlpha = 1 - progress
+    context.strokeStyle = impact.shield ? "#67e8f9" : "#fb923c"
+    context.lineWidth = 4 - progress * 2
+    context.shadowColor = context.strokeStyle
+    context.shadowBlur = 18
+    context.beginPath()
+    context.arc(screen.x, screen.y, 18 + progress * 30, 0, Math.PI * 2)
+    context.stroke()
+    context.restore()
+  }
+
+  drawExplosion(explosion, time) {
+    const context = this.context
+    const screen = this.worldToScreen(explosion.position)
+    const progress = clamp((time - explosion.startedAt) / (explosion.expiresAt - explosion.startedAt), 0, 1)
+    const {definition, image} = this.assets.get("explosions", "plasma")
+    const size = (definition?.width || 96) * (0.45 + progress * 1.25)
+    context.save()
+    context.translate(screen.x, screen.y)
+    context.rotate(progress * 1.8)
+    context.globalAlpha = 1 - progress
+    context.shadowColor = "#f97316"
+    context.shadowBlur = 28
+    if (image) context.drawImage(image, -size / 2, -size / 2, size, size)
+    else {
+      context.fillStyle = "#fb923c"
+      context.beginPath()
+      context.arc(0, 0, size / 3, 0, Math.PI * 2)
+      context.fill()
+    }
+    context.restore()
+  }
+
   drawFallbackShip(context, isSelf, width, height) {
     context.fillStyle = isSelf ? "#102b3b" : "#211939"
     context.strokeStyle = isSelf ? "#67e8f9" : "#c4b5fd"
@@ -387,7 +734,9 @@ class SpaceClient {
     for (const entity of this.entities.values()) {
       const dotX = x + (entity.render.x / this.boundaries.width) * mapWidth
       const dotY = y + (entity.render.y / this.boundaries.height) * mapHeight
-      context.fillStyle = entity.id === this.selfId ? "#67e8f9" : "#c4b5fd"
+      context.fillStyle = entity.kind === "npc"
+        ? "#fb923c"
+        : entity.id === this.selfId ? "#67e8f9" : "#c4b5fd"
       context.beginPath()
       context.arc(dotX, dotY, entity.id === this.selfId ? 2.5 : 2, 0, Math.PI * 2)
       context.fill()
@@ -414,13 +763,51 @@ class SpaceClient {
     this.root.querySelector("#hud-shield-bar").style.width = stats.shields > 0 ? "100%" : "0%"
 
     const equipment = [...configuration.lasers, ...configuration.generators, ...configuration.drones]
-    this.text("#hud-equipment", equipment.length ? equipment.map(item => item.name).join(" · ") : "Base ship systems")
+    this.text(
+      "#hud-equipment",
+      equipment.length ? equipment.map(item => item.name).join(" · ") : "Phoenix pulse emitter · Base ship systems"
+    )
   }
 
   updateCoordinates() {
     const ownShip = this.entities.get(this.selfId)
     if (!ownShip) return
     this.text("#hud-coordinates", `${number(ownShip.render.x)} / ${number(ownShip.render.y)}`)
+  }
+
+  updateCombatHud() {
+    const ownShip = this.entities.get(this.selfId)
+    if (ownShip) {
+      this.text("#hud-hp", `${number(ownShip.hull)} / ${number(ownShip.maxHull)}`)
+      this.text("#hud-shields", `${number(ownShip.shields)} / ${number(ownShip.maxShields)}`)
+      this.setWidth("#hud-hp-bar", healthPercent(ownShip.hull, ownShip.maxHull))
+      this.setWidth("#hud-shield-bar", healthPercent(ownShip.shields, ownShip.maxShields))
+    }
+
+    const target = this.entities.get(this.selectedTargetId)
+    const panel = this.root.querySelector("#combat-target-panel")
+    if (!panel) return
+
+    if (target?.kind === "npc") {
+      panel.classList.remove("hidden")
+      this.text("#combat-target-name", target.displayName || "Hostile")
+      this.text("#combat-target-state", `${(target.state || "idle").toUpperCase()} · ${number(target.attackRange)}u weapons`)
+      this.text("#combat-target-hull", `${number(target.hull)} / ${number(target.maxHull)}`)
+      this.text("#combat-target-shields", `${number(target.shields)} / ${number(target.maxShields)}`)
+      this.setWidth("#combat-target-hull-bar", healthPercent(target.hull, target.maxHull))
+      this.setWidth("#combat-target-shield-bar", healthPercent(target.shields, target.maxShields))
+    } else {
+      panel.classList.add("hidden")
+    }
+  }
+
+  setWidth(selector, percentage) {
+    const element = this.root.querySelector(selector)
+    if (element) element.style.width = `${percentage}%`
+  }
+
+  setCombatMessage(message) {
+    this.text("#combat-status", message)
   }
 
   resize() {

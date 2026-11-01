@@ -35,6 +35,32 @@ defmodule DarkorbitWeb.WorldChannel do
     {:reply, {:error, %{reason: "invalid_destination"}}, socket}
   end
 
+  def handle_in("select_target", %{"target_id" => target_id}, socket)
+      when is_binary(target_id) do
+    case World.select_target(socket.assigns.world_session_id, target_id) do
+      {:ok, selection} -> {:reply, {:ok, selection}, socket}
+      {:error, reason} -> {:reply, {:error, %{reason: error_reason(reason)}}, socket}
+    end
+  end
+
+  def handle_in("select_target", _payload, socket) do
+    {:reply, {:error, %{reason: "invalid_target"}}, socket}
+  end
+
+  def handle_in("clear_target", _payload, socket) do
+    case World.clear_target(socket.assigns.world_session_id) do
+      {:ok, selection} -> {:reply, {:ok, selection}, socket}
+      {:error, reason} -> {:reply, {:error, %{reason: error_reason(reason)}}, socket}
+    end
+  end
+
+  def handle_in("laser_attack", _payload, socket) do
+    case World.attack(socket.assigns.world_session_id) do
+      {:ok, attack} -> {:reply, {:ok, attack}, socket}
+      {:error, reason} -> {:reply, {:error, %{reason: error_reason(reason)}}, socket}
+    end
+  end
+
   @impl true
   def handle_info({:entity_joined, entity}, socket) do
     payload = Map.put(entity, :pilot, World.player_summary(entity.player_id))
@@ -43,7 +69,18 @@ defmodule DarkorbitWeb.WorldChannel do
   end
 
   def handle_info({event, payload}, socket)
-      when event in [:entity_left, :movement_started, :world_state] do
+      when event in [
+             :entity_left,
+             :movement_started,
+             :world_state,
+             :npc_spawned,
+             :npc_movement_started,
+             :npc_state_changed,
+             :target_selected,
+             :target_cleared,
+             :laser_fired,
+             :entity_destroyed
+           ] do
     :ok = push(socket, Atom.to_string(event), payload)
     {:noreply, socket}
   end
@@ -61,7 +98,10 @@ defmodule DarkorbitWeb.WorldChannel do
   defp finish_join(socket, map_id, session, status) do
     case World.snapshot(map_id) do
       {:ok, snapshot} ->
-        player_ids = Enum.map(snapshot.entities, & &1.player_id)
+        player_ids =
+          snapshot.entities
+          |> Enum.filter(&(&1.kind == :player))
+          |> Enum.map(& &1.player_id)
 
         response = %{
           map: snapshot,

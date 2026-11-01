@@ -66,39 +66,33 @@ Inspired by:
 
 ---
 
-## 📊 Current Progress
+## ✅ Completed Milestones
 
-| System | Status | Completion |
-|--------|--------|------------|
-| Accounts | Stable | 90% |
-| Inventory | Catalog-backed | 90% |
-| Fleet | Catalog-backed | 85% |
-| Loadouts | Two configs + stats | 95% |
-| Equipment Engine | Core Complete | 95% |
-| Preferences | Basic | 50% |
-| Titles | Basic | 50% |
-| Web Layer | Scaffolded | 30% |
-| Game Logic | Stats + movement | 40% |
-| World Simulation | Starting map | 35% |
-| Real-time Systems | PubSub events | 20% |
+### Milestone A — Persistent player domains
 
-### Overall Project Progress: ~55%
+- Account registration and authentication
+- Inventory, fleet, two ship configurations, preferences, and titles
+- Slot-based equipment mutations and starter-ship provisioning
 
----
+### Milestone B — Persistent-state hardening
 
-## 🔥 What We Just Achieved
+- Atomic account provisioning and equipment replacement
+- Ownership-scoped mutations, row locks, uniqueness constraints, and database checks
+- Concurrent inventory and loadout regression coverage
 
-We now have a true MMO-grade equipment pipeline:
+### Milestone C — Derived stats and authoritative world
 
-Inventory → Loadout → Database (atomic consistency)
+- Configurable ship and equipment catalogs
+- Pure configuration-aware ship-stat calculation
+- Supervised sector `1-1`, sessions, bounded server-owned movement, deterministic ticks, and PubSub events
 
-Properties:
-- No duplication
-- No desync
-- No ghost items
-- Fully deterministic
+### Milestone D — Authenticated browser flight
 
-### ✅ Milestone D.1 — Continuous Mouse Navigation
+- Credential login, signed game socket tokens, and an authenticated Phoenix world channel
+- Canvas 2D sector renderer, original placeholder graphics, interpolated authoritative snapshots, and multiplayer movement events
+- Playable development pilots seeded for browser testing
+
+### Milestone D.1 — Continuous mouse navigation
 
 - Single-click destination setting remains available
 - Click-and-hold continuously steers toward the pointer at approximately 10 commands per second
@@ -106,6 +100,17 @@ Properties:
 - Pointer capture, cancellation, focus loss, and hidden-tab cleanup are handled safely
 - Near-ship and redundant retargets are suppressed to avoid jitter and unnecessary traffic
 - The client still sends destination intent only; boundary validation, position, and speed remain server-owned
+
+### Milestone E — Server-authoritative NPC combat
+
+- Configurable original NPC catalog with three deterministic `Rift Skirmisher` spawns in sector `1-1`
+- Map-owned NPC movement, hull, shields, targeting, bounded AI, destruction, and tick-based respawning
+- Pure range, cooldown, shield-absorption, hull-damage, and destruction rules
+- Authenticated target/select/fire channel intentions with authoritative multiplayer combat events
+- Right-click and accessible nearest-target selection, target HUD, Space/click firing, laser and hit effects, and explosions
+- Catalog-defined Phoenix pulse emitter so existing development pilots can fight without inventory grants or duplication
+
+Graphical ship flight and continuous mouse navigation have been manually verified. Two-player browser synchronization and the complete Milestone E browser combat encounter are implemented and covered by automated tests, but await manual verification in browser sessions.
 
 ---
 
@@ -121,24 +126,23 @@ Properties:
 - Two configuration-aware loadouts
 - Pure derived stats from equipped inventory
 
-### 3. Combat System
-- Targeting system
-- Damage calculation
-- Cooldowns
-- PvP + PvE hooks
+### 3. Combat System (initial PvE slice complete)
+- Server-authoritative NPC targeting, damage, cooldowns, destruction, and respawning ✅
+- Server-authoritative NPC attacks and player damage ✅
+- PvP, ammunition, rewards, and player respawning remain future work
 
-### 4. Map / World Layer (initial slice complete)
+### 4. Map / World Layer (initial player-flight slice complete)
 - Supervised starting map (1-1)
 - Server-owned player positioning and bounded movement
 - Configurable deterministic simulation ticks
 - Continuous click-and-hold client navigation ✅
-- NPC spawning
+- NPC spawning, AI, combat, destruction, and respawning ✅
 
-### 5. Real-Time Layer (PubSub foundation complete)
-- Channels / sockets
-- Player presence
-- Combat events
-- Movement sync
+### 5. Real-Time Layer (movement and PvE slices complete)
+- Authenticated Channels and sockets ✅
+- Connected-player presence and disconnect cleanup ✅
+- Movement synchronization ✅
+- Targeting, laser, damage, destruction, and respawn events ✅
 
 ### 6. Economy System
 - Shop / purchases
@@ -162,7 +166,8 @@ Properties:
 ## 🧱 Architectural Direction
 
 Principles:
-- State is authoritative in DB
+- Persistent account state is authoritative in the database
+- Live movement and combat state is authoritative in map processes
 - Derived values are computed, never stored
 - All mutations are transactional
 - Systems are composable
@@ -171,14 +176,16 @@ Principles:
 
 ## ⚠️ Known Gaps
 
-- No combat loop
-- No client-facing Channel/socket protocol
-- No UI integration
+- Two-player browser synchronization and the Milestone E combat encounter await manual browser verification
+- Destroyed player recovery, ammunition, loot, rewards, and PvP are not implemented
+- Live map state is ephemeral, single-node, and has no crash recovery or spatial partitioning
+- Initial map, NPC, and combat balance values remain provisional
 - No anti-cheat layer
 
 ---
 
 ## ✅ Immediate Next Task
 
-Build the first combat slice and client-facing world protocol on top of the
-authoritative simulation.
+Manually exercise the complete combat acceptance flow in two browser sessions,
+then design player recovery and reward handling without moving combat authority
+out of `Core.World.MapServer`.

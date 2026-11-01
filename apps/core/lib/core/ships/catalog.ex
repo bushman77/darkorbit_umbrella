@@ -16,7 +16,9 @@ defmodule Core.Ships.Catalog do
       hit_points: 4_000,
       shields: 0,
       speed: 320,
-      damage: 0,
+      # The starter Phoenix carries a built-in pulse emitter. This server-owned
+      # base weapon arms existing pilots without mutating inventory on connect.
+      damage: 40,
       cargo_capacity: 100,
       laser_slots: 1,
       generator_slots: 1

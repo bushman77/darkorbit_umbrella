@@ -46,7 +46,9 @@ defmodule DarkorbitWeb.WorldChannelTest do
     assert response.player.pilot.id == account.id
     assert response.player.pilot.pilot_name == account.pilot_name
     assert response.player.stats.speed == 320
+    assert response.player.stats.damage == 40
     assert Enum.any?(response.map.entities, &(&1.id == account.id))
+    assert Enum.count(response.map.entities, &(&1.kind == :npc)) == 3
 
     leave_and_wait(joined_socket)
   end
@@ -129,7 +131,14 @@ defmodule DarkorbitWeb.WorldChannelTest do
       subscribe_and_join(second_socket, WorldChannel, "world:1-1")
 
     assert second_response.pilots |> Map.keys() |> Enum.sort() == [first.id, second.id]
-    assert Enum.sort(Enum.map(second_response.map.entities, & &1.id)) == [first.id, second.id]
+
+    player_ids =
+      second_response.map.entities
+      |> Enum.filter(&(&1.kind == :player))
+      |> Enum.map(& &1.id)
+      |> Enum.sort()
+
+    assert player_ids == [first.id, second.id]
     second_id = second.id
     assert_push "entity_joined", %{id: ^second_id, pilot: %{pilot_name: second_name}}
     assert second_name == second.pilot_name
@@ -151,6 +160,76 @@ defmodule DarkorbitWeb.WorldChannelTest do
     leave_and_wait(second_socket)
   end
 
+  test "authenticated pilots receive authoritative targeting and combat events" do
+    first = verified_player_account_fixture()
+    second = verified_player_account_fixture()
+    {:ok, first_socket} = authenticated_socket(first)
+    {:ok, second_socket} = authenticated_socket(second)
+
+    {:ok, first_response, first_socket} =
+      subscribe_and_join(first_socket, WorldChannel, "world:1-1")
+
+    {:ok, _second_response, second_socket} =
+      subscribe_and_join(second_socket, WorldChannel, "world:1-1")
+
+    target =
+      Enum.find(first_response.map.entities, &(&1.id == "npc:1-1:rift_skirmisher:1"))
+
+    select_ref =
+      push(first_socket, "select_target", %{
+        "target_id" => target.id,
+        "player_id" => second.id,
+        "session_id" => -1
+      })
+
+    assert_reply select_ref, :ok, %{selection: %{player_id: first_id, target_id: target_id}}
+    assert first_id == first.id
+    assert target_id == target.id
+    assert_push "target_selected", %{player_id: ^first_id, target_id: ^target_id}
+    assert_push "target_selected", %{player_id: ^first_id, target_id: ^target_id}
+
+    attack_ref =
+      push(first_socket, "laser_attack", %{"damage" => 999_999, "target_id" => "spoof"})
+
+    assert_reply attack_ref, :ok, %{damage: 40, target_id: ^target_id, destroyed: false}
+    assert_push "laser_fired", %{attacker_id: ^first_id, damage: 40, target_id: ^target_id}
+    assert_push "laser_fired", %{attacker_id: ^first_id, damage: 40, target_id: ^target_id}
+
+    assert {:ok, snapshot} = World.snapshot()
+    damaged = Enum.find(snapshot.entities, &(&1.id == target.id))
+    assert damaged.shields == 376
+    assert damaged.hull == 784
+
+    repeated_ref = push(first_socket, "laser_attack", %{})
+    assert_reply repeated_ref, :error, %{reason: "weapon_cooldown"}
+
+    invalid_ref = push(second_socket, "select_target", %{"target_id" => "npc:1-1:missing"})
+    assert_reply invalid_ref, :error, %{reason: "target_not_found"}
+
+    leave_and_wait(first_socket)
+    leave_and_wait(second_socket)
+  end
+
+  test "disconnecting during pursuit clears the authoritative NPC target" do
+    account = verified_player_account_fixture()
+    {:ok, socket} = authenticated_socket(account)
+    {:ok, _response, socket} = subscribe_and_join(socket, WorldChannel, "world:1-1")
+
+    assert {:ok, _tick} = World.tick()
+    assert {:ok, pursuing} = World.snapshot()
+    assert Enum.any?(pursuing.entities, &(&1.kind == :npc and &1.target_id == account.id))
+
+    leave_and_wait(socket)
+
+    assert {:ok, disconnected} = World.snapshot()
+    refute Enum.any?(disconnected.entities, &(&1.kind == :player and &1.id == account.id))
+
+    assert Enum.all?(
+             Enum.filter(disconnected.entities, &(&1.kind == :npc)),
+             &is_nil(&1.target_id)
+           )
+  end
+
   defp authenticated_socket(account) do
     connect(UserSocket, %{"token" => GameAuth.socket_token(account)})
   end
@@ -167,7 +246,9 @@ defmodule DarkorbitWeb.WorldChannelTest do
   defp clear_world do
     case World.snapshot() do
       {:ok, snapshot} ->
-        Enum.each(snapshot.entities, fn entity ->
+        snapshot.entities
+        |> Enum.filter(&(&1.kind == :player))
+        |> Enum.each(fn entity ->
           case SessionManager.fetch_player(SessionManager, entity.player_id) do
             {:ok, session} -> World.disconnect(session.id)
             :error -> :ok

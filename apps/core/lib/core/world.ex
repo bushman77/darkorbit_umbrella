@@ -49,6 +49,42 @@ defmodule Core.World do
     end
   end
 
+  @spec select_target(pos_integer(), term(), keyword()) :: {:ok, map()} | {:error, term()}
+  def select_target(session_id, target_id, opts \\ []) do
+    registry = Keyword.get(opts, :registry, Core.World.Registry)
+    sessions = Keyword.get(opts, :sessions, SessionManager)
+
+    with {:ok, session} <- fetch_session(sessions, session_id) do
+      MapServer.select_target(
+        registry,
+        session.map_id,
+        session.id,
+        session.entity_id,
+        target_id
+      )
+    end
+  end
+
+  @spec clear_target(pos_integer(), keyword()) :: {:ok, map()} | {:error, term()}
+  def clear_target(session_id, opts \\ []) do
+    registry = Keyword.get(opts, :registry, Core.World.Registry)
+    sessions = Keyword.get(opts, :sessions, SessionManager)
+
+    with {:ok, session} <- fetch_session(sessions, session_id) do
+      MapServer.clear_target(registry, session.map_id, session.id, session.entity_id)
+    end
+  end
+
+  @spec attack(pos_integer(), keyword()) :: {:ok, map()} | {:error, term()}
+  def attack(session_id, opts \\ []) do
+    registry = Keyword.get(opts, :registry, Core.World.Registry)
+    sessions = Keyword.get(opts, :sessions, SessionManager)
+
+    with {:ok, session} <- fetch_session(sessions, session_id) do
+      MapServer.attack(registry, session.map_id, session.id, session.entity_id)
+    end
+  end
+
   @spec snapshot(String.t(), keyword()) :: {:ok, map()} | {:error, term()}
   def snapshot(map_id \\ MapDefinition.starting_map_id(), opts \\ []) do
     registry = Keyword.get(opts, :registry, Core.World.Registry)

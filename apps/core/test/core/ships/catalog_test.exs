@@ -10,7 +10,7 @@ defmodule Core.Ships.CatalogTest do
     assert phoenix.hit_points == 4_000
     assert phoenix.shields == 0
     assert phoenix.speed == 320
-    assert phoenix.damage == 0
+    assert phoenix.damage == 40
     assert phoenix.cargo_capacity == 100
     assert phoenix.laser_slots == 1
     assert phoenix.generator_slots == 1

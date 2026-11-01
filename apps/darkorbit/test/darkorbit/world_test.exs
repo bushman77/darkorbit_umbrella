@@ -23,13 +23,15 @@ defmodule Darkorbit.WorldTest do
     assert {:ok, before_tick} = World.snapshot()
     first_tick_number = before_tick.tick + 1
     assert {:ok, first_tick} = World.tick()
-    assert [%{position: %{x: first_x}}] = first_tick.entities
+    %{position: %{x: first_x}} = Enum.find(first_tick.entities, &(&1.kind == :player))
     assert_in_delta first_x, 1_032.0, 0.000_001
     assert_receive {:world_state, %{tick: ^first_tick_number}}
 
     second_tick_number = first_tick_number + 1
     assert {:ok, second_tick} = World.tick()
-    assert [%{position: %{x: 1_064.0, y: 1_000.0}, destination: nil}] = second_tick.entities
+    player = Enum.find(second_tick.entities, &(&1.kind == :player))
+    assert player.position == %{x: 1_064.0, y: 1_000.0}
+    assert player.destination == nil
     assert_receive {:world_state, %{tick: ^second_tick_number}}
   end
 

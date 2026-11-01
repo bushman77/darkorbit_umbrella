@@ -1,10 +1,10 @@
-# Architecture baseline through Milestone D
+# Architecture through Milestone E
 
 ## Umbrella boundaries
 
-- `apps/core` owns configurable game-data catalogs, pure stat and movement
-  mechanics, player sessions, and the supervised OTP world runtime. It has no
-  Phoenix, Ecto, or PostgreSQL dependency.
+- `apps/core` owns configurable game-data catalogs, pure stat, movement,
+  combat, and NPC decision mechanics, player sessions, and the supervised OTP
+  world runtime. It has no Phoenix, Ecto, or PostgreSQL dependency.
 - `apps/darkorbit` owns PostgreSQL persistence and the account, fleet,
   inventory, loadout, preference, and title domains. It adapts persisted
   loadouts into pure core stats and delivers core events through Phoenix
@@ -56,21 +56,50 @@ the endpoint.
    usable.
 4. Configurations 1 and 2 are calculated independently from their actual
    equipped loadout state.
+5. The Phoenix has a catalog-defined built-in pulse emitter. It gives existing
+   and new pilots non-zero base damage without granting or duplicating a
+   persistent inventory item during world connection.
+
+## Pure combat and NPC invariants
+
+1. `Core.Combat` validates entity kinds, alive state, range, simulation-tick
+   cooldowns, and server-owned damage. Negative damage is normalized to zero.
+2. Shield absorption is clamped to the valid range. Applied shield and hull
+   damage cannot exceed the target's remaining values, and neither resource
+   can fall below zero.
+3. Only player-to-NPC and NPC-to-player targets are valid. PvP, NPC friendly
+   fire, and client-supplied combat statistics are rejected by construction.
+4. `Core.NPC.Catalog` contains configurable definitions and spawn/respawn data.
+   The initial original enemy is the `Rift Skirmisher`; its values are
+   provisional.
+5. `Core.NPC.AI` is pure and bounded. Its `idle`, `patrol`, `pursue`, `attack`,
+   and `destroyed` transitions use deterministic patrol points and tick-based
+   attack readiness, with no pathfinding or wall-clock dependency.
 
 ## Authoritative world invariants
 
-1. The initial `1-1` map owns all connected entity positions in one GenServer.
-   Clients submit destinations, never positions.
+1. The initial `1-1` map owns all connected player and NPC positions, health,
+   targets, cooldowns, AI state, destruction, and respawn queues in one
+   GenServer. Clients submit intentions, never positions or combat results.
 2. Movement destinations must be finite coordinates within the configured map
    boundaries. Each tick advances linearly by the connected ship's derived
    speed without overshooting.
-3. A player has at most one live in-memory session. Map commands verify the
-   session bound to the entity, and disconnect removes both session and entity.
+3. A player has at most one live in-memory session. Every movement, targeting,
+   and attack command resolves the session-bound entity. Disconnect removes
+   the player and immediately clears NPC pursuit of that entity.
 4. Tick duration, automatic ticking, map definitions, and the event sink are
    runtime configuration. Tests disable timers and drive ticks synchronously.
-5. Core emits transport-neutral events. `Darkorbit.World.PubSub` publishes
-   `:entity_joined`, `:entity_left`, `:movement_started`, and `:world_state` on
-   `world:<map-id>` topics.
+5. NPC IDs use the reserved `npc:<map>:<type>:<spawn-slot>` namespace. Joins
+   reject an entity ID already used by either a player or NPC.
+6. NPC spawns are deterministic. Destruction removes an NPC from snapshots and
+   records a tick deadline; respawn recreates the catalog-defined entity at its
+   original spawn without a database query.
+7. The map GenServer serializes simultaneous attacks, so a successful attack
+   updates the cooldown before another command can run. Destroyed targets are
+   removed or marked dead before subsequent commands are evaluated.
+8. Core emits transport-neutral movement, NPC-state, targeting, laser, damage,
+   destruction, respawn, and world-state events. `Darkorbit.World.PubSub`
+   publishes them on `world:<map-id>` topics.
 
 ## Browser transport invariants
 
@@ -78,17 +107,21 @@ the endpoint.
    issues a short-lived signed token containing that session identity; socket
    connect verifies both its signature and the still-current database session.
 2. Only authenticated sockets can join `world:1-1`. A channel creates exactly
-   one Core session, binds all movement to that session, and disconnects it
-   when the channel terminates.
-3. Movement payloads contain destination coordinates only. Client-provided
-   entity or session identifiers are ignored, and Core remains responsible for
-   authorization and map-boundary validation.
+   one Core session, binds movement and combat to that session, and disconnects
+   it when the channel terminates.
+3. Movement payloads contain destination coordinates; targeting contains only
+   an NPC ID; firing contains no combat values. Client-provided entity,
+   session, damage, range, position, and cooldown values are ignored.
 4. Channel join returns a full authoritative snapshot and persisted HUD data.
    Core PubSub events are forwarded to all joined clients; multiple clients
    therefore render the same tick-owned player positions.
 5. The Canvas renderer interpolates displayed positions toward the latest
-   server snapshots. Mouse input never changes an entity position locally.
-6. All included graphics are original placeholders. A versioned client catalog
+   server snapshots. Mouse input never changes an entity position locally, and
+   visual damage updates consume authoritative laser/world events.
+6. Left-click and click-and-hold remain dedicated to pointer navigation.
+   Right-click selects a rendered NPC, the target-nearest button is the
+   accessible alternative, and Space or the fire button submits a laser intent.
+7. All included graphics are original placeholders. A versioned client catalog
    separates ships, NPCs, lasers, explosions, drones, and backgrounds so later
    art changes do not alter networking or simulation code.
 
@@ -101,22 +134,28 @@ slot validation, atomic equipment replacement, and cross-account loadout
 authorization. Multi-connection regression tests issue simultaneous inventory
 withdrawals and simultaneous equips to prove that one item cannot be consumed
 or equipped twice. Pure tests cover catalogs, stat aggregation, equipment
-constraints, boundaries, and movement. A headless integration test connects a
-persisted player's active ship, moves it across the map, and observes PubSub
-world-state events. Channel integration tests additionally cover signed socket
-authentication, map authorization, Core-validated movement, map event
-subscriptions, disconnect cleanup, and simultaneous players.
+constraints, boundaries, movement, combat calculations, NPC definitions, and
+AI transitions. Headless tests cover deterministic NPC spawning/movement,
+range and cooldown enforcement, damage/destruction/respawn, repeated and
+concurrent attacks, dead-player rejection, and disconnect cleanup. Channel
+integration tests additionally cover signed socket authentication, map
+authorization, spoofed combat values, multiplayer combat broadcasts, and
+simultaneous players. JavaScript tests cover pointer-navigation preservation,
+target filtering/hit testing, and authoritative health updates.
 
 ## Known baseline limitations
 
-- There is no combat, NPC, portal, spatial partitioning, persistence/recovery
-  for live map state, or multi-node world ownership yet.
+- The full combat acceptance flow and two-player observation have not been
+  manually verified in browser sessions.
+- Destroyed player respawning, ammunition, loot, rewards, PvP, portals,
+  spatial partitioning, persistence/recovery for live map state, and multi-node
+  world ownership are not implemented.
 - Catalog values and the starting map are provisional placeholder game data.
 - The existing dependency lock must be reviewed regularly with `mix hex.audit`.
   Dependency advisories are release blockers for an internet-facing server.
 
 ## Next vertical slice
 
-The next vertical slice can add a minimal authoritative combat loop (targeting,
-cooldowns, lasers, damage, and destruction) while keeping combat mechanics in
-Core and treating the existing graphics catalog as presentation only.
+After manual browser acceptance, the next combat slice can add explicit player
+recovery and server-owned rewards/ammunition while retaining map-process
+authority and keeping persistence operations outside the simulation tick.

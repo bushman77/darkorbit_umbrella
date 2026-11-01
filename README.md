@@ -6,8 +6,9 @@ identity, ownership, inventory, equipment, progression, economy, and world
 state are validated and owned by the server.
 
 The completed vertical slice includes persistent player-state domains, a
-deterministic ship-stat engine, a supervised authoritative starting map, and
-an authenticated multiplayer Canvas 2D browser client for sector 1-1.
+deterministic ship-stat engine, a supervised authoritative starting map,
+server-owned NPC combat, and an authenticated multiplayer Canvas 2D browser
+client for sector 1-1.
 
 ## Requirements
 
@@ -39,8 +40,11 @@ wing_pilot / launch-sector-11
 ```
 
 Open a normal and private browser window with one account in each to see both
-ships. Click in the viewport to submit a destination; the server validates the
-command and broadcasts tick-owned positions back to both clients.
+ships and the same NPC encounter. Left-click or hold in the viewport to fly,
+right-click an NPC (or use **Target nearest**) to lock it, and press Space or
+use **Fire** to shoot. The server validates each intention and broadcasts
+tick-owned positions, health, damage, destruction, and respawning back to all
+clients.
 
 Useful commands:
 
@@ -57,9 +61,10 @@ test aliases create and migrate `darkorbit_test` automatically. Run
 retirements and security advisories.
 
 The game transport uses `world:1-1` on `/socket`. Browser sessions issue a
-short-lived signed socket token, and channel commands contain only movement
-intentions (`x` and `y` destinations). Core owns sessions, map bounds, speeds,
-positions, and simulation ticks. Original placeholder graphics live under
+short-lived signed socket token. Channel commands contain only movement,
+target-selection, target-clearing, and laser-fire intentions. Core owns
+sessions, map bounds, positions, health, damage, cooldowns, NPC decisions, and
+simulation ticks. Original placeholder graphics live under
 `apps/darkorbit_web/priv/static/images/game`; their categories and dimensions
 are defined in `assets/js/game/asset_catalog.js`.
 

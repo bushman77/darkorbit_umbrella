@@ -11,7 +11,7 @@ defmodule Core.Ships.StatsTest do
     assert stats.hit_points == 4_000
     assert stats.shields == 0
     assert stats.speed == 320
-    assert stats.damage == 0
+    assert stats.damage == 40
     assert stats.cargo_capacity == 100
     assert stats.shield_absorption == 0.0
     assert stats.shield_regeneration == 0
@@ -21,7 +21,7 @@ defmodule Core.Ships.StatsTest do
     loadout = %{lasers: ["lf1"], generators: ["g3"]}
 
     assert {:ok, stats} = Stats.calculate(1, loadout)
-    assert stats.damage == 40
+    assert stats.damage == 80
     assert stats.speed == 327
     assert stats.shields == 0
   end
@@ -44,9 +44,9 @@ defmodule Core.Ships.StatsTest do
     assert {:ok, %{1 => config_one, 2 => config_two}} =
              Stats.calculate_configurations(1, configurations)
 
-    assert config_one.damage == 40
+    assert config_one.damage == 80
     assert config_one.speed == 322
-    assert config_two.damage == 200
+    assert config_two.damage == 240
     assert config_two.shields == 2_000
   end
 
@@ -113,7 +113,7 @@ defmodule Core.Ships.StatsTest do
     }
 
     assert {:ok, stats} = Stats.calculate(1, loadout)
-    assert stats.damage == 40
+    assert stats.damage == 80
     assert stats.speed == 322
   end
 end

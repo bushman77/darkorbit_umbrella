@@ -2,8 +2,9 @@ defmodule Darkorbit.World do
   @moduledoc """
   Persistence-aware entry point to the authoritative world simulation.
 
-  Connecting snapshots the active ship's derived speed into the runtime entity.
-  Subsequent movement remains independent of PostgreSQL and Phoenix.
+  Connecting snapshots the active ship's derived combat and movement stats
+  into the runtime entity. Subsequent simulation remains independent of
+  PostgreSQL and Phoenix.
   """
 
   alias Core.World, as: Simulation
@@ -24,6 +25,9 @@ defmodule Darkorbit.World do
 
   defdelegate disconnect(session_id), to: Simulation
   defdelegate move(session_id, destination), to: Simulation
+  defdelegate select_target(session_id, target_id), to: Simulation
+  defdelegate clear_target(session_id), to: Simulation
+  defdelegate attack(session_id), to: Simulation
 
   @spec snapshot(String.t()) :: {:ok, map()} | {:error, term()}
   def snapshot(map_id \\ MapDefinition.starting_map_id()), do: Simulation.snapshot(map_id)

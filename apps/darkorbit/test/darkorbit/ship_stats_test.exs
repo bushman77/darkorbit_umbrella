@@ -55,12 +55,12 @@ defmodule Darkorbit.ShipStatsTest do
              )
 
     assert {:ok, config_one} = ShipStats.calculate(account.id, ship.id, 1)
-    assert config_one.damage == 40
+    assert config_one.damage == 80
     assert config_one.speed == 322
     assert config_one.shields == 0
 
     assert {:ok, config_two} = ShipStats.for_active_ship(account.id, 2)
-    assert config_two.damage == 200
+    assert config_two.damage == 240
     assert config_two.speed == 320
     assert config_two.shields == 1_000
   end
