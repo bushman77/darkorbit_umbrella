@@ -1,0 +1,45 @@
+defmodule Core.World.Supervisor do
+  @moduledoc "Supervises the session registry and map-owned simulation state."
+
+  use Supervisor
+
+  alias Core.World.MapDefinition
+  alias Core.World.MapServer
+  alias Core.World.NoopEventSink
+  alias Core.World.SessionManager
+
+  def start_link(opts) do
+    Supervisor.start_link(__MODULE__, opts, name: Keyword.get(opts, :name, __MODULE__))
+  end
+
+  @impl true
+  def init(opts) do
+    registry = Keyword.get(opts, :registry, Core.World.Registry)
+    sessions = Keyword.get(opts, :sessions, SessionManager)
+    tick_ms = Keyword.get(opts, :tick_ms, 100)
+    event_sink = Keyword.get(opts, :event_sink, NoopEventSink)
+    auto_tick? = Keyword.get(opts, :auto_tick, true)
+    maps = Keyword.get(opts, :maps, [MapDefinition.starting_map()])
+
+    map_children =
+      Enum.map(maps, fn definition ->
+        {MapServer,
+         definition: MapDefinition.new(definition),
+         registry: registry,
+         tick_ms: tick_ms,
+         event_sink: event_sink,
+         auto_tick: auto_tick?}
+      end)
+
+    children =
+      [
+        {Registry, keys: :unique, name: registry},
+        {SessionManager, name: sessions}
+      ] ++ map_children
+
+    # Sessions and map entities form one ephemeral consistency boundary. If a
+    # process fails, restart the whole world so no stale session can point at a
+    # map that has lost its entity state.
+    Supervisor.init(children, strategy: :one_for_all)
+  end
+end

@@ -7,12 +7,13 @@ defmodule Darkorbit.Application do
 
   @impl true
   def start(_type, _args) do
+    world_options = Application.get_env(:core, Core.World, [])
+
     children = [
       Darkorbit.Repo,
       {DNSCluster, query: Application.get_env(:darkorbit, :dns_cluster_query) || :ignore},
-      {Phoenix.PubSub, name: Darkorbit.PubSub}
-      # Start a worker by calling: Darkorbit.Worker.start_link(arg)
-      # {Darkorbit.Worker, arg}
+      {Phoenix.PubSub, name: Darkorbit.PubSub},
+      {Core.World.Supervisor, world_options}
     ]
 
     Supervisor.start_link(children, strategy: :one_for_one, name: Darkorbit.Supervisor)

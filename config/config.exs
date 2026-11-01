@@ -22,6 +22,22 @@ config :darkorbit,
 # at the `config/runtime.exs`.
 config :darkorbit, Darkorbit.Mailer, adapter: Swoosh.Adapters.Local
 
+# The simulation owns ephemeral world state. These values are placeholder game
+# data and can be overridden per environment without changing core mechanics.
+config :core, Core.World,
+  tick_ms: 100,
+  auto_tick: true,
+  event_sink: Darkorbit.World.PubSub,
+  maps: [
+    %{
+      id: "1-1",
+      name: "Home Sector",
+      width: 20_000,
+      height: 12_000,
+      spawn: {1_000.0, 1_000.0}
+    }
+  ]
+
 config :darkorbit_web,
   ecto_repos: [Darkorbit.Repo],
   generators: [context_app: :darkorbit]

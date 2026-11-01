@@ -36,6 +36,7 @@ defmodule Darkorbit.MixProject do
   # Type `mix help deps` for examples and options.
   defp deps do
     [
+      {:core, in_umbrella: true},
       {:dns_cluster, "~> 0.2.0"},
       {:phoenix_pubsub, "~> 2.1"},
       {:ecto_sql, "~> 3.13"},

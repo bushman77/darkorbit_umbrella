@@ -32,6 +32,10 @@ config :swoosh, :api_client, false
 # Keep account tests fast while exercising the same bcrypt code path.
 config :bcrypt_elixir, log_rounds: 4
 
+# Tests drive deterministic ticks synchronously; no wall-clock sleeps are
+# needed and automatic timers cannot race assertions.
+config :core, Core.World, auto_tick: false
+
 # Initialize plugs at runtime for faster test compilation
 config :phoenix, :plug_init_mode, :runtime
 

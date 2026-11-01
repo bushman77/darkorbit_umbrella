@@ -8,6 +8,7 @@ defmodule Darkorbit.Fleet do
 
   import Ecto.Query, warn: false
 
+  alias Core.Ships.Catalog, as: ShipCatalog
   alias Darkorbit.Accounts.PlayerAccount
   alias Darkorbit.Fleet.PlayerShip
   alias Darkorbit.Loadouts
@@ -34,7 +35,19 @@ defmodule Darkorbit.Fleet do
   end
 
   def add_ship_to_user(user_id, ship_id)
+      when is_integer(user_id) and is_integer(ship_id) and ship_id > 0 do
+    case ShipCatalog.fetch(ship_id) do
+      {:ok, _ship} -> do_add_ship_to_user(user_id, ship_id)
+      :error -> {:error, :unknown_ship}
+    end
+  end
+
+  def add_ship_to_user(user_id, ship_id)
       when is_integer(user_id) and is_integer(ship_id) do
+    do_add_ship_to_user(user_id, ship_id)
+  end
+
+  defp do_add_ship_to_user(user_id, ship_id) do
     Repo.transaction(fn ->
       with {:ok, player_ship} <- insert_or_get_ship(user_id, ship_id),
            {:ok, _loadouts} <-

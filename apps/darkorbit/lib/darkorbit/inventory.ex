@@ -8,10 +8,10 @@ defmodule Darkorbit.Inventory do
 
   import Ecto.Query, warn: false
 
+  alias Core.Equipment.Catalog, as: EquipmentCatalog
+  alias Core.Equipment.Item
   alias Darkorbit.Inventory.PlayerEquipment
   alias Darkorbit.Repo
-
-  @valid_lasers ~w(lf1 lf2 lf3 lf4)
 
   def list_player_equipment, do: Repo.all(PlayerEquipment)
 
@@ -29,6 +29,7 @@ defmodule Darkorbit.Inventory do
         "equipment" => %{
           "lasers" => %{"lf1" => 0, "lf2" => 0, "lf3" => 0, "lf4" => 0},
           "generators" => %{},
+          "shields" => %{},
           "drones" => %{}
         },
         "skill_tree" => %{
@@ -58,43 +59,79 @@ defmodule Darkorbit.Inventory do
     |> inserted_or_existing(user_id)
   end
 
-  def laser_count(user_id, laser_id)
-      when is_integer(user_id) and laser_id in @valid_lasers do
-    case get_equipment_by_user_id(user_id) do
-      %PlayerEquipment{} = equipment -> laser_count_from_items(equipment.items, laser_id)
-      nil -> 0
+  def equipment_count(user_id, item_id) when is_integer(user_id) and is_binary(item_id) do
+    with {:ok, item} <- EquipmentCatalog.fetch(item_id),
+         %PlayerEquipment{} = equipment <- get_equipment_by_user_id(user_id) do
+      equipment_count_from_items(equipment.items, item)
+    else
+      _not_found -> 0
     end
   end
 
-  def laser_count(_user_id, _laser_id), do: 0
+  def equipment_count(_user_id, _item_id), do: 0
 
-  def add_lasers(user_id, laser_id, amount)
-      when is_integer(user_id) and laser_id in @valid_lasers and is_integer(amount) and
-             amount > 0 do
-    mutate_lasers(user_id, laser_id, fn current -> {:ok, current + amount} end)
+  def add_equipment(user_id, item_id, amount)
+      when is_integer(user_id) and is_binary(item_id) and is_integer(amount) and amount > 0 do
+    with {:ok, item} <- fetch_equipment(item_id) do
+      mutate_equipment(user_id, item, fn current -> {:ok, current + amount} end)
+    end
   end
 
-  def add_lasers(_user_id, laser_id, _amount) when laser_id not in @valid_lasers,
-    do: {:error, :invalid_laser}
-
-  def add_lasers(_user_id, _laser_id, _amount), do: {:error, :invalid_amount}
-
-  def remove_laser(user_id, laser_id, amount)
-      when is_integer(user_id) and laser_id in @valid_lasers and is_integer(amount) and
-             amount > 0 do
-    mutate_lasers(user_id, laser_id, fn current ->
-      if current >= amount,
-        do: {:ok, current - amount},
-        else: {:error, :not_enough_lasers}
-    end)
+  def add_equipment(_user_id, item_id, _amount) when is_binary(item_id) do
+    case EquipmentCatalog.fetch(item_id) do
+      :error -> {:error, :invalid_equipment}
+      {:ok, _item} -> {:error, :invalid_amount}
+    end
   end
 
-  def remove_laser(_user_id, laser_id, _amount) when laser_id not in @valid_lasers,
-    do: {:error, :invalid_laser}
+  def add_equipment(_user_id, _item_id, _amount), do: {:error, :invalid_amount}
 
-  def remove_laser(_user_id, _laser_id, _amount), do: {:error, :invalid_amount}
+  def remove_equipment(user_id, item_id, amount)
+      when is_integer(user_id) and is_binary(item_id) and is_integer(amount) and amount > 0 do
+    with {:ok, item} <- fetch_equipment(item_id) do
+      mutate_equipment(user_id, item, fn current ->
+        if current >= amount,
+          do: {:ok, current - amount},
+          else: {:error, :not_enough_equipment}
+      end)
+    end
+  end
 
-  defp mutate_lasers(user_id, laser_id, operation) do
+  def remove_equipment(_user_id, item_id, _amount) when is_binary(item_id) do
+    case EquipmentCatalog.fetch(item_id) do
+      :error -> {:error, :invalid_equipment}
+      {:ok, _item} -> {:error, :invalid_amount}
+    end
+  end
+
+  def remove_equipment(_user_id, _item_id, _amount), do: {:error, :invalid_amount}
+
+  def laser_count(user_id, laser_id) do
+    if equipment_in_category?(laser_id, :laser),
+      do: equipment_count(user_id, laser_id),
+      else: 0
+  end
+
+  def add_lasers(user_id, laser_id, amount) do
+    if equipment_in_category?(laser_id, :laser) do
+      add_equipment(user_id, laser_id, amount)
+    else
+      {:error, :invalid_laser}
+    end
+  end
+
+  def remove_laser(user_id, laser_id, amount) do
+    if equipment_in_category?(laser_id, :laser) do
+      case remove_equipment(user_id, laser_id, amount) do
+        {:error, :not_enough_equipment} -> {:error, :not_enough_lasers}
+        result -> result
+      end
+    else
+      {:error, :invalid_laser}
+    end
+  end
+
+  defp mutate_equipment(user_id, item, operation) do
     Repo.transaction(fn ->
       equipment =
         from(equipment in PlayerEquipment,
@@ -105,10 +142,10 @@ defmodule Darkorbit.Inventory do
 
       case equipment do
         %PlayerEquipment{} = equipment ->
-          current = laser_count_from_items(equipment.items, laser_id)
+          current = equipment_count_from_items(equipment.items, item)
 
           case operation.(current) do
-            {:ok, new_count} -> persist_laser_count(equipment, laser_id, new_count)
+            {:ok, new_count} -> persist_equipment_count(equipment, item, new_count)
             {:error, reason} -> Repo.rollback(reason)
           end
 
@@ -118,18 +155,19 @@ defmodule Darkorbit.Inventory do
     end)
   end
 
-  defp persist_laser_count(equipment, laser_id, new_count) do
+  defp persist_equipment_count(equipment, item, new_count) do
     items = equipment.items || %{}
     equipment_bag = Map.get(items, "equipment", %{})
-    lasers = Map.get(equipment_bag, "lasers", %{})
+    bucket_name = EquipmentCatalog.inventory_bucket(item)
+    bucket = Map.get(equipment_bag, bucket_name, %{})
 
-    new_lasers =
+    new_bucket =
       if new_count == 0,
-        do: Map.delete(lasers, laser_id),
-        else: Map.put(lasers, laser_id, new_count)
+        do: Map.delete(bucket, item.id),
+        else: Map.put(bucket, item.id, new_count)
 
     new_items =
-      Map.put(items, "equipment", Map.put(equipment_bag, "lasers", new_lasers))
+      Map.put(items, "equipment", Map.put(equipment_bag, bucket_name, new_bucket))
 
     equipment
     |> PlayerEquipment.items_changeset(new_items)
@@ -140,15 +178,31 @@ defmodule Darkorbit.Inventory do
     end
   end
 
-  defp laser_count_from_items(items, laser_id) do
+  defp equipment_count_from_items(items, item) do
     count =
       (items || %{})
       |> Map.get("equipment", %{})
-      |> Map.get("lasers", %{})
-      |> Map.get(laser_id, 0)
+      |> Map.get(EquipmentCatalog.inventory_bucket(item), %{})
+      |> Map.get(item.id, 0)
 
     if is_integer(count) and count >= 0, do: count, else: 0
   end
+
+  defp fetch_equipment(item_id) do
+    case EquipmentCatalog.fetch(item_id) do
+      {:ok, item} -> {:ok, item}
+      :error -> {:error, :invalid_equipment}
+    end
+  end
+
+  defp equipment_in_category?(item_id, category) when is_binary(item_id) do
+    case EquipmentCatalog.fetch(item_id) do
+      {:ok, %Item{category: ^category}} -> true
+      _other -> false
+    end
+  end
+
+  defp equipment_in_category?(_item_id, _category), do: false
 
   defp inserted_or_existing({:ok, %PlayerEquipment{id: nil}}, user_id) do
     {:ok, Repo.get_by!(PlayerEquipment, user_id: user_id)}

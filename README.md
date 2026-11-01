@@ -5,9 +5,10 @@ built as an authoritative game system: clients submit intentions, while
 identity, ownership, inventory, equipment, progression, economy, and world
 state are validated and owned by the server.
 
-The current completed baseline stabilizes account registration and the
-persistent player-state domains. It is not yet a playable game client; the
-next vertical slices are the ship-stat engine and authoritative world runtime.
+The completed server baseline includes persistent player-state domains, a
+deterministic ship-stat engine, and a supervised authoritative starting map.
+It is not yet a playable browser client: combat and a client-facing game
+socket protocol remain future vertical slices.
 
 ## Requirements
 

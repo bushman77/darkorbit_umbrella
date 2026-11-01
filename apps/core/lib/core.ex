@@ -1,18 +1,5 @@
 defmodule Core do
   @moduledoc """
-  Documentation for `Core`.
+  Pure game mechanics and the supervised authoritative world runtime.
   """
-
-  @doc """
-  Hello world.
-
-  ## Examples
-
-      iex> Core.hello()
-      :world
-
-  """
-  def hello do
-    :world
-  end
 end

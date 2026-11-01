@@ -106,4 +106,69 @@ defmodule Darkorbit.LoadoutsTest do
 
     assert Inventory.laser_count(account.id, "lf1") == 0
   end
+
+  test "generator slots accept speed generators and shields and preserve inventory" do
+    account = player_account_fixture()
+    [ship] = Fleet.list_ships_for_user(account.id)
+    [loadout | _rest] = Loadouts.list_loadouts_for_player_ship(ship.id)
+    assert {:ok, _equipment} = Inventory.add_equipment(account.id, "g1", 1)
+    assert {:ok, _equipment} = Inventory.add_equipment(account.id, "sg1", 1)
+
+    assert {:ok, equipped} =
+             Loadouts.equip_generator_from_inventory(
+               account.id,
+               loadout.id,
+               "ship",
+               0,
+               "g1"
+             )
+
+    assert Enum.at(equipped.generators["ship"], 0) == "g1"
+    assert Inventory.equipment_count(account.id, "g1") == 0
+
+    assert {:ok, replaced} =
+             Loadouts.equip_generator_from_inventory(
+               account.id,
+               loadout.id,
+               "ship",
+               0,
+               "sg1"
+             )
+
+    assert Enum.at(replaced.generators["ship"], 0) == "sg1"
+    assert Inventory.equipment_count(account.id, "g1") == 1
+    assert Inventory.equipment_count(account.id, "sg1") == 0
+
+    assert {:ok, _unequipped} =
+             Loadouts.unequip_generator_to_inventory(account.id, loadout.id, "ship", 0)
+
+    assert Inventory.equipment_count(account.id, "sg1") == 1
+  end
+
+  test "equipment types cannot cross slot classes or ship capacity" do
+    account = player_account_fixture()
+    [ship] = Fleet.list_ships_for_user(account.id)
+    [loadout | _rest] = Loadouts.list_loadouts_for_player_ship(ship.id)
+
+    assert {:error, :invalid_laser} =
+             Loadouts.equip_laser_from_inventory(account.id, loadout.id, "ship", 0, "g1")
+
+    assert {:error, :invalid_generator} =
+             Loadouts.equip_generator_from_inventory(
+               account.id,
+               loadout.id,
+               "ship",
+               0,
+               "lf1"
+             )
+
+    assert {:error, :slot_locked} =
+             Loadouts.equip_generator_from_inventory(
+               account.id,
+               loadout.id,
+               "ship",
+               1,
+               "g1"
+             )
+  end
 end

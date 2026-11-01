@@ -71,15 +71,16 @@ Inspired by:
 | System | Status | Completion |
 |--------|--------|------------|
 | Accounts | Stable | 90% |
-| Inventory | Functional | 80% |
-| Fleet | Functional | 75% |
-| Loadouts | Advanced | 90% |
+| Inventory | Catalog-backed | 90% |
+| Fleet | Catalog-backed | 85% |
+| Loadouts | Two configs + stats | 95% |
 | Equipment Engine | Core Complete | 95% |
 | Preferences | Basic | 50% |
 | Titles | Basic | 50% |
 | Web Layer | Scaffolded | 30% |
-| Game Logic | Minimal | 10% |
-| Real-time Systems | Not Started | 0% |
+| Game Logic | Stats + movement | 40% |
+| World Simulation | Starting map | 35% |
+| Real-time Systems | PubSub events | 20% |
 
 ### Overall Project Progress: ~55%
 
@@ -102,14 +103,14 @@ Properties:
 ## 🚧 Next Major Milestones
 
 ### 1. Inventory Expansion
-- Generators
 - Drone equipment slots
 - Ammo system
 - Stackable vs unique items
 
-### 2. Ship Stats Engine
-- Compute stats from loadout
-- Derived state system (no raw stat storage)
+### 2. Ship Stats Engine ✅
+- Configurable ship and equipment catalogs
+- Two configuration-aware loadouts
+- Pure derived stats from equipped inventory
 
 ### 3. Combat System
 - Targeting system
@@ -117,13 +118,13 @@ Properties:
 - Cooldowns
 - PvP + PvE hooks
 
-### 4. Map / World Layer
-- Maps (X-1, X-2, etc.)
-- Player positioning
-- Movement system
+### 4. Map / World Layer (initial slice complete)
+- Supervised starting map (1-1)
+- Server-owned player positioning and bounded movement
+- Configurable deterministic simulation ticks
 - NPC spawning
 
-### 5. Real-Time Layer (Phoenix)
+### 5. Real-Time Layer (PubSub foundation complete)
 - Channels / sockets
 - Player presence
 - Combat events
@@ -160,9 +161,8 @@ Principles:
 
 ## ⚠️ Known Gaps
 
-- No stat engine yet
 - No combat loop
-- No real-time layer
+- No client-facing Channel/socket protocol
 - No UI integration
 - No anti-cheat layer
 
@@ -170,4 +170,5 @@ Principles:
 
 ## ✅ Immediate Next Task
 
-Build Ship Stat Computation Engine
+Build the first combat slice and client-facing world protocol on top of the
+authoritative simulation.

@@ -1,21 +1,9 @@
 # Core
 
-**TODO: Add description**
+Pure DarkOrbit game mechanics and the OTP world runtime. This application owns
+catalog definitions, derived ship statistics, movement, live sessions, and
+map processes without depending on Phoenix, Ecto, or PostgreSQL.
 
-## Installation
-
-If [available in Hex](https://hex.pm/docs/publish), the package can be installed
-by adding `core` to your list of dependencies in `mix.exs`:
-
-```elixir
-def deps do
-  [
-    {:core, "~> 0.1.0"}
-  ]
-end
-```
-
-Documentation can be generated with [ExDoc](https://github.com/elixir-lang/ex_doc)
-and published on [HexDocs](https://hexdocs.pm). Once published, the docs can
-be found at <https://hexdocs.pm/core>.
-
+The umbrella's persistence application starts `Core.World.Supervisor` after
+its event transport is available. Core tests can start isolated world
+supervisors with injected event sinks and deterministic manual ticks.

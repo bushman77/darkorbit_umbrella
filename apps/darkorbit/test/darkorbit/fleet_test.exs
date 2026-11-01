@@ -26,7 +26,9 @@ defmodule Darkorbit.FleetTest do
     account = player_account_fixture()
 
     assert {:error, %Ecto.Changeset{}} = Fleet.add_ship_to_user(account.id, 0)
+    assert {:error, :unknown_ship} = Fleet.add_ship_to_user(account.id, 999)
     refute Fleet.owned_ship?(account.id, 0)
+    refute Fleet.owned_ship?(account.id, 999)
   end
 
   test "active ship changes require ownership" do
