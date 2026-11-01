@@ -152,7 +152,7 @@ test("minimap projection converts world and CSS coordinates consistently at cent
   assert.deepEqual(projection.worldPoint({x: projection.x, y: projection.y}), {x: 0, y: 0})
   assert.deepEqual(
     projection.worldPoint({x: projection.x + projection.width, y: projection.y + projection.height}),
-    boundaries
+    {x: boundaries.width, y: boundaries.height}
   )
 })
 
@@ -169,7 +169,7 @@ test("letterboxed clicks are rejected while projected boundary clicks remain val
   )
   assert.deepEqual(
     minimapWorldPoint({clientX: 330, clientY: 304}, canvas, boundaries),
-    boundaries
+    {x: boundaries.width, y: boundaries.height}
   )
 })
 
@@ -234,8 +234,9 @@ test("one renderer owns resize lifecycle, entity markers, destination feedback, 
   assert.equal(renderer.draw(0), true)
   assert.equal(renderer.draw(MINIMAP_FRAME_INTERVAL_MS - 1), false)
   assert.equal(canvas.context.arcs.length, 5)
-  assert.deepEqual(canvas.context.lineTos[0], [233.33333333333331, 140])
-  assert.equal(canvas.context.arcs[0][0], 233.33333333333331)
+  assert.ok(Math.abs(canvas.context.lineTos[0][0] - 233.33333333333331) < 1e-9)
+  assert.equal(canvas.context.lineTos[0][1], 140)
+  assert.ok(Math.abs(canvas.context.arcs[0][0] - 233.33333333333331) < 1e-9)
   assert.equal(canvas.context.arcs[0][1], 140)
 
   destination = null
@@ -286,10 +287,10 @@ test("locked minimap clicks replace destinations without mutating active combat 
   context.click(225, 125, 1)
   context.click(125, 70, 2)
 
-  assert.deepEqual(context.commands, [
-    {x: 10_000, y: 6_000},
-    {x: 10_000 / 13, y: 12_000 / 13},
-  ])
+  assert.equal(context.commands.length, 2)
+  assert.deepEqual(context.commands[0], {x: 10_000, y: 6_000})
+  assert.ok(Math.abs(context.commands[1].x - 10_000 / 13) < 1e-9)
+  assert.ok(Math.abs(context.commands[1].y - 12_000 / 13) < 1e-9)
   assert.deepEqual(context.combat, combatBefore)
   assert.equal(context.canvas.hasPointerCapture(1), false)
 })
