@@ -49,6 +49,28 @@ defmodule Core.World do
     end
   end
 
+  @doc "Submit a bounded series of waypoints for server-owned autopilot."
+  @spec plot_course(pos_integer(), term(), keyword()) :: {:ok, map()} | {:error, term()}
+  def plot_course(session_id, waypoints, opts \\ []) do
+    registry = Keyword.get(opts, :registry, Core.World.Registry)
+    sessions = Keyword.get(opts, :sessions, SessionManager)
+
+    with {:ok, session} <- fetch_session(sessions, session_id) do
+      MapServer.plot_course(registry, session.map_id, session.id, session.entity_id, waypoints)
+    end
+  end
+
+  @doc "Cancel any course without trusting client-supplied position."
+  @spec stop_navigation(pos_integer(), keyword()) :: {:ok, map()} | {:error, term()}
+  def stop_navigation(session_id, opts \\ []) do
+    registry = Keyword.get(opts, :registry, Core.World.Registry)
+    sessions = Keyword.get(opts, :sessions, SessionManager)
+
+    with {:ok, session} <- fetch_session(sessions, session_id) do
+      MapServer.stop_navigation(registry, session.map_id, session.id, session.entity_id)
+    end
+  end
+
   @spec select_target(pos_integer(), term(), keyword()) :: {:ok, map()} | {:error, term()}
   def select_target(session_id, target_id, opts \\ []) do
     registry = Keyword.get(opts, :registry, Core.World.Registry)

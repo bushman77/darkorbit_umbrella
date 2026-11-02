@@ -61,6 +61,64 @@ defmodule Core.WorldTest do
     assert_in_delta y, 1_000.0, 0.000_001
   end
 
+  test "server-owned course advances ordered waypoints and finishes", context do
+    assert {:ok, session} = World.connect(:route_pilot, context.stats, context.world_options)
+    opts = context.world_options
+    assert {:ok, course} = World.plot_course(session.id, [%{x: 1_032.0, y: 1_000.0}, %{x: 1_064.0, y: 1_000.0}], opts)
+    assert course.navigation_mode == :autopilot
+    assert course.destination == %{x: 1_032.0, y: 1_000.0}
+    assert course.route_waypoints == [%{x: 1_064.0, y: 1_000.0}]
+
+    assert {:ok, step} = World.tick("1-1", opts)
+    first = Enum.find(step.entities, &(&1.id == :route_pilot))
+    assert first.position == %{x: 1_032.0, y: 1_000.0}
+    assert first.destination == %{x: 1_064.0, y: 1_000.0}
+    assert first.navigation_mode == :autopilot
+
+    assert {:ok, step} = World.tick("1-1", opts)
+    last = Enum.find(step.entities, &(&1.id == :route_pilot))
+    assert last.position == %{x: 1_064.0, y: 1_000.0}
+    assert last.destination == nil
+    assert last.navigation_mode == :manual
+    assert last.route_waypoints == []
+  end
+
+  test "manual steering and stop cancel autopilot without client positions", context do
+    assert {:ok, session} = World.connect(:route_override, context.stats, context.world_options)
+    opts = context.world_options
+    route = [%{x: 1_032, y: 1_000}, %{x: 1_064, y: 1_000}]
+    assert {:ok, _} = World.plot_course(session.id, route, opts)
+    assert {:ok, manual} = World.move(session.id, %{x: 1_000, y: 1_032}, opts)
+    assert manual.navigation_mode == :manual
+    assert manual.route_waypoints == []
+    assert manual.destination == %{x: 1_000, y: 1_032}
+
+    assert {:ok, _} = World.plot_course(session.id, route, opts)
+    assert {:error, :session_not_found} = World.stop_navigation(-1, opts)
+    assert {:ok, stopped} = World.stop_navigation(session.id, opts)
+    assert stopped.position == %{x: 1_000.0, y: 1_000.0}
+    assert stopped.destination == nil
+    assert stopped.route_waypoints == []
+    assert stopped.navigation_mode == :manual
+
+    assert {:ok, snapshot} = World.tick("1-1", opts)
+    player = Enum.find(snapshot.entities, &(&1.id == :route_override))
+    assert player.position == stopped.position
+  end
+
+  test "rejected route preserves the previous active course", context do
+    assert {:ok, session} = World.connect(:route_validity, context.stats, context.world_options)
+    opts = context.world_options
+    assert {:ok, before} = World.plot_course(session.id, [%{x: 1_128, y: 1_000}], opts)
+    assert {:error, :outside_map} =
+             World.plot_course(session.id, [%{x: 1_200, y: 1_000}, %{x: -1, y: 10}], opts)
+    assert {:error, :invalid_course} = World.plot_course(session.id, [], opts)
+    assert {:ok, snapshot} = World.snapshot("1-1", opts)
+    current = Enum.find(snapshot.entities, &(&1.id == :route_validity))
+    assert current.destination == before.destination
+    assert current.navigation_mode == :autopilot
+  end
+
   test "validates movement against map boundaries and the owning session", context do
     assert {:ok, session} = World.connect(:pilot_two, context.stats, context.world_options)
 

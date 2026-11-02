@@ -21,7 +21,13 @@ defmodule Core.World.Entity do
     :next_attack_tick,
     :status
   ]
-  defstruct @enforce_keys ++ [:destination, :target_id, :engaged_target_id]
+  defstruct @enforce_keys ++ [
+              :destination,
+              :target_id,
+              :engaged_target_id,
+              navigation_mode: :manual,
+              route_waypoints: []
+            ]
 
   @type t :: %__MODULE__{
           id: term(),
@@ -30,6 +36,8 @@ defmodule Core.World.Entity do
           session_id: pos_integer(),
           position: Position.t(),
           destination: Position.t() | nil,
+          navigation_mode: :manual | :autopilot,
+          route_waypoints: [Position.t()],
           speed: number(),
           hull: non_neg_integer(),
           max_hull: non_neg_integer(),

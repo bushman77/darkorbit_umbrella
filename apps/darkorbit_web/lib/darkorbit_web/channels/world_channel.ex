@@ -35,6 +35,24 @@ defmodule DarkorbitWeb.WorldChannel do
     {:reply, {:error, %{reason: "invalid_destination"}}, socket}
   end
 
+  def handle_in("plot_course", %{"waypoints" => waypoints}, socket) do
+    case World.plot_course(socket.assigns.world_session_id, waypoints) do
+      {:ok, entity} -> {:reply, {:ok, %{entity: entity}}, socket}
+      {:error, reason} -> {:reply, {:error, %{reason: error_reason(reason)}}, socket}
+    end
+  end
+
+  def handle_in("plot_course", _payload, socket) do
+    {:reply, {:error, %{reason: "invalid_course"}}, socket}
+  end
+
+  def handle_in("stop_navigation", _payload, socket) do
+    case World.stop_navigation(socket.assigns.world_session_id) do
+      {:ok, entity} -> {:reply, {:ok, %{entity: entity}}, socket}
+      {:error, reason} -> {:reply, {:error, %{reason: error_reason(reason)}}, socket}
+    end
+  end
+
   def handle_in("select_target", %{"target_id" => target_id}, socket)
       when is_binary(target_id) do
     case World.select_target(socket.assigns.world_session_id, target_id) do

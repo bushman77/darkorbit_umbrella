@@ -12,6 +12,7 @@ defmodule Core.World.MapServer do
   alias Core.NPC.Catalog, as: NPCCatalog
   alias Core.NPC.Entity, as: NPCEntity
   alias Core.Ships.Stats
+  alias Core.World.Course
   alias Core.World.Entity
   alias Core.World.EventSink
   alias Core.World.MapDefinition
@@ -51,6 +52,18 @@ defmodule Core.World.MapServer do
           {:ok, map()} | {:error, term()}
   def move(registry, map_id, session_id, entity_id, destination) do
     call_map(registry, map_id, {:move, session_id, entity_id, destination})
+  end
+
+  @spec plot_course(atom(), String.t(), pos_integer(), term(), term()) ::
+          {:ok, map()} | {:error, term()}
+  def plot_course(registry, map_id, session_id, entity_id, waypoints) do
+    call_map(registry, map_id, {:plot_course, session_id, entity_id, waypoints})
+  end
+
+  @spec stop_navigation(atom(), String.t(), pos_integer(), term()) ::
+          {:ok, map()} | {:error, term()}
+  def stop_navigation(registry, map_id, session_id, entity_id) do
+    call_map(registry, map_id, {:stop_navigation, session_id, entity_id})
   end
 
   @spec select_target(atom(), String.t(), pos_integer(), term(), term()) ::
@@ -203,9 +216,35 @@ defmodule Core.World.MapServer do
     with {:ok, entity} <- authorized_entity(state, session_id, entity_id),
          :ok <- living_attacker(entity),
          {:ok, destination} <- Movement.destination(state.definition, destination) do
-      updated_entity = %{entity | destination: destination}
+      updated_entity = %{entity | destination: destination, route_waypoints: [], navigation_mode: :manual}
       new_state = %{state | entities: Map.put(state.entities, entity.id, updated_entity)}
       payload = public_entity(updated_entity)
+      broadcast(new_state, :movement_started, payload)
+      {:reply, {:ok, payload}, new_state}
+    else
+      error -> {:reply, error, state}
+    end
+  end
+
+  def handle_call({:plot_course, session_id, entity_id, waypoints}, _from, state) do
+    with {:ok, entity} <- authorized_entity(state, session_id, entity_id),
+         :ok <- living_attacker(entity),
+         {:ok, [first | remaining]} <- Course.plan(state.definition, waypoints) do
+      updated = %{entity | destination: first, route_waypoints: remaining, navigation_mode: :autopilot}
+      new_state = %{state | entities: Map.put(state.entities, entity.id, updated)}
+      payload = public_entity(updated)
+      broadcast(new_state, :movement_started, payload)
+      {:reply, {:ok, payload}, new_state}
+    else
+      error -> {:reply, error, state}
+    end
+  end
+
+  def handle_call({:stop_navigation, session_id, entity_id}, _from, state) do
+    with {:ok, entity} <- authorized_entity(state, session_id, entity_id) do
+      updated = %{entity | destination: nil, route_waypoints: [], navigation_mode: :manual}
+      new_state = %{state | entities: Map.put(state.entities, entity.id, updated)}
+      payload = public_entity(updated)
       broadcast(new_state, :movement_started, payload)
       {:reply, {:ok, payload}, new_state}
     else
@@ -703,7 +742,14 @@ defmodule Core.World.MapServer do
   defp advance_entity(entity, distance) do
     case Movement.advance(entity.position, entity.destination, distance) do
       {position, :moving} -> %{entity | position: position}
-      {position, :arrived} -> %{entity | position: position, destination: nil}
+      {position, :arrived} ->
+        case entity.route_waypoints do
+          [next | remaining] ->
+            %{entity | position: position, destination: next, route_waypoints: remaining}
+
+          [] ->
+            %{entity | position: position, destination: nil, navigation_mode: :manual}
+        end
     end
   end
 
@@ -800,6 +846,8 @@ defmodule Core.World.MapServer do
       player_id: entity.player_id,
       position: public_position(entity.position),
       destination: public_position(entity.destination),
+      navigation_mode: entity.navigation_mode,
+      route_waypoints: Enum.map(entity.route_waypoints, &public_position/1),
       speed: entity.speed,
       hull: entity.hull,
       max_hull: entity.max_hull,

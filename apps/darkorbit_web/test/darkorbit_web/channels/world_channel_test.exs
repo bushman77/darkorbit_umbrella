@@ -98,6 +98,32 @@ defmodule DarkorbitWeb.WorldChannelTest do
     leave_and_wait(second_socket)
   end
 
+  test "navigation course and stop bind to authenticated player and ignore spoofed ids" do
+    first = verified_player_account_fixture()
+    second = verified_player_account_fixture()
+    {:ok, first_socket} = authenticated_socket(first)
+    {:ok, second_socket} = authenticated_socket(second)
+    {:ok, _response, first_socket} = subscribe_and_join(first_socket, WorldChannel, "world:1-1")
+    {:ok, _response, second_socket} = subscribe_and_join(second_socket, WorldChannel, "world:1-1")
+
+    ref = push(first_socket, "plot_course", %{
+      "waypoints" => [%{"x" => 1_032, "y" => 1_000}, %{"x" => 1_064, "y" => 1_000}],
+      "entity_id" => second.id
+    })
+    assert_reply ref, :ok, %{entity: %{id: first_id, navigation_mode: :autopilot}}
+    assert first_id == first.id
+    assert {:ok, snapshot} = World.snapshot()
+    assert Enum.find(snapshot.entities, &(&1.id == first.id)).route_waypoints == [%{x: 1_064, y: 1_000}]
+    assert Enum.find(snapshot.entities, &(&1.id == second.id)).destination == nil
+
+    ref = push(first_socket, "plot_course", %{"waypoints" => [%{"x" => 30_000, "y" => 0}]})
+    assert_reply ref, :error, %{reason: "outside_map"}
+    ref = push(first_socket, "stop_navigation", %{"entity_id" => second.id, "x" => 88_888})
+    assert_reply ref, :ok, %{entity: %{id: ^first_id, destination: nil, route_waypoints: []}}
+    leave_and_wait(first_socket)
+    leave_and_wait(second_socket)
+  end
+
   test "map subscribers receive tick events from the authoritative simulation" do
     account = verified_player_account_fixture()
     {:ok, socket} = authenticated_socket(account)
