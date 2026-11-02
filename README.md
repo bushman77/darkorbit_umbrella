@@ -209,3 +209,33 @@ The reticle briefly changes green on hit and red on miss. The red
 beams persist for 0.55 seconds with enhanced collision flashes.
 A selected target is *not* automatically hit by manual Space fire:
 the player's nose and the two authoritative rays still determine hits.
+
+### Sector 1-1 starter Dart (2026-11-02)
+
+The demo now starts with **one** NPC instead of three: an orange **Dart**
+pirate fighter, modelled as original low-poly delta-wing geometry in
+`apps/darkorbit_web/assets/js/game/dart_model.mjs`. Its pointed nose,
+wide swept wings, compact dark canopy, dorsal fin and lit rear engines are
+an original Three.js interpretation of the 1989 *Space Rogue* Dart
+recognition-guide silhouette. The NPC is available in both 3D and stereo
+SBS views and retains existing hit detection, AI, selected-target ring,
+combat damage, destruction, and authoritative deterministic respawn.
+Only one Dart can be present at a time; after destruction it respawns
+following the existing three-second test-sector delay. A broader,
+event-driven spawning system remains future work.
+
+Reference: 1989 *Sunracer Owner's Guide and Navigation Manual*,
+Traveller's Recognition Guide p. 32:
+https://cdn.steamstatic.com/steam/apps/569200/manuals/space_rogue_manual.pdf#page=36
+
+Documented original Dart: Pirate/Fighter, orange, length 12m, 16t,
+armor 245, Garnet laser (10 mw/s), SM-1 missile, Fwd-2 shields,
+10% ECM, Borelle High Performance propulsion, acceleration 0.30g,
+turn rate 45 degrees/sec.
+
+Implemented now: **245 hull** (mapped from documented armor), **120
+general shields**, 0.6 shield absorption, 210 world units/sec,
+35 laser damage, 420 range, 1.2s cooldown, 900 detection radius.
+The latter combat/flight values are *provisional*, not copies of the
+1989 weapon/directional-shield model. SM-1, ECM and forward-only shields
+are not implemented yet.

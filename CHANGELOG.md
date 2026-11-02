@@ -351,3 +351,20 @@
   shield/hull readings directly on the stereoscopic cockpit HUD.
 - Extended dual red beam rendering to 550ms, increased thickness and impact
   flash visibility; existing server-owned beam/impact geometry is unchanged.
+
+### Sector 1-1 demo — one original-inspired Dart fighter (2026-11-02)
+
+- Replaced the three `rift_skirmisher` demo spawns with one deterministic
+  `dart` pirate fighter at (1480,1000), preserving the existing
+  authoritative AI and spawn/destruction/respawn event lifecycles.
+- Mapped the original Space Rogue Dart's documented 245 armor to
+  245 hull; shield and laser values remain explicit provisional
+  balance values pending faithful directional-shield/weapon systems.
+- Added lightweight procedural Three.js Dart geometry in orange with
+  sweeping delta wings, pointed nose, small dark canopy, vertical
+  dorsal fin, exhaust ports and the existing target-selection ring.
+- Added Dart orientation, ship-model and NPC target-facing tests;
+  rewrote the multi-NPC-dependent simulation and channel tests for
+  the single-Dart demo, including destruction and delayed respawn.
+- Left the current cockpit, player flight, twin laser hit logic,
+  damage authorization and bounded AI control unchanged.

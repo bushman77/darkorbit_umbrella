@@ -416,3 +416,29 @@ are thicker, remain visible for 550 ms and have larger impact flashes.
 
 No client-side damage inference, aim assist, automatic target snapping,
 or new weapon recharge behavior was added.
+
+## Sector 1-1 Dart starter fighter (2026-11-02)
+
+The previous Rift Skirmisher placeholders (three orange octahedrons)
+have been replaced by **one Dart-class pirate fighter**. The default
+`Core.NPC.Catalog` now spawns only `npc:1-1:dart:1` at world XY
+`(1480,1000)`. It uses the existing authoritative NPC FSM and 30
+simulation-tick respawn delay (3 seconds at the default 100ms tick).
+No parallel second NPC is spawned while the Dart is alive. After
+destruction it is removed, then that same unique identity respawns.
+Sector NPC stats are temporarily balanced for the demo; `max_hull =
+245` follows the 1989 Dart's published armor, while shields/damage/
+speed/cooldowns are estimates pending directional shields, ECM,
+Garnet lasers and SM-1 gameplay.
+
+The browser chooses `createDartModel(THREE)` for `npcTypeId === "dart"`,
+in both conventional 3D and stereo SBS, preserving renderer ownership.
+The original-generated lightweight polygonal ship has a swept
+delta-shaped orange hull, dark canopy, central dorsal fin, and twin
+engine housings. Its nose orientation follows the NPC's movement/
+combat targeting; server-authoritative XYZ collision and damage
+spheres are unchanged. Existing legacy/future NPC types retain the
+generic fallback mesh.
+
+Reference manual illustration and specifications:
+https://cdn.steamstatic.com/steam/apps/569200/manuals/space_rogue_manual.pdf#page=36

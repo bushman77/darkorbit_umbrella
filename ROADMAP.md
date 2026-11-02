@@ -103,7 +103,7 @@ Inspired by:
 
 ### Milestone E — Server-authoritative NPC combat
 
-- Configurable original NPC catalog with three deterministic `Rift Skirmisher` spawns in sector `1-1`
+- Configurable NPC catalog with **one Dart pirate fighter** in the Sector `1-1` demo (replacing the initial three Rift Skirmishers); deterministic respawn keeps one live enemy at a time
 - Map-owned NPC movement, hull, shields, targeting, bounded AI, destruction, and tick-based respawning
 - Pure range, cooldown, shield-absorption, hull-damage, and destruction rules
 - Authenticated target/select/fire channel intentions with authoritative multiplayer combat events
