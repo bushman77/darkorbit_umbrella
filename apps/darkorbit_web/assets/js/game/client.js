@@ -61,6 +61,10 @@ class SpaceClient {
     this.lastFrame = performance.now()
   }
 
+  inSystemCruise() {
+    return this.navComputer?.solarNavigation?.status === "traveling"
+  }
+
   start() {
     if (!this.canvas || !this.root.querySelector("#space-viewport-3d")) {
       this.showError("The 3D flight viewport is missing.")
@@ -79,7 +83,8 @@ class SpaceClient {
       getDestination: () => this.commandDestination,
     }).start()
     this.flightControls = new FlightControls({
-      active: () => !this.navComputer?.isOpen && this.channel?.state === "joined" &&
+      active: () => !this.navComputer?.isOpen && !this.inSystemCruise() &&
+        this.channel?.state === "joined" &&
         this.entities.get(this.selfId)?.status !== "destroyed",
       send: input => this.sendFlightControls(input),
     })
@@ -132,7 +137,7 @@ class SpaceClient {
     }).attach()
     this.canvas.addEventListener("contextmenu", event => this.handleTargetPointer(event))
     this.spaceLaser = new SpaceLaserTrigger({
-      active: () => !this.navComputer?.isOpen &&
+      active: () => !this.navComputer?.isOpen && !this.inSystemCruise() &&
         this.channel?.state === "joined" &&
         this.entities.get(this.selfId)?.status !== "destroyed",
       worldTick: () => this.worldTick,
@@ -174,7 +179,7 @@ class SpaceClient {
     this.channel.on("world_state", state => this.applyWorldState(state))
     this.channel.on("solar_navigation_updated", payload => {
       if (String(payload.player_id) === String(this.selfId) && payload.navigation) {
-        this.navComputer.setSolarNavigation(payload.navigation)
+        this.applySolarNavigation(payload.navigation)
       }
     })
     this.channel.on("movement_started", entity => this.upsertEntity(entity))
@@ -217,7 +222,7 @@ class SpaceClient {
     this.tickMs = response.map.tick_ms
     this.pilots = new Map(Object.entries(response.pilots || {}))
 
-    if(response.solar_navigation)this.navComputer.setSolarNavigation(response.solar_navigation)
+    if(response.solar_navigation)this.applySolarNavigation(response.solar_navigation)
     for (const entity of response.map.entities) this.upsertEntity(entity, true)
     this.syncOwnCombatState()
 
@@ -372,6 +377,19 @@ class SpaceClient {
       .receive("timeout", () => this.showError("Flight control link timed out."))
   }
 
+  applySolarNavigation(navigation) {
+    this.navComputer.setSolarNavigation(navigation)
+    const active=this.inSystemCruise()
+    this.root.dataset.propulsionMode=active?"interplanetary_cruise":"conventional"
+    const label=this.root.querySelector("#propulsion-status")
+    if(label)label.textContent=active?"SUBLIGHT CRUISE / FLIGHT LOCKED":"CONVENTIONAL FLIGHT"
+    if(active){
+      this.flightControls?.release({silent:true})
+      this.spaceLaser?.release()
+      this.navigation?.cancel()
+    }
+  }
+
   solarSetCourse(bodyId, done) {
     if(this.channel?.state!=="joined")return done(false,null,"relay offline")
     this.channel.push("solar_set_course",{body_id:bodyId},5000)
@@ -447,6 +465,10 @@ class SpaceClient {
 
   handleCombatKey(event) {
     if (this.navComputer?.isOpen) return
+    if (this.inSystemCruise()) {
+      if (event.code === "Space") event.preventDefault()
+      return
+    }
     if (event.code === "Space" && !gameplayTypingTarget(event.target) &&
         !event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey) {
       event.preventDefault()

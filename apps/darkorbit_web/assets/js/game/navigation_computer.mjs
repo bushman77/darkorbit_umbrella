@@ -180,7 +180,7 @@ export class NavigationComputer {
     if(navigation?.system_id!=="sol" || !["idle","traveling"].includes(navigation.status))return
     this.solarNavigation=navigation
     this.solarStatusMessage=navigation.status==="traveling" ?
-      "TRANSIT IN PROGRESS" : "HELM READY"
+      "SUBLIGHT INTERPLANETARY CRUISE" : "CONVENTIONAL FLIGHT READY"
     if(this.isOpen&&this.view==="system")this.renderSolarView()
   }
 
@@ -234,9 +234,26 @@ export class NavigationComputer {
     const percent=Math.max(0,Math.min(100,Math.round((nav?.progress || 0)*100)))
     if(progress)progress.value=percent
     const percentLabel=this.root.querySelector("#nav-solar-progress-label")
+    const duration=ms=>{
+      const seconds=Math.max(0,Math.ceil((ms || 0)/1000))
+      const minutes=Math.floor(seconds/60)
+      return `${minutes}:${String(seconds%60).padStart(2,"0")}`
+    }
     if(percentLabel)percentLabel.textContent=traveling?
-      `${percent}% · ${Math.ceil((nav.remaining_ms || 0)/1000)}s remaining`:
-      "Ready to plot course"
+      `${percent}% · ${duration(nav.remaining_ms)} remaining`:
+      "Conventional flight · choose a planet to begin sublight cruise"
+    const drive=this.root.querySelector("#nav-solar-drive")
+    if(drive)drive.textContent=traveling ? "SUBLIGHT INTERPLANETARY CRUISE" : "CONVENTIONAL"
+    const speed=this.root.querySelector("#nav-solar-speed")
+    if(speed)speed.textContent=traveling ?
+      `${Math.round(nav.cruise_speed_km_s || 0).toLocaleString("en-US")} game km/s` :
+      "Conventional thrusters"
+    const distance=this.root.querySelector("#nav-solar-distance-travelled")
+    if(distance)distance.textContent=traveling ?
+      `${Math.round(nav.distance_travelled_km || 0).toLocaleString("en-US")} / ${Math.round(nav.travel_distance_km || 0).toLocaleString("en-US")} game km` :
+      "No interplanetary course"
+    const eta=this.root.querySelector("#nav-solar-eta")
+    if(eta)eta.textContent=traveling ? duration(nav.remaining_ms) : "—"
     const button=this.root.querySelector("#nav-solar-engage")
     if(button){
       button.disabled=this.solarPending||!connected||!nav||traveling||
@@ -324,7 +341,8 @@ export class NavigationComputer {
   }
 
   submit() {
-    if (this.pending || !this.isConnected() || !this.draft.length) return
+    if (this.pending || !this.isConnected() || !this.draft.length ||
+        this.solarNavigation?.status==="traveling") return
     this.pending = true
     this.refreshStatus()
     const waypoints = this.draft.map(({x, y, z}) => ({x, y, z: z ?? 0}))
@@ -341,7 +359,8 @@ export class NavigationComputer {
   }
 
   stop() {
-    if (this.pending || !this.isConnected()) return
+    if (this.pending || !this.isConnected() ||
+        this.solarNavigation?.status==="traveling") return
     this.pending = true
     this.refreshStatus()
     this.halt((ok, reason) => {

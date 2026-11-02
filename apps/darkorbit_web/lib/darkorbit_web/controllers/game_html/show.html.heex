@@ -36,7 +36,7 @@
             Connecting
           </p>
         </div>
-        <p class="mt-1 text-sm font-semibold">Sector <span class="text-cyan-200">1-1</span></p>
+        <p class="mt-1 text-sm font-semibold" id="propulsion-status">CONVENTIONAL FLIGHT</p>
       </div>
     </div>
 
@@ -135,6 +135,10 @@
             <dl class="solar-body-metrics">
               <div><dt>CURRENT REGION</dt><dd id="nav-solar-location">—</dd></div>
               <div><dt>FLIGHT PLAN</dt><dd id="nav-solar-route">NO ACTIVE TRANSIT</dd></div>
+              <div><dt>PROPULSION</dt><dd id="nav-solar-drive">CONVENTIONAL</dd></div>
+              <div><dt>DRIVE SPEED</dt><dd id="nav-solar-speed">Conventional thrusters</dd></div>
+              <div><dt>TRAVEL DISTANCE</dt><dd id="nav-solar-distance-travelled">No interplanetary course</dd></div>
+              <div><dt>ARRIVAL ETA</dt><dd id="nav-solar-eta">—</dd></div>
             </dl>
             <label for="nav-solar-progress" id="nav-solar-progress-label" class="solar-progress-label">
               Ready to plot course
@@ -147,10 +151,12 @@
               Abort transit
             </button>
           </div>
-          <p class="solar-system-note">V1 system travel is server-authoritative, with
-            game-scaled transit times. It updates your current solar region but does
-            not yet move the 3D ship or simulate orbital mechanics. Sector 1-1
-            remains the separate tactical flight chart.</p>
+          <p class="solar-system-note">Interplanetary cruise uses a dedicated sublight
+            drive and the same real-time clock as combat. Distance is compressed
+            into game kilometers, not physical Solar System kilometers. Cockpit
+            controls and weapons are locked during cruise. This is system-level
+            travel only: orbital physics and physical sector transfers are not yet
+            connected.</p>
         </aside>
       </section>
 
