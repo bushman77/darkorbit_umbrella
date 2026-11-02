@@ -109,6 +109,12 @@ defmodule Core.World.MapServer do
     call_map(registry, map_id, {:activate_action, session_id, entity_id, slot})
   end
 
+  @spec fire_ready_weapon(atom(), String.t(), pos_integer(), term()) ::
+          {:ok, map()} | {:error, term()}
+  def fire_ready_weapon(registry, map_id, session_id, entity_id) do
+    call_map(registry, map_id, {:fire_ready_weapon, session_id, entity_id})
+  end
+
   @spec attack(atom(), String.t(), pos_integer(), term()) ::
           {:ok, map()} | {:error, term()}
   def attack(registry, map_id, session_id, entity_id) do
@@ -383,6 +389,52 @@ defmodule Core.World.MapServer do
     end
   end
 
+  def handle_call({:fire_ready_weapon, session_id, entity_id}, _from, state) do
+    with {:ok, attacker} <- authorized_entity(state, session_id, entity_id),
+         :ok <- living_attacker(attacker),
+         :ok <- armed_weapon(attacker),
+         true <- Combat.cooldown_ready?(state.tick, attacker.next_attack_tick) do
+      direction = FlightDynamics.forward(attacker.attitude)
+
+      case Core.Combat.LineOfFire.trace(
+             attacker.position, direction, Map.values(state.npcs), attacker.attack_range
+           ) do
+        {:hit, target, impact} ->
+          case Combat.validate_attack(attacker, target, state.tick) do
+            :ok ->
+              {new_state, payload} =
+                resolve_player_attack(state, attacker, target,
+                  %{from: position_3d(attacker.position), to: impact})
+              {:reply, {:ok, payload}, new_state}
+
+            {:error, reason} ->
+              {:reply, {:error, reason}, state}
+          end
+
+        {:miss, endpoint} ->
+          updated = %{attacker | next_attack_tick: Combat.next_attack_tick(attacker, state.tick)}
+          new_state = %{state | entities: Map.put(state.entities, attacker.id, updated)}
+          payload = %{
+            attacker_id: attacker.id,
+            target_id: nil,
+            hit: false,
+            from: position_3d(attacker.position),
+            to: endpoint,
+            damage: 0,
+            shield_damage: 0,
+            hull_damage: 0,
+            next_attack_tick: updated.next_attack_tick,
+            tick: state.tick
+          }
+          broadcast(new_state, :laser_fired, payload)
+          {:reply, {:ok, payload}, new_state}
+      end
+    else
+      false -> {:reply, {:error, :weapon_cooldown}, state}
+      error -> {:reply, error, state}
+    end
+  end
+
   def handle_call({:attack, session_id, entity_id}, _from, state) do
     with {:ok, attacker} <- authorized_entity(state, session_id, entity_id),
          :ok <- living_attacker(attacker),
@@ -498,7 +550,7 @@ defmodule Core.World.MapServer do
     end
   end
 
-  defp resolve_player_attack(state, attacker, target) do
+  defp resolve_player_attack(state, attacker, target, beam \\ nil) do
     {damaged_target, damage} = Combat.apply_damage(target, attacker.damage)
 
     updated_attacker = %{
@@ -512,7 +564,10 @@ defmodule Core.World.MapServer do
         npcs: Map.put(state.npcs, target.id, damaged_target)
     }
 
-    payload = combat_payload(updated_attacker, damaged_target, damage, state.tick)
+    payload =
+      combat_payload(updated_attacker, damaged_target, damage, state.tick)
+      |> Map.put(:hit, true)
+      |> maybe_add_beam(beam)
     broadcast(state, :laser_fired, payload)
 
     if damage.destroyed do
@@ -521,6 +576,9 @@ defmodule Core.World.MapServer do
       {state, payload}
     end
   end
+
+  defp maybe_add_beam(payload, nil), do: payload
+  defp maybe_add_beam(payload, beam), do: Map.merge(payload, beam)
 
   defp resolve_npc_attack(state, {npc_id, player_id}) do
     with {:ok, attacker} <- Map.fetch(state.npcs, npc_id),

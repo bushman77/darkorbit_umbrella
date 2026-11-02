@@ -35,6 +35,7 @@ defmodule Darkorbit.World do
   defdelegate toggle_laser_fire(session_id), to: Simulation
   defdelegate activate_action(session_id, slot), to: Simulation
   defdelegate attack(session_id), to: Simulation
+  defdelegate fire_ready_weapon(session_id), to: Simulation
 
   @spec action_hotbar() :: [Core.Combat.ActionCatalog.slot()]
   def action_hotbar, do: Core.Combat.ActionCatalog.hotbar()

@@ -148,6 +148,17 @@ defmodule Core.World do
     end
   end
 
+  @doc "Fire the ready laser along the authenticated ship's current nose."
+  @spec fire_ready_weapon(pos_integer(), keyword()) :: {:ok, map()} | {:error, term()}
+  def fire_ready_weapon(session_id, opts \\ []) do
+    registry = Keyword.get(opts, :registry, Core.World.Registry)
+    sessions = Keyword.get(opts, :sessions, SessionManager)
+
+    with {:ok, session} <- fetch_session(sessions, session_id) do
+      MapServer.fire_ready_weapon(registry, session.map_id, session.id, session.entity_id)
+    end
+  end
+
   @spec attack(pos_integer(), keyword()) :: {:ok, map()} | {:error, term()}
   def attack(session_id, opts \\ []) do
     registry = Keyword.get(opts, :registry, Core.World.Registry)

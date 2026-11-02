@@ -120,6 +120,14 @@ defmodule DarkorbitWeb.WorldChannel do
     {:reply, {:error, %{reason: "invalid_action_slot"}}, socket}
   end
 
+  def handle_in("fire_ready_weapon", _payload, socket) do
+    # Ship identity, heading and cooldown all come from the channel session.
+    case World.fire_ready_weapon(socket.assigns.world_session_id) do
+      {:ok, shot} -> {:reply, {:ok, shot}, socket}
+      {:error, reason} -> {:reply, {:error, %{reason: error_reason(reason)}}, socket}
+    end
+  end
+
   def handle_in("laser_attack", _payload, socket) do
     case World.attack(socket.assigns.world_session_id) do
       {:ok, attack} -> {:reply, {:ok, attack}, socket}
