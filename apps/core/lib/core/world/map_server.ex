@@ -14,6 +14,7 @@ defmodule Core.World.MapServer do
   alias Core.Ships.Stats
   alias Core.World.Course
   alias Core.World.Entity
+  alias Core.World.FlightDynamics
   alias Core.World.EventSink
   alias Core.World.MapDefinition
   alias Core.World.Movement
@@ -64,6 +65,12 @@ defmodule Core.World.MapServer do
           {:ok, map()} | {:error, term()}
   def stop_navigation(registry, map_id, session_id, entity_id) do
     call_map(registry, map_id, {:stop_navigation, session_id, entity_id})
+  end
+
+  @spec flight_controls(atom(), String.t(), pos_integer(), term(), map()) ::
+          {:ok, map()} | {:error, term()}
+  def flight_controls(registry, map_id, session_id, entity_id, input) do
+    call_map(registry, map_id, {:flight_controls, session_id, entity_id, input})
   end
 
   @spec select_target(atom(), String.t(), pos_integer(), term(), term()) ::
@@ -216,7 +223,11 @@ defmodule Core.World.MapServer do
     with {:ok, entity} <- authorized_entity(state, session_id, entity_id),
          :ok <- living_attacker(entity),
          {:ok, destination} <- Movement.destination(state.definition, destination) do
-      updated_entity = %{entity | destination: destination, route_waypoints: [], navigation_mode: :manual}
+      updated_entity = %{
+        entity | destination: destination, route_waypoints: [], navigation_mode: :manual,
+                 throttle: 0.0, velocity: %{x: 0.0, y: 0.0, z: 0.0},
+                 rotation_input: %{yaw: 0.0, pitch: 0.0, roll: 0.0}
+      }
       new_state = %{state | entities: Map.put(state.entities, entity.id, updated_entity)}
       payload = public_entity(updated_entity)
       broadcast(new_state, :movement_started, payload)
@@ -230,7 +241,11 @@ defmodule Core.World.MapServer do
     with {:ok, entity} <- authorized_entity(state, session_id, entity_id),
          :ok <- living_attacker(entity),
          {:ok, [first | remaining]} <- Course.plan(state.definition, waypoints) do
-      updated = %{entity | destination: first, route_waypoints: remaining, navigation_mode: :autopilot}
+      updated = %{
+        entity | destination: first, route_waypoints: remaining, navigation_mode: :autopilot,
+                 throttle: 0.0, velocity: %{x: 0.0, y: 0.0, z: 0.0},
+                 rotation_input: %{yaw: 0.0, pitch: 0.0, roll: 0.0}
+      }
       new_state = %{state | entities: Map.put(state.entities, entity.id, updated)}
       payload = public_entity(updated)
       broadcast(new_state, :movement_started, payload)
@@ -242,7 +257,24 @@ defmodule Core.World.MapServer do
 
   def handle_call({:stop_navigation, session_id, entity_id}, _from, state) do
     with {:ok, entity} <- authorized_entity(state, session_id, entity_id) do
-      updated = %{entity | destination: nil, route_waypoints: [], navigation_mode: :manual}
+      updated = %{
+        entity | destination: nil, route_waypoints: [], navigation_mode: :manual,
+                 throttle: 0.0, velocity: %{x: 0.0, y: 0.0, z: 0.0},
+                 rotation_input: %{yaw: 0.0, pitch: 0.0, roll: 0.0}
+      }
+      new_state = %{state | entities: Map.put(state.entities, entity.id, updated)}
+      payload = public_entity(updated)
+      broadcast(new_state, :movement_started, payload)
+      {:reply, {:ok, payload}, new_state}
+    else
+      error -> {:reply, error, state}
+    end
+  end
+
+  def handle_call({:flight_controls, session_id, entity_id, input}, _from, state) do
+    with {:ok, entity} <- authorized_entity(state, session_id, entity_id),
+         :ok <- living_attacker(entity),
+         {:ok, updated} <- FlightDynamics.controls(entity, input, state.tick) do
       new_state = %{state | entities: Map.put(state.entities, entity.id, updated)}
       payload = public_entity(updated)
       broadcast(new_state, :movement_started, payload)
@@ -383,8 +415,13 @@ defmodule Core.World.MapServer do
 
     entities =
       Map.new(state.entities, fn {entity_id, entity} ->
-        distance = if Combat.alive?(entity), do: entity.speed * distance_factor, else: 0
-        {entity_id, advance_entity(entity, distance)}
+        moved =
+          cond do
+            not Combat.alive?(entity) -> entity
+            entity.destination != nil -> advance_entity(entity, entity.speed * distance_factor)
+            true -> FlightDynamics.step(entity, state.definition, distance_factor, next_tick)
+          end
+        {entity_id, moved}
       end)
 
     {npcs, attack_actions, npc_events} =
@@ -872,6 +909,10 @@ defmodule Core.World.MapServer do
       destination_3d: position_3d(entity.destination),
       route_waypoints_3d: Enum.map(entity.route_waypoints, &position_3d/1),
       navigation_mode: entity.navigation_mode,
+      flight_mode: entity.flight_mode,
+      throttle: entity.throttle,
+      attitude: entity.attitude,
+      velocity: entity.velocity,
       route_waypoints: Enum.map(entity.route_waypoints, &public_position/1),
       speed: entity.speed,
       hull: entity.hull,

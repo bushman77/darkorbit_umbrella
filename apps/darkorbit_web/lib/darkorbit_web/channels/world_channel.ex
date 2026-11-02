@@ -61,6 +61,14 @@ defmodule DarkorbitWeb.WorldChannel do
     end
   end
 
+  def handle_in("flight_controls", input, socket) when is_map(input) do
+    # Authentication and entity identity come solely from the channel session.
+    case World.flight_controls(socket.assigns.world_session_id, input) do
+      {:ok, entity} -> {:reply, {:ok, %{entity: entity}}, socket}
+      {:error, reason} -> {:reply, {:error, %{reason: error_reason(reason)}}, socket}
+    end
+  end
+
   def handle_in("select_target", %{"target_id" => target_id}, socket)
       when is_binary(target_id) do
     case World.select_target(socket.assigns.world_session_id, target_id) do

@@ -26,7 +26,13 @@ defmodule Core.World.Entity do
               :target_id,
               :engaged_target_id,
               navigation_mode: :manual,
-              route_waypoints: []
+              route_waypoints: [],
+              flight_mode: :cruise,
+              throttle: 0.0,
+              attitude: %{yaw: 0.0, pitch: 0.0, roll: 0.0},
+              rotation_input: %{yaw: 0.0, pitch: 0.0, roll: 0.0},
+              velocity: %{x: 0.0, y: 0.0, z: 0.0},
+              control_tick: -1_000
             ]
 
   @type t :: %__MODULE__{
@@ -38,6 +44,12 @@ defmodule Core.World.Entity do
           destination: Position.t() | nil,
           navigation_mode: :manual | :autopilot,
           route_waypoints: [Position.t()],
+          flight_mode: :cruise | :newtonian,
+          throttle: float(),
+          attitude: %{yaw: float(), pitch: float(), roll: float()},
+          rotation_input: %{yaw: float(), pitch: float(), roll: float()},
+          velocity: %{x: float(), y: float(), z: float()},
+          control_tick: integer(),
           speed: number(),
           hull: non_neg_integer(),
           max_hull: non_neg_integer(),

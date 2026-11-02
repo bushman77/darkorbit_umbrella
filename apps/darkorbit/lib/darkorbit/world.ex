@@ -27,6 +27,7 @@ defmodule Darkorbit.World do
   defdelegate move(session_id, destination), to: Simulation
   defdelegate plot_course(session_id, waypoints), to: Simulation
   defdelegate stop_navigation(session_id), to: Simulation
+  defdelegate flight_controls(session_id, input), to: Simulation
   defdelegate select_target(session_id, target_id), to: Simulation
   defdelegate clear_target(session_id), to: Simulation
   defdelegate engage_combat(session_id), to: Simulation

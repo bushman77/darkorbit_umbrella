@@ -71,6 +71,17 @@ defmodule Core.World do
     end
   end
 
+  @doc "Apply authenticated signed throttle and rotational flight commands."
+  @spec flight_controls(pos_integer(), map(), keyword()) :: {:ok, map()} | {:error, term()}
+  def flight_controls(session_id, input, opts \\ []) do
+    registry = Keyword.get(opts, :registry, Core.World.Registry)
+    sessions = Keyword.get(opts, :sessions, SessionManager)
+
+    with {:ok, session} <- fetch_session(sessions, session_id) do
+      MapServer.flight_controls(registry, session.map_id, session.id, session.entity_id, input)
+    end
+  end
+
   @spec select_target(pos_integer(), term(), keyword()) :: {:ok, map()} | {:error, term()}
   def select_target(session_id, target_id, opts \\ []) do
     registry = Keyword.get(opts, :registry, Core.World.Registry)
