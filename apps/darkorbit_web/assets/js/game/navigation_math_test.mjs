@@ -47,3 +47,16 @@ test("preview distance accumulates each leg deterministically", () => {
   assert.equal(routeDistance({x: 0, y: 0}, [{x: 3, y: 4}, {x: 3, y: 8}]), 9)
   assert.equal(routeDistance(null, [{x: 1, y: 1}]), 0)
 })
+
+test("altitude is valid and route planning calculates actual 3D distance", () => {
+  const volume = {...bounds, altitude_min: -3000, altitude_max: 3000}
+  assert.deepEqual(parseCoordinates("1250", "1850", volume, "750"), {x: 1250, y: 1850, z: 750})
+  assert.equal(parseCoordinates("1250", "1850", volume, "3001"), null)
+  assert.equal(parseCoordinates("1250", "1850", volume, ""), null)
+  assert.equal(parseCoordinates("1250", "1850", volume, "wat"), null)
+  assert.equal(routeDistance({x: 0, y: 0, z: 0}, [{x: 0, y: 0, z: 300}]), 300)
+  const zero = [{x: 100, y: 200, z: 0}]
+  const high = appendWaypoint(zero, {x: 100, y: 200, z: 200}, volume)
+  assert.equal(high.length, 2)
+  assert.equal(appendWaypoint(zero, {x: 100, y: 200, z: 0}, volume), zero)
+})

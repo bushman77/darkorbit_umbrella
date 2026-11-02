@@ -14,6 +14,12 @@ export function validWaypoint(point, boundaries) {
   if (!point || !boundaries || !Number.isFinite(point.x) || !Number.isFinite(point.y)) return null
   if (!(boundaries.width > 0) || !(boundaries.height > 0)) return null
   if (point.x < 0 || point.y < 0 || point.x > boundaries.width || point.y > boundaries.height) return null
+  if (point.z !== undefined) {
+    const altitudeMin = boundaries.altitude_min ?? -3000
+    const altitudeMax = boundaries.altitude_max ?? 3000
+    if (!Number.isFinite(point.z) || point.z < altitudeMin || point.z > altitudeMax) return null
+    return {x: point.x, y: point.y, z: point.z}
+  }
   return {x: point.x, y: point.y}
 }
 
@@ -22,7 +28,8 @@ export function appendWaypoint(draft, point, boundaries) {
   const normalized = validWaypoint(point, boundaries)
   if (!normalized) return draft
   const previous = draft.at(-1)
-  if (previous && Math.hypot(previous.x - normalized.x, previous.y - normalized.y) < 1) return draft
+  if (previous && Math.hypot(previous.x - normalized.x, previous.y - normalized.y,
+    (previous.z ?? 0) - (normalized.z ?? 0)) < 1) return draft
   return [...draft, normalized]
 }
 
@@ -33,13 +40,16 @@ export function routeDistance(origin, waypoints) {
   for (const point of waypoints) {
     if (!Number.isFinite(last?.x) || !Number.isFinite(last?.y) ||
         !Number.isFinite(point?.x) || !Number.isFinite(point?.y)) return 0
-    total += Math.hypot(point.x - last.x, point.y - last.y)
+    total += Math.hypot(point.x - last.x, point.y - last.y, (point.z ?? 0) - (last.z ?? 0))
     last = point
   }
   return total
 }
 
-export function parseCoordinates(rawX, rawY, boundaries) {
+export function parseCoordinates(rawX, rawY, boundaries, rawZ) {
   if (String(rawX).trim() === "" || String(rawY).trim() === "") return null
-  return validWaypoint({x: Number(rawX), y: Number(rawY)}, boundaries)
+  if (rawZ !== undefined && String(rawZ).trim() === "") return null
+  const point = {x: Number(rawX), y: Number(rawY)}
+  if (rawZ !== undefined) point.z = Number(rawZ)
+  return validWaypoint(point, boundaries)
 }

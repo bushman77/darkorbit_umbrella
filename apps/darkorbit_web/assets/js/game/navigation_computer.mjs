@@ -5,7 +5,8 @@ import {
 
 const NS = "http://www.w3.org/2000/svg"
 const number = value => Math.round(value).toLocaleString("en-US")
-const coordText = point => point ? `${number(point.x)} / ${number(point.y)}` : "— / —"
+const coordText = point => point ?
+  `${number(point.x)} / ${number(point.y)} / Z ${number(point.z ?? 0)}` : "— / — / Z —"
 
 function element(name, attributes = {}, label = null) {
   const node = document.createElementNS(NS, name)
@@ -62,7 +63,8 @@ export class NavigationComputer {
       event.preventDefault()
       const x = this.root.querySelector("#nav-x").value
       const y = this.root.querySelector("#nav-y").value
-      const point = parseCoordinates(x, y, this.getBoundaries())
+      const z = this.root.querySelector("#nav-z").value
+      const point = parseCoordinates(x, y, this.getBoundaries(), z)
       this.addWaypoint(point)
     })
     this.svg.addEventListener("click", event => {
@@ -72,7 +74,9 @@ export class NavigationComputer {
       pointer.x = event.clientX
       pointer.y = event.clientY
       const local = pointer.matrixTransform(matrix.inverse())
-      this.addWaypoint(chartWorldPoint({x: local.x, y: local.y}, this.getBoundaries()))
+      const xy = chartWorldPoint({x: local.x, y: local.y}, this.getBoundaries())
+      const z = Number(this.root.querySelector("#nav-z").value)
+      this.addWaypoint(xy && {...xy, z})
     })
     return this
   }
@@ -85,6 +89,12 @@ export class NavigationComputer {
     if (this.isOpen) return
     this.isOpen = true
     this.root.hidden = false
+    const altitude = this.root.querySelector("#nav-z")
+    const bounds = this.getBoundaries()
+    altitude.min = String(bounds.altitude_min ?? -3000)
+    altitude.max = String(bounds.altitude_max ?? 3000)
+    // Default to current altitude for a new chart session, but permit changes.
+    if (!this.draft.length) altitude.value = String(this.ownShip()?.target?.z ?? 0)
     this.onOpen?.()
     this.note("Click the chart to plot waypoints. Engage to hand the course to the helm.")
     this.draw(0, true)
@@ -143,7 +153,7 @@ export class NavigationComputer {
     if (this.pending || !this.isConnected() || !this.draft.length) return
     this.pending = true
     this.refreshStatus()
-    const waypoints = this.draft.map(({x, y}) => ({x, y}))
+    const waypoints = this.draft.map(({x, y, z}) => ({x, y, z: z ?? 0}))
     this.engage(waypoints, (ok, reason) => {
       this.pending = false
       if (ok) {
