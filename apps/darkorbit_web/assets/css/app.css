@@ -693,12 +693,9 @@ body {
 }
 
 
-/* Experimental 3D/SBS stage: the original 2D canvas remains the input surface. */
-#space-viewport-3d { opacity: 0; }
-#game-client[data-display-mode="3d"] #space-viewport,
-#game-client[data-display-mode="sbs"] #space-viewport { opacity: 0; }
-#game-client[data-display-mode="3d"] #space-viewport-3d,
-#game-client[data-display-mode="sbs"] #space-viewport-3d { opacity: 1; }
+/* Only the WebGL canvas is a flight display. A transparent div collects input. */
+#space-viewport { background: transparent; }
+#space-viewport-3d { opacity: 1; }
 /* The standard HUD is monoscopic; stereo mode uses the cockpit texture instead. */
 #game-client[data-display-mode="sbs"] > header,
 #game-client[data-display-mode="sbs"] .cockpit-interface,
@@ -770,8 +767,5 @@ body {
   .nav-console { width: 100%; }
 }
 
-/* Classic 2D game presentation retired: atlas owns the overhead navigation map.
-   The transparent input canvas remains for existing target-selection handlers. */
-#game-client[data-display-mode="3d"] #space-viewport,
-#game-client[data-display-mode="sbs"] #space-viewport { opacity: 0; }
+/* Classic 2D gameplay is retired; the atlas remains the overhead map. */
 .nav-coordinate-form .nav-altitude-label { grid-column: span 2; }

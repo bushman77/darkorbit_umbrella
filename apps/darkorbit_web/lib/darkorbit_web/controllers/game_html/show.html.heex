@@ -6,14 +6,14 @@
   data-layout-player-id={@layout_player_id}
   class="relative h-screen min-h-[38rem] overflow-hidden bg-[#02050c] text-slate-100"
 >
-  <canvas
+  <%!-- Invisible pointer surface, not a 2D renderer. The atlas owns 2D navigation. --%>
+  <div
     id="space-viewport"
     class="absolute inset-0 size-full cursor-crosshair touch-none focus:outline-none"
     tabindex="0"
-    aria-label="3D space cockpit target selection viewport. Press M for the navigation atlas."
+    aria-label="3D space cockpit targeting. Press M for the navigation atlas."
   >
-    Your browser needs Canvas 2D support to run the space client.
-  </canvas>
+  </div>
 
   <canvas id="space-viewport-3d" class="pointer-events-none absolute inset-0 size-full" aria-hidden="true"></canvas>
 

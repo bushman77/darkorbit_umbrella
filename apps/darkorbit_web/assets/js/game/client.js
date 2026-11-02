@@ -1,9 +1,7 @@
 import {Socket} from "phoenix"
-import {GraphicsAssets} from "./asset_catalog"
 import {
   applyAuthoritativeDamage,
   entityKey,
-  findNpcAtScreenPoint,
   healthPercent,
   nearestNpc,
 } from "./combat_client.mjs"
@@ -14,10 +12,11 @@ import {
   smoothAngle,
 } from "./combat_controls.mjs"
 import {CockpitWindowManager} from "./cockpit_window_manager.mjs"
-import {MinimapRenderer, minimapWorldPoint} from "./minimap_renderer.mjs"
+import {MinimapRenderer} from "./minimap_renderer.mjs"
 import {PointerNavigation} from "./pointer_navigation.mjs"
 import {StereoSpaceView} from "./stereo_view.js"
 import {NavigationComputer} from "./navigation_computer.mjs"
+import {nextFlightMode, validFlightMode} from "./display_modes.mjs"
 
 const clamp = (value, minimum, maximum) => Math.min(Math.max(value, minimum), maximum)
 const validDestination = (destination, boundaries) =>
@@ -34,22 +33,11 @@ const titleize = value => String(value || "hostile npc")
   .map(word => word.charAt(0).toUpperCase() + word.slice(1))
   .join(" ")
 
-const seededRandom = seed => {
-  let value = seed >>> 0
-  return () => {
-    value += 0x6D2B79F5
-    let result = value
-    result = Math.imul(result ^ (result >>> 15), result | 1)
-    result ^= result + Math.imul(result ^ (result >>> 7), result | 61)
-    return ((result ^ (result >>> 14)) >>> 0) / 4294967296
-  }
-}
-
 class SpaceClient {
   constructor(root) {
     this.root = root
+    // Transparent DOM hit surface. Three.js owns the only flight renderer.
     this.canvas = root.querySelector("#space-viewport")
-    this.context = this.canvas.getContext("2d", {alpha: false})
     this.stereoView = null
     this.displayMode = "3d"
     this.mapId = root.dataset.mapId
@@ -58,8 +46,6 @@ class SpaceClient {
     this.pilots = new Map()
     this.boundaries = {width: 20000, height: 12000}
     this.volume = {altitude_min: -3000, altitude_max: 3000}
-    this.camera = {x: 1000, y: 1000}
-    this.viewport = {width: 1, height: 1, dpr: 1}
     this.selfId = null
     this.player = null
     this.commandDestination = null
@@ -68,16 +54,12 @@ class SpaceClient {
     this.worldTick = 0
     this.tickMs = 100
     this.beams = []
-    this.impacts = []
-    this.explosions = []
     this.lastFrame = performance.now()
-    this.assets = new GraphicsAssets()
-    this.stars = this.createStars()
   }
 
   start() {
-    if (!this.context) {
-      this.showError("Canvas 2D is unavailable in this browser.")
+    if (!this.canvas || !this.root.querySelector("#space-viewport-3d")) {
+      this.showError("The 3D flight viewport is missing.")
       return
     }
 
@@ -92,21 +74,6 @@ class SpaceClient {
       getSelfId: () => this.selfId,
       getDestination: () => this.commandDestination,
     }).start()
-    const minimapCanvas = this.root.querySelector("#cockpit-minimap-canvas")
-    // The legacy minimap is read-only telemetry. Only the full atlas plots courses.
-    const canNavigateMinimap = () => false
-
-    this.minimapNavigation = new PointerNavigation({
-      canvas: minimapCanvas,
-      destinationForPointer: pointer =>
-        minimapWorldPoint(pointer, minimapCanvas, this.boundaries),
-      shipPosition: () => null,
-      sendDestination: destination =>
-        canNavigateMinimap() && this.sendDestination(destination),
-      interceptPointerDown: pointer =>
-        !canNavigateMinimap() ||
-        !minimapWorldPoint(pointer, minimapCanvas, this.boundaries),
-    }).attach()
     this.navComputer = new NavigationComputer({
       root: this.root.querySelector("#navigation-computer"),
       getEntities: () => this.entities,
@@ -115,24 +82,19 @@ class SpaceClient {
       isConnected: () => this.channel?.state === "joined" && Boolean(this.selfId),
       engage: (waypoints, done) => this.plotCourse(waypoints, done),
       halt: done => this.stopNavigation(done),
-      onOpen: () => {
-        this.navigation?.cancel()
-        this.minimapNavigation?.cancel()
-      },
+      onOpen: () => this.navigation?.cancel(),
       onClose: () => this.canvas.focus({preventScroll: true}),
     }).start()
     this.root.querySelector("#nav-open")?.addEventListener("click", () => this.navComputer.open())
     window.addEventListener("keydown", event => this.navComputer.handleKey(event))
-    this.assets.preload()
     this.root.querySelector("#display-mode")?.addEventListener("change", event => this.setDisplayMode(event.target.value))
     window.addEventListener("keydown", event => this.handleDisplayModeKey(event))
-    this.resize()
-    this.setDisplayMode("3d")
+    if (!this.setDisplayMode("3d")) return
     this.canvas.addEventListener("pointerdown", () => this.canvas.focus({preventScroll: true}))
     window.addEventListener("resize", () => this.resize())
     this.navigation = new PointerNavigation({
       canvas: this.canvas,
-      destinationForPointer: pointer => this.destinationForPointer(pointer),
+      destinationForPointer: () => null,
       shipPosition: () => this.entities.get(this.selfId)?.target,
       sendDestination: destination => this.sendDestination(destination),
       // In cockpit mode click selects targets; travel is plotted on the atlas.
@@ -204,9 +166,6 @@ class SpaceClient {
 
     for (const entity of response.map.entities) this.upsertEntity(entity, true)
     this.syncOwnCombatState()
-
-    const ownShip = this.entities.get(this.selfId)
-    if (ownShip) this.camera = {...ownShip.render}
 
     this.populateHud()
     this.setConnection("Authoritative sync", "online")
@@ -323,17 +282,6 @@ class SpaceClient {
     }
   }
 
-  destinationForPointer(pointer) {
-    const rect = this.canvas.getBoundingClientRect()
-    if (this.displayMode !== "2d") {
-      return this.stereoView?.destination(pointer, rect, this.boundaries) || null
-    }
-    return {
-      x: clamp(pointer.clientX - rect.left + this.camera.x - this.viewport.width / 2, 0, this.boundaries.width),
-      y: clamp(pointer.clientY - rect.top + this.camera.y - this.viewport.height / 2, 0, this.boundaries.height),
-    }
-  }
-
   plotCourse(waypoints, done) {
     if (this.channel?.state !== "joined") return done(false, "relay offline")
     this.channel.push("plot_course", {waypoints}, 5000)
@@ -384,27 +332,10 @@ class SpaceClient {
 
   selectTargetAtPointer(pointer) {
     const rect = this.canvas.getBoundingClientRect()
-    if (this.displayMode !== "2d") {
-      const targetId = this.stereoView?.selectNpc(pointer, rect)
-      if (!targetId) return false
-      this.selectTarget(targetId)
-      return true
-    }
-    const target = findNpcAtScreenPoint(
-      this.entities.values(),
-      {x: pointer.clientX - rect.left, y: pointer.clientY - rect.top},
-      position => this.worldToScreen(position),
-      () => this.npcRenderDimensions()
-    )
-
-    if (!target) return false
-    this.selectTarget(target.id)
+    const targetId = this.stereoView?.selectNpc(pointer, rect)
+    if (!targetId) return false
+    this.selectTarget(targetId)
     return true
-  }
-
-  npcRenderDimensions() {
-    const {definition} = this.assets.get("npcs", "sentinel")
-    return {width: definition?.width || 60, height: definition?.height || 60}
   }
 
   handleCombatKey(event) {
@@ -571,12 +502,6 @@ class SpaceClient {
         startedAt,
         expiresAt: startedAt + 230,
       })
-      this.impacts.push({
-        position: {...target.render},
-        shield: Number(attack.shield_damage) > 0,
-        startedAt,
-        expiresAt: startedAt + 420,
-      })
     }
 
     if (entityKey(attack.attacker_id) === this.selfId) {
@@ -591,13 +516,6 @@ class SpaceClient {
   entityDestroyed(destruction) {
     const id = entityKey(destruction.entity.id)
     const entity = this.entities.get(id)
-    const position = entity?.render || destruction.entity.position
-    const startedAt = performance.now()
-
-    if (position) {
-      this.explosions.push({position: {...position}, startedAt, expiresAt: startedAt + 850})
-    }
-
     if (destruction.entity.kind === "npc") this.removeEntity(id)
     if (this.selectedTargetId === id) this.selectedTargetId = null
 
@@ -660,353 +578,14 @@ class SpaceClient {
       )
     }
 
-    const ownShip = this.entities.get(this.selfId)
-    if (!ownShip) return
-
-    const cameraTarget = this.clampedCamera(ownShip.render)
-    const cameraBlend = 1 - Math.exp(-deltaSeconds / 0.14)
-    this.camera.x += (cameraTarget.x - this.camera.x) * cameraBlend
-    this.camera.y += (cameraTarget.y - this.camera.y) * cameraBlend
-  }
-
-  clampedCamera(position) {
-    const halfWidth = this.viewport.width / 2
-    const halfHeight = this.viewport.height / 2
-    const x = this.boundaries.width <= this.viewport.width
-      ? this.boundaries.width / 2
-      : clamp(position.x, halfWidth, this.boundaries.width - halfWidth)
-    const y = this.boundaries.height <= this.viewport.height
-      ? this.boundaries.height / 2
-      : clamp(position.y, halfHeight, this.boundaries.height - halfHeight)
-    return {x, y}
   }
 
   draw(time) {
-    if (this.stereoView) {
-      this.stereoView.render(this, time)
-      this.beams = this.beams.filter(beam => beam.expiresAt > time)
-      this.impacts = this.impacts.filter(impact => impact.expiresAt > time)
-      this.explosions = this.explosions.filter(explosion => explosion.expiresAt > time)
-      return
-    }
-    const context = this.context
-    context.setTransform(this.viewport.dpr, 0, 0, this.viewport.dpr, 0, 0)
-    const gradient = context.createRadialGradient(
-      this.viewport.width * 0.52,
-      this.viewport.height * 0.42,
-      20,
-      this.viewport.width * 0.52,
-      this.viewport.height * 0.42,
-      Math.max(this.viewport.width, this.viewport.height)
-    )
-    gradient.addColorStop(0, "#071426")
-    gradient.addColorStop(0.55, "#030a16")
-    gradient.addColorStop(1, "#01040a")
-    context.fillStyle = gradient
-    context.fillRect(0, 0, this.viewport.width, this.viewport.height)
+    // A missing WebGL renderer must never silently bring back Classic 2D.
+    if (!this.stereoView) return
 
-    this.drawStars(time)
-    this.drawGrid()
-    this.drawBoundary()
-    this.drawDestination(time)
-
-    const orderedEntities = [...this.entities.values()].sort((left, right) => {
-      const kindOrder = (left.kind === "player" ? 0 : 1) - (right.kind === "player" ? 0 : 1)
-      return kindOrder || left.id.localeCompare(right.id)
-    })
-    for (const entity of orderedEntities) this.drawEntity(entity, time)
-
-    this.drawCombatEffects(time)
-  }
-
-  drawStars(time) {
-    const context = this.context
-    for (const star of this.stars) {
-      const width = this.viewport.width + 120
-      const height = this.viewport.height + 120
-      const x = ((star.x * width - this.camera.x * star.depth * 0.11) % width + width) % width - 60
-      const y = ((star.y * height - this.camera.y * star.depth * 0.11) % height + height) % height - 60
-      const shimmer = 0.72 + Math.sin(time * 0.0018 + star.phase) * 0.28
-      context.globalAlpha = star.alpha * shimmer
-      context.fillStyle = star.tint
-      context.beginPath()
-      context.arc(x, y, star.radius, 0, Math.PI * 2)
-      context.fill()
-    }
-    context.globalAlpha = 1
-  }
-
-  drawGrid() {
-    const context = this.context
-    const spacing = 500
-    const left = this.camera.x - this.viewport.width / 2
-    const top = this.camera.y - this.viewport.height / 2
-    const right = left + this.viewport.width
-    const bottom = top + this.viewport.height
-    context.lineWidth = 1
-    context.strokeStyle = "rgba(103, 232, 249, 0.035)"
-    context.beginPath()
-
-    for (let x = Math.floor(left / spacing) * spacing; x <= right; x += spacing) {
-      const screen = this.worldToScreen({x, y: 0})
-      context.moveTo(Math.round(screen.x) + 0.5, 0)
-      context.lineTo(Math.round(screen.x) + 0.5, this.viewport.height)
-    }
-    for (let y = Math.floor(top / spacing) * spacing; y <= bottom; y += spacing) {
-      const screen = this.worldToScreen({x: 0, y})
-      context.moveTo(0, Math.round(screen.y) + 0.5)
-      context.lineTo(this.viewport.width, Math.round(screen.y) + 0.5)
-    }
-    context.stroke()
-  }
-
-  drawBoundary() {
-    const context = this.context
-    const origin = this.worldToScreen({x: 0, y: 0})
-    context.save()
-    context.strokeStyle = "rgba(103, 232, 249, 0.65)"
-    context.lineWidth = 2
-    context.setLineDash([10, 8])
-    context.shadowColor = "rgba(34, 211, 238, 0.4)"
-    context.shadowBlur = 12
-    context.strokeRect(origin.x, origin.y, this.boundaries.width, this.boundaries.height)
-    context.restore()
-  }
-
-  drawDestination(time) {
-    if (!this.commandDestination) return
-    const context = this.context
-    const screen = this.worldToScreen(this.commandDestination)
-    const pulse = 12 + Math.sin(time * 0.006) * 3
-    context.save()
-    context.strokeStyle = "rgba(103, 232, 249, 0.8)"
-    context.lineWidth = 1.5
-    context.beginPath()
-    context.arc(screen.x, screen.y, pulse, 0, Math.PI * 2)
-    context.moveTo(screen.x - 18, screen.y)
-    context.lineTo(screen.x + 18, screen.y)
-    context.moveTo(screen.x, screen.y - 18)
-    context.lineTo(screen.x, screen.y + 18)
-    context.stroke()
-    context.restore()
-  }
-
-  drawEntity(entity, time) {
-    if (entity.kind === "npc") this.drawNpc(entity, time)
-    else this.drawShip(entity, time)
-  }
-
-  drawShip(entity, time) {
-    const context = this.context
-    const screen = this.worldToScreen(entity.render)
-    const isSelf = entity.id === this.selfId
-    const assetName = isSelf ? "localScout" : "remoteScout"
-    const {definition, image} = this.assets.get("ships", assetName)
-    const width = definition?.width || 68
-    const height = definition?.height || 52
-
-    context.save()
-    context.translate(screen.x, screen.y)
-    context.rotate(entity.angle + Math.PI / 2)
-
-    if (entity.destination) {
-      const exhaust = 12 + Math.sin(time * 0.018 + Number(entity.id)) * 4
-      const exhaustGradient = context.createLinearGradient(0, height / 4, 0, height / 2 + exhaust)
-      exhaustGradient.addColorStop(0, isSelf ? "rgba(103,232,249,0.85)" : "rgba(196,181,253,0.8)")
-      exhaustGradient.addColorStop(1, "rgba(37,99,235,0)")
-      context.fillStyle = exhaustGradient
-      context.beginPath()
-      context.moveTo(-7, height * 0.28)
-      context.lineTo(0, height * 0.5 + exhaust)
-      context.lineTo(7, height * 0.28)
-      context.closePath()
-      context.fill()
-    }
-
-    context.shadowColor = isSelf ? "rgba(34,211,238,0.6)" : "rgba(167,139,250,0.5)"
-    context.shadowBlur = isSelf ? 18 : 12
-    if (image) {
-      context.drawImage(image, -width / 2, -height / 2, width, height)
-    } else {
-      this.drawFallbackShip(context, isSelf, width, height)
-    }
-    context.restore()
-
-    const pilot = this.pilots.get(entity.playerId)
-    context.textAlign = "center"
-    context.font = isSelf ? "600 12px ui-sans-serif" : "500 11px ui-sans-serif"
-    context.fillStyle = isSelf ? "#a5f3fc" : "#ddd6fe"
-    context.fillText(pilot?.pilot_name || `Pilot ${entity.playerId}`, screen.x, screen.y + height / 2 + 17)
-  }
-
-  drawNpc(entity, time) {
-    const context = this.context
-    const screen = this.worldToScreen(entity.render)
-    const {definition, image} = this.assets.get("npcs", "sentinel")
-    const width = definition?.width || 60
-    const height = definition?.height || 60
-    const selected = entity.id === this.selectedTargetId
-
-    context.save()
-    context.translate(screen.x, screen.y)
-
-    if (selected) {
-      const pulse = 39 + Math.sin(time * 0.009) * 4
-      context.strokeStyle = "rgba(251, 146, 60, 0.95)"
-      context.lineWidth = 2
-      context.setLineDash([7, 5])
-      context.beginPath()
-      context.arc(0, 0, pulse, 0, Math.PI * 2)
-      context.stroke()
-      context.setLineDash([])
-    }
-
-    context.rotate(entity.angle + Math.PI / 2)
-    context.shadowColor = selected ? "rgba(251,146,60,0.9)" : "rgba(249,115,22,0.48)"
-    context.shadowBlur = selected ? 22 : 12
-    if (image) {
-      context.drawImage(image, -width / 2, -height / 2, width, height)
-    } else {
-      this.drawFallbackNpc(context, width, height)
-    }
-    context.restore()
-
-    this.drawEntityBars(entity, screen, width)
-    context.textAlign = "center"
-    context.font = selected ? "700 12px ui-sans-serif" : "600 11px ui-sans-serif"
-    context.fillStyle = selected ? "#fed7aa" : "#fdba74"
-    context.fillText(entity.displayName || "Hostile", screen.x, screen.y + height / 2 + 28)
-    context.font = "600 8px ui-sans-serif"
-    context.fillStyle = "rgba(251,146,60,0.68)"
-    context.fillText((entity.state || "idle").toUpperCase(), screen.x, screen.y + height / 2 + 40)
-  }
-
-  drawFallbackNpc(context, width, height) {
-    context.fillStyle = "#431407"
-    context.strokeStyle = "#fb923c"
-    context.lineWidth = 2
-    context.beginPath()
-    context.moveTo(0, -height / 2)
-    context.lineTo(width / 2, 0)
-    context.lineTo(0, height / 2)
-    context.lineTo(-width / 2, 0)
-    context.closePath()
-    context.fill()
-    context.stroke()
-  }
-
-  drawEntityBars(entity, screen, width) {
-    const context = this.context
-    const barWidth = Math.max(46, width)
-    const left = screen.x - barWidth / 2
-    const top = screen.y - width / 2 - 14
-    context.fillStyle = "rgba(2,6,23,0.82)"
-    context.fillRect(left, top, barWidth, 7)
-    context.fillStyle = "#38bdf8"
-    context.fillRect(left, top, barWidth * healthPercent(entity.shields, entity.maxShields) / 100, 2)
-    context.fillStyle = "#34d399"
-    context.fillRect(left, top + 4, barWidth * healthPercent(entity.hull, entity.maxHull) / 100, 3)
-  }
-
-  drawCombatEffects(time) {
+    this.stereoView.render(this, time)
     this.beams = this.beams.filter(beam => beam.expiresAt > time)
-    this.impacts = this.impacts.filter(impact => impact.expiresAt > time)
-    this.explosions = this.explosions.filter(explosion => explosion.expiresAt > time)
-
-    for (const beam of this.beams) this.drawBeam(beam, time)
-    for (const impact of this.impacts) this.drawImpact(impact, time)
-    for (const explosion of this.explosions) this.drawExplosion(explosion, time)
-  }
-
-  drawBeam(beam, time) {
-    const context = this.context
-    const from = this.worldToScreen(beam.from)
-    const to = this.worldToScreen(beam.to)
-    const deltaX = to.x - from.x
-    const deltaY = to.y - from.y
-    const length = Math.hypot(deltaX, deltaY)
-    const progress = clamp((time - beam.startedAt) / (beam.expiresAt - beam.startedAt), 0, 1)
-    const {definition, image} = this.assets.get("lasers", "pulse")
-
-    context.save()
-    context.translate(from.x, from.y)
-    context.rotate(Math.atan2(deltaY, deltaX))
-    context.globalAlpha = 1 - progress * 0.72
-    context.shadowColor = beam.hostile ? "#fb923c" : "#22d3ee"
-    context.shadowBlur = 16 + Math.sin(progress * Math.PI) * 12
-
-    if (image) {
-      context.drawImage(image, 0, -(definition?.height || 8) / 2, length, definition?.height || 8)
-    } else {
-      context.strokeStyle = beam.hostile ? "#fdba74" : "#a5f3fc"
-      context.lineWidth = 3 + Math.sin(progress * Math.PI) * 2
-      context.beginPath()
-      context.moveTo(0, 0)
-      context.lineTo(length, 0)
-      context.stroke()
-    }
-    context.restore()
-  }
-
-  drawImpact(impact, time) {
-    const context = this.context
-    const screen = this.worldToScreen(impact.position)
-    const progress = clamp((time - impact.startedAt) / (impact.expiresAt - impact.startedAt), 0, 1)
-    context.save()
-    context.globalAlpha = 1 - progress
-    context.strokeStyle = impact.shield ? "#67e8f9" : "#fb923c"
-    context.lineWidth = 4 - progress * 2
-    context.shadowColor = context.strokeStyle
-    context.shadowBlur = 18
-    context.beginPath()
-    context.arc(screen.x, screen.y, 18 + progress * 30, 0, Math.PI * 2)
-    context.stroke()
-    context.restore()
-  }
-
-  drawExplosion(explosion, time) {
-    const context = this.context
-    const screen = this.worldToScreen(explosion.position)
-    const progress = clamp((time - explosion.startedAt) / (explosion.expiresAt - explosion.startedAt), 0, 1)
-    const {definition, image} = this.assets.get("explosions", "plasma")
-    const size = (definition?.width || 96) * (0.45 + progress * 1.25)
-    context.save()
-    context.translate(screen.x, screen.y)
-    context.rotate(progress * 1.8)
-    context.globalAlpha = 1 - progress
-    context.shadowColor = "#f97316"
-    context.shadowBlur = 28
-    if (image) context.drawImage(image, -size / 2, -size / 2, size, size)
-    else {
-      context.fillStyle = "#fb923c"
-      context.beginPath()
-      context.arc(0, 0, size / 3, 0, Math.PI * 2)
-      context.fill()
-    }
-    context.restore()
-  }
-
-  drawFallbackShip(context, isSelf, width, height) {
-    context.fillStyle = isSelf ? "#102b3b" : "#211939"
-    context.strokeStyle = isSelf ? "#67e8f9" : "#c4b5fd"
-    context.lineWidth = 2
-    context.beginPath()
-    context.moveTo(0, -height / 2)
-    context.lineTo(width / 2, height / 3)
-    context.lineTo(10, height / 5)
-    context.lineTo(0, height / 2)
-    context.lineTo(-10, height / 5)
-    context.lineTo(-width / 2, height / 3)
-    context.closePath()
-    context.fill()
-    context.stroke()
-  }
-
-  worldToScreen(position) {
-    return {
-      x: position.x - this.camera.x + this.viewport.width / 2,
-      y: position.y - this.camera.y + this.viewport.height / 2,
-    }
   }
 
   populateHud() {
@@ -1131,9 +710,6 @@ class SpaceClient {
   resize() {
     const rect = this.canvas.getBoundingClientRect()
     const dpr = Math.min(window.devicePixelRatio || 1, 2)
-    this.viewport = {width: rect.width, height: rect.height, dpr}
-    this.canvas.width = Math.max(1, Math.floor(rect.width * dpr))
-    this.canvas.height = Math.max(1, Math.floor(rect.height * dpr))
     this.stereoView?.resize(rect.width, rect.height, dpr)
   }
 
@@ -1143,11 +719,11 @@ class SpaceClient {
     const element = event.target
     if (element?.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(element?.tagName)) return
     event.preventDefault()
-    this.setDisplayMode(this.displayMode === "sbs" ? "3d" : "sbs")
+    this.setDisplayMode(nextFlightMode(this.displayMode))
   }
 
   setDisplayMode(mode) {
-    if (!["3d", "sbs"].includes(mode)) return
+    if (!validFlightMode(mode)) return false
     if (!this.stereoView) {
       try {
         this.stereoView = new StereoSpaceView(this.root.querySelector("#space-viewport-3d"))
@@ -1155,7 +731,7 @@ class SpaceClient {
         this.showError("WebGL is required for the 3D cockpit. Check browser GPU support.")
         const select = this.root.querySelector("#display-mode")
         if (select) select.value = "3d"
-        return
+        return false
       }
     }
     this.navigation?.cancel()
@@ -1165,20 +741,7 @@ class SpaceClient {
     if (select) select.value = mode
     this.stereoView.setMode(mode)
     this.resize()
-  }
-
-  createStars() {
-    const random = seededRandom(0x0B17)
-    const tints = ["#ffffff", "#bae6fd", "#c7d2fe", "#a5f3fc"]
-    return Array.from({length: 260}, () => ({
-      x: random(),
-      y: random(),
-      depth: 0.18 + random() * 0.82,
-      radius: 0.35 + random() * 1.25,
-      alpha: 0.28 + random() * 0.62,
-      phase: random() * Math.PI * 2,
-      tint: tints[Math.floor(random() * tints.length)],
-    }))
+    return true
   }
 
   setConnection(label, state) {
