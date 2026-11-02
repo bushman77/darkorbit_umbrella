@@ -156,6 +156,40 @@ defmodule Core.WorldTest do
     assert snapshot.volume == %{altitude_min: -3_000, altitude_max: 3_000}
   end
 
+  test "manual thrust is session bound, moves only on ticks and overrides autopilot", context do
+    assert {:ok, session} = World.connect(:flight_pilot, context.stats, context.world_options)
+    opts = context.world_options
+
+    assert {:ok, _} = World.plot_course(session.id, [%{x: 1_160, y: 1_000}], opts)
+    assert {:error, :session_not_found} =
+             World.flight_controls(-1, %{throttle: 1.0}, opts)
+
+    assert {:ok, command} =
+             World.flight_controls(session.id,
+               %{"throttle" => 0.7, "yaw" => 0.0, "pitch" => 0.0,
+                 "roll" => 0.0, "mode" => "cruise"}, opts)
+
+    assert command.destination == nil
+    assert command.route_waypoints == []
+    assert command.throttle == 0.7
+    assert command.flight_mode == :cruise
+    assert command.position_3d == %{x: 1000.0, y: 1000.0, z: 0.0}
+
+    assert {:ok, tick} = World.tick("1-1", opts)
+    pilot = Enum.find(tick.entities, &(&1.id == :flight_pilot))
+    assert pilot.position_3d.y < 1000.0
+    assert pilot.velocity.y < 0.0
+
+    assert {:error, :invalid_flight_controls} =
+             World.flight_controls(session.id, %{throttle: 999}, opts)
+    assert {:ok, current} = World.snapshot("1-1", opts)
+    assert Enum.find(current.entities, &(&1.id == :flight_pilot)).throttle == 0.7
+
+    assert {:ok, stopped} = World.stop_navigation(session.id, opts)
+    assert stopped.throttle == 0.0
+    assert stopped.velocity == %{x: 0.0, y: 0.0, z: 0.0}
+  end
+
   test "validates movement against map boundaries and the owning session", context do
     assert {:ok, session} = World.connect(:pilot_two, context.stats, context.world_options)
 

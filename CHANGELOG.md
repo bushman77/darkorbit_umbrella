@@ -229,3 +229,14 @@
 - Restricted `V` and the selector to 3D/SBS; added display-mode tests.
 - Missing WebGL now reports an error rather than activating an obsolete view.
 - The flat navigation atlas and 3D cockpit CanvasTexture readouts remain.
+
+
+### SBS branch — Manual Cruise/Newtonian flight (2026-11-01)
+- Added `Core.World.FlightDynamics`: server-owned signed thrust, velocity,
+  attitude, sector bounds and two flight physics modes.
+- Added authenticated `flight_controls` commands and 3D/SBS keyboard piloting.
+- Flight keys follow the original Space Rogue layout with a modern reverse
+  throttle extension; `Ctrl+E` toggles flight physics.
+- Added HUD readouts and Core/Channel/browser regressions.
+- Browser flight-control tests passed in isolation; run full local suites and
+  evaluate flight handling in Firefox before treating it as production ready.

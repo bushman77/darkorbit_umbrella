@@ -152,6 +152,35 @@ defmodule DarkorbitWeb.WorldChannelTest do
     leave_and_wait(socket)
   end
 
+  test "flight control commands cannot spoof another ship or its motion" do
+    first = verified_player_account_fixture()
+    second = verified_player_account_fixture()
+    {:ok, first_socket} = authenticated_socket(first)
+    {:ok, second_socket} = authenticated_socket(second)
+    {:ok, _response, first_socket} = subscribe_and_join(first_socket, WorldChannel, "world:1-1")
+    {:ok, _response, second_socket} = subscribe_and_join(second_socket, WorldChannel, "world:1-1")
+
+    ref = push(first_socket, "flight_controls", %{
+      "throttle" => 0.6, "yaw" => 0.0, "pitch" => 0.0,
+      "roll" => 0.0, "mode" => "newtonian",
+      "entity_id" => second.id, "position" => %{"x" => 20_000}
+    })
+    assert_reply ref, :ok, %{entity: %{id: owner_id, flight_mode: :newtonian, throttle: 0.6}}
+    assert owner_id == first.id
+
+    ref = push(first_socket, "flight_controls", %{"throttle" => 100})
+    assert_reply ref, :error, %{reason: "invalid_flight_controls"}
+
+    assert {:ok, snapshot} = World.tick()
+    first_ship = Enum.find(snapshot.entities, &(&1.id == first.id))
+    second_ship = Enum.find(snapshot.entities, &(&1.id == second.id))
+    assert first_ship.position_3d.y < 1_000.0
+    assert second_ship.position_3d == %{x: 1_000.0, y: 1_000.0, z: 0.0}
+
+    leave_and_wait(first_socket)
+    leave_and_wait(second_socket)
+  end
+
   test "map subscribers receive tick events from the authoritative simulation" do
     account = verified_player_account_fixture()
     {:ok, socket} = authenticated_socket(account)

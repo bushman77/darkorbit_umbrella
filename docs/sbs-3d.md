@@ -162,3 +162,55 @@ a separate flight presentation.
 and hard-reload Firefox (Ctrl+Shift+R) to avoid displaying a stale compiled
 JavaScript or HTML template. Run Node/Elixir tests and visually check both
 view modes; this commit was not browser-tested remotely.
+
+
+## Manual flight controls — first physics slice
+
+There are now two separate movement paths:
+- **Atlas autopilot**: plot XYZ waypoints, press Engage, and the Elixir simulation
+  follows the server-owned course. Opening the atlas releases held steering keys.
+- **Manual cockpit flight**: keyboard submits signed throttle and rotational
+  *intent* over the authenticated `flight_controls` Channel command. Core
+  integrates actual orientation, velocity, and position on 100ms world ticks.
+  A manual flight command cancels autopilot.
+
+### Default keys
+
+| Key | Function |
+| --- | --- |
+| `+` / `=` or numpad `+` | Increase signed throttle in 10% steps |
+| `-` or numpad `-` | Decrease signed throttle, passing through zero into reverse |
+| `W` / `X` | Pitch down / up |
+| `A` / `D` | Yaw left / right |
+| `Z` / `C` | Roll counterclockwise / clockwise |
+| `S` | Release all held rotational controls |
+| `Ctrl+E` | Toggle assisted Cruise Flight / Newtonian Flight |
+| `V` | Switch single-view 3D / stereoscopic SBS |
+| `M` | Open/close the navigation atlas |
+
+### Dynamics
+
+In **Cruise Flight** mode, the throttle represents signed desired speed
+along the ship's nose. The server approaches that desired velocity with
+bounded acceleration. Turning gradually curves travel toward the new
+heading. At zero throttle Cruise brakes the ship; at negative throttle
+it reverses direction.
+
+In **Newtonian Flight**, throttle controls signed acceleration along the
+nose, while velocity persists when throttle is zero. You can rotate,
+point at a target, and continue drifting in the old direction. Negative
+throttle applies reverse thrust; it does not magically zero velocity.
+
+The server validates all control values (normalized [-1,1]); the client
+cannot set position, attitude, speed or velocity. The last rotational
+input expires after ten simulation ticks without refresh. Browser blur,
+loss of visibility, and entering the atlas release the local held keys.
+The sector boundaries absorb outward velocity. This slice uses Euler
+yaw/pitch/roll angles with pitch bounded just short of vertical rather
+than a quaternion-based 6DOF body-frame integrator; fine for an initial
+playable cockpit, but not yet full aerospace control or rotational inertia.
+
+**Testing status:** pure JavaScript flight controls tests passed via an
+isolated runtime check. The new Core and Channel tests need to be run
+with Elixir on the developer's Pop!_OS machine. Physics feel and 3D/SBS
+orientation require in-browser evaluation.

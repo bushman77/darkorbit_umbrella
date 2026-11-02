@@ -287,3 +287,14 @@ validation remain deferred.
 - [x] Remove Classic 2D flight renderer and retain overhead mapping only in the atlas.
 - [x] Regression-test the two allowed cockpit display modes.
 - [ ] Verify refreshed compiled assets and live 3D/SBS switching in Firefox.
+
+
+### Manual pilot controls slice — SBS branch
+- [x] Server-owned signed throttle with forward, neutral, reverse.
+- [x] Server-integrated 3-axis attitude and pitch/yaw/roll keyboard commands.
+- [x] Assisted Cruise Flight and momentum-preserving Newtonian Flight toggle.
+- [x] Bounds-safe tick motion; authenticated Channel controls and telemetry.
+- [x] Cabin and SBS flight indicators; keyboard and server tests added.
+- [ ] Run `mix precommit` and `npm test` on the laptop and test the flight feel.
+- [ ] Improve to quaternion-based attitude and body-frame 6DOF handling.
+- [ ] Add throttle controls on screen, smoothing, remapping, docking and inertia tuning.

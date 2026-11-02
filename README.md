@@ -107,3 +107,12 @@ Classic 2D is no longer an available flight view on `sbs`. The game
 requires WebGL and presents only **3D** or **Stereo SBS** (`V` toggles).
 The atlas (`M`) remains a separate top-down SVG navigation computer.
 After updating this branch, rebuild web assets and hard-refresh the browser.
+
+
+### Fly the ship manually (experimental SBS branch)
+The cockpit now accepts signed throttle (`+`/`-`), pitch (`W`/`X`),
+yaw (`A`/`D`), roll (`Z`/`C`) and rotation release (`S`).
+Use `Ctrl+E` to toggle Cruise (assisted velocity) and Newtonian
+(momentum-preserving thrust). Throttle can cross zero into reverse.
+This is server-owned XYZ motion; **M** opens atlas autopilot separately.
+See [SBS flight and navigation notes](docs/sbs-3d.md).
