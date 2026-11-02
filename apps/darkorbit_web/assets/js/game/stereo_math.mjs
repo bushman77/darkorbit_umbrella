@@ -1,9 +1,13 @@
-// Pure rendering coordinates. The authoritative server currently owns an XY plane.
+// Authoritative XYZ space. Game XY maps onto Three.js XZ; altitude Z maps to Three.js Y.
 export const WORLD_SCALE = 0.06
 
-export const toScene = ({x, y}) => ({x: x * WORLD_SCALE, y: 0, z: y * WORLD_SCALE})
+export const toScene = ({x, y, z = 0}) => ({
+  x: x * WORLD_SCALE, y: z * WORLD_SCALE, z: y * WORLD_SCALE,
+})
 
-export const toWorld = ({x, z}) => ({x: x / WORLD_SCALE, y: z / WORLD_SCALE})
+export const toWorld = ({x, y = 0, z}) => ({
+  x: x / WORLD_SCALE, y: z / WORLD_SCALE, z: y / WORLD_SCALE,
+})
 
 // Stereo coordinates are relative to the selected half of an SBS display.
 export function pointerNdc(pointer, rect, mode = "3d") {

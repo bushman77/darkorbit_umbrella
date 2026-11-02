@@ -70,10 +70,9 @@ export class StereoSpaceView {
     const sun = new THREE.DirectionalLight(0xb6eaff, 2.1)
     sun.position.set(25, 60, 15)
     this.scene.add(sun)
-    const grid = new THREE.GridHelper(1500, 75, 0x1a4c6b, 0x0d263c)
-    grid.position.set(450, -7, 350)
-    this.scene.add(grid)
+    // Space has no artificial ground plane. The atlas alone owns the XY chart.
     this.addStars()
+    this.addSpaceLandmarks()
     this.addCockpit()
     this.beamGroup = new THREE.Group()
     this.scene.add(this.beamGroup)
@@ -95,6 +94,27 @@ export class StereoSpaceView {
     const geometry = new THREE.BufferGeometry()
     geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3))
     this.scene.add(new THREE.Points(geometry, new THREE.PointsMaterial({color: 0xc8e3ff, size: 1.3})))
+  }
+
+  addSpaceLandmarks() {
+    const asteroidMaterial = new THREE.MeshStandardMaterial({
+      color: 0x655b68, roughness: 0.94, flatShading: true,
+    })
+    const landmarks = [
+      {x: 1250, y: 1550, z: 240, size: 5.5},
+      {x: 1800, y: 1750, z: -210, size: 8},
+      {x: 860, y: 2100, z: 500, size: 4},
+      {x: 1500, y: 700, z: -400, size: 6},
+    ]
+    for (const marker of landmarks) {
+      const where = toScene(marker)
+      const rock = new THREE.Mesh(
+        new THREE.IcosahedronGeometry(marker.size, 1),
+        asteroidMaterial,
+      )
+      rock.position.set(where.x, where.y, where.z)
+      this.scene.add(rock)
+    }
   }
 
   addCockpit() {
@@ -156,8 +176,19 @@ export class StereoSpaceView {
     if (!ownShip) return
     const pos = toScene(ownShip.render)
     const angle = Number.isFinite(ownShip.angle) ? ownShip.angle : -Math.PI / 2
-    this.camera.position.set(pos.x, 2.75, pos.z)
-    this.camera.lookAt(pos.x + Math.cos(angle) * 50, 0.0, pos.z + Math.sin(angle) * 50)
+    this.camera.position.set(pos.x, pos.y + 2.75, pos.z)
+    // Stage 1: track the authoritative 3D course heading. Full manual
+    // yaw/pitch/roll and inertia will be a separate flight-dynamics milestone.
+    const destination = ownShip.destination ? toScene(ownShip.destination) : null
+    const dx = destination ? destination.x - pos.x : 0
+    const dy = destination ? destination.y - pos.y : 0
+    const dz = destination ? destination.z - pos.z : 0
+    if (destination && dx * dx + dy * dy + dz * dz > 0.01) {
+      this.camera.lookAt(pos.x + dx, pos.y + 2.75 + dy, pos.z + dz)
+    } else {
+      this.camera.lookAt(pos.x + Math.cos(angle) * 50, pos.y + 2.0,
+        pos.z + Math.sin(angle) * 50)
+    }
     this.camera.updateMatrixWorld(true)
   }
 
@@ -179,7 +210,7 @@ export class StereoSpaceView {
         this.nodes.set(entity.id, node)
       }
       const pos = toScene(entity.render)
-      node.position.set(pos.x, entity.kind === "npc" ? 1.8 : 1.2, pos.z)
+      node.position.set(pos.x, pos.y + (entity.kind === "npc" ? 1.8 : 1.2), pos.z)
       node.rotation.y = -entity.angle
       node.userData.ring.visible = entity.id === client.selectedTargetId
     }
@@ -202,8 +233,8 @@ export class StereoSpaceView {
       const from = toScene(beamData.from)
       const to = toScene(beamData.to)
       const geo = new THREE.BufferGeometry().setFromPoints([
-        new THREE.Vector3(from.x, 1.5, from.z),
-        new THREE.Vector3(to.x, 1.5, to.z),
+        new THREE.Vector3(from.x, from.y + 1.5, from.z),
+        new THREE.Vector3(to.x, to.y + 1.5, to.z),
       ])
       const fraction = clamp((beamData.expiresAt - time) / Math.max(1, beamData.expiresAt - beamData.startedAt), 0, 1)
       const beam = new THREE.Line(geo, new THREE.LineBasicMaterial({
@@ -228,7 +259,8 @@ export class StereoSpaceView {
     ctx.strokeRect(8, 8, 1008, 240)
     ctx.fillStyle = "#aaf6ff"
     ctx.font = "bold 36px monospace"
-    ctx.fillText("SECTOR 1-1 / COCKPIT", 30, 65)
+    const altitude = Math.round(own?.render?.z || 0)
+    ctx.fillText("SECTOR 1-1   ALT " + (altitude >= 0 ? "+" : "") + altitude, 30, 65)
     ctx.font = "30px monospace"
     const hp = own ? Math.round(100 * (own.hull || 0) / Math.max(own.maxHull || 1, 1)) : 0
     const shield = own ? Math.round(100 * (own.shields || 0) / Math.max(own.maxShields || 1, 1)) : 0

@@ -769,3 +769,9 @@ body {
   .nav-layout { grid-template-columns: 1fr; }
   .nav-console { width: 100%; }
 }
+
+/* Classic 2D game presentation retired: atlas owns the overhead navigation map.
+   The transparent input canvas remains for existing target-selection handlers. */
+#game-client[data-display-mode="3d"] #space-viewport,
+#game-client[data-display-mode="sbs"] #space-viewport { opacity: 0; }
+.nav-coordinate-form .nav-altitude-label { grid-column: span 2; }

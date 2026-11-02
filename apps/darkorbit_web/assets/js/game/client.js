@@ -51,12 +51,13 @@ class SpaceClient {
     this.canvas = root.querySelector("#space-viewport")
     this.context = this.canvas.getContext("2d", {alpha: false})
     this.stereoView = null
-    this.displayMode = "2d"
+    this.displayMode = "3d"
     this.mapId = root.dataset.mapId
     this.token = root.dataset.socketToken
     this.entities = new Map()
     this.pilots = new Map()
     this.boundaries = {width: 20000, height: 12000}
+    this.volume = {altitude_min: -3000, altitude_max: 3000}
     this.camera = {x: 1000, y: 1000}
     this.viewport = {width: 1, height: 1, dpr: 1}
     this.selfId = null
@@ -112,7 +113,7 @@ class SpaceClient {
       root: this.root.querySelector("#navigation-computer"),
       getEntities: () => this.entities,
       getSelfId: () => this.selfId,
-      getBoundaries: () => this.boundaries,
+      getBoundaries: () => ({...this.boundaries, ...this.volume}),
       isConnected: () => this.channel?.state === "joined" && Boolean(this.selfId),
       engage: (waypoints, done) => this.plotCourse(waypoints, done),
       halt: done => this.stopNavigation(done),
@@ -128,6 +129,7 @@ class SpaceClient {
     this.root.querySelector("#display-mode")?.addEventListener("change", event => this.setDisplayMode(event.target.value))
     window.addEventListener("keydown", event => this.handleDisplayModeKey(event))
     this.resize()
+    this.setDisplayMode("3d")
     this.canvas.addEventListener("pointerdown", () => this.canvas.focus({preventScroll: true}))
     window.addEventListener("resize", () => this.resize())
     this.navigation = new PointerNavigation({
@@ -135,7 +137,11 @@ class SpaceClient {
       destinationForPointer: pointer => this.destinationForPointer(pointer),
       shipPosition: () => this.entities.get(this.selfId)?.target,
       sendDestination: destination => this.sendDestination(destination),
-      interceptPointerDown: pointer => this.selectTargetAtPointer(pointer),
+      // In cockpit mode click selects targets; travel is plotted on the atlas.
+      interceptPointerDown: pointer => {
+        this.selectTargetAtPointer(pointer)
+        return true
+      },
     }).attach()
     this.canvas.addEventListener("contextmenu", event => this.handleTargetPointer(event))
     this.root.querySelector("#combat-target-nearest")?.addEventListener("click", () => this.selectNearestTarget())
@@ -193,6 +199,7 @@ class SpaceClient {
     this.player = response.player
     this.selfId = entityKey(response.player.pilot.id)
     this.boundaries = response.map.boundaries
+    this.volume = response.map.volume || this.volume
     this.worldTick = response.map.tick
     this.tickMs = response.map.tick_ms
     this.pilots = new Map(Object.entries(response.pilots || {}))
@@ -209,6 +216,7 @@ class SpaceClient {
 
   applyWorldState(state) {
     this.boundaries = state.boundaries || this.boundaries
+    this.volume = state.volume || this.volume
     this.worldTick = state.tick
     this.tickMs = state.tick_ms || this.tickMs
     const activeIds = new Set()
@@ -234,14 +242,17 @@ class SpaceClient {
   upsertEntity(entity, snap = false) {
     const id = entityKey(entity.id)
     const existing = this.entities.get(id)
-    const target = {x: entity.position.x, y: entity.position.y}
-    const destination = entity.destination
+    const p3 = entity.position_3d || entity.position
+    const target = {x: p3.x, y: p3.y, z: p3.z ?? 0}
+    const d3 = entity.destination_3d || entity.destination
+    const destination = d3 ? {x: d3.x, y: d3.y, z: d3.z ?? 0} : null
+    const route3d = entity.route_waypoints_3d || entity.route_waypoints || []
 
     if (existing) {
       existing.target = target
       existing.destination = destination
       existing.navigationMode = entity.navigation_mode || "manual"
-      existing.routeWaypoints = entity.route_waypoints || []
+      existing.routeWaypoints = route3d
       existing.speed = entity.speed
       existing.kind = entity.kind || existing.kind
       existing.playerId = entity.player_id == null ? existing.playerId : entityKey(entity.player_id)
@@ -280,7 +291,7 @@ class SpaceClient {
         target,
         destination,
         navigationMode: entity.navigation_mode || "manual",
-        routeWaypoints: entity.route_waypoints || [],
+        routeWaypoints: route3d,
         speed: entity.speed,
         hull: entity.hull,
         maxHull: entity.max_hull,
@@ -638,6 +649,8 @@ class SpaceClient {
     for (const entity of this.entities.values()) {
       entity.render.x += (entity.target.x - entity.render.x) * positionBlend
       entity.render.y += (entity.target.y - entity.render.y) * positionBlend
+      entity.render.z = (entity.render.z ?? 0) +
+        ((entity.target.z ?? 0) - (entity.render.z ?? 0)) * positionBlend
     }
 
     const rotationBlend = 1 - Math.exp(-deltaSeconds / 0.075)
@@ -671,7 +684,7 @@ class SpaceClient {
   }
 
   draw(time) {
-    if (this.displayMode !== "2d" && this.stereoView) {
+    if (this.stereoView) {
       this.stereoView.render(this, time)
       this.beams = this.beams.filter(beam => beam.expiresAt > time)
       this.impacts = this.impacts.filter(impact => impact.expiresAt > time)
@@ -1021,7 +1034,7 @@ class SpaceClient {
   updateCoordinates() {
     const ownShip = this.entities.get(this.selfId)
     if (!ownShip) return
-    this.text("#hud-coordinates", `${number(ownShip.render.x)} / ${number(ownShip.render.y)}`)
+    this.text("#hud-coordinates", `${number(ownShip.render.x)} / ${number(ownShip.render.y)} / ${number(ownShip.render.z)}`)
   }
 
   updateNavigationStatus() {
@@ -1031,9 +1044,9 @@ class SpaceClient {
     if (ownShip?.status === "destroyed") {
       status = "Navigation unavailable"
     } else if (this.commandDestination) {
-      status = `Course locked · ${number(this.commandDestination.x)} / ${number(this.commandDestination.y)}`
+      status = `Course locked · ${number(this.commandDestination.x)} / ${number(this.commandDestination.y)} / ${number(this.commandDestination.z)}`
     } else if (ownShip) {
-      status = "Click sector to set course"
+      status = "Press M for atlas navigation"
     }
 
     this.text("#minimap-navigation-status", status)
@@ -1132,18 +1145,18 @@ class SpaceClient {
     const element = event.target
     if (element?.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(element?.tagName)) return
     event.preventDefault()
-    this.setDisplayMode({"2d": "3d", "3d": "sbs", "sbs": "2d"}[this.displayMode])
+    this.setDisplayMode(this.displayMode === "sbs" ? "3d" : "sbs")
   }
 
   setDisplayMode(mode) {
-    if (!["2d", "3d", "sbs"].includes(mode)) return
-    if (mode !== "2d" && !this.stereoView) {
+    if (!["3d", "sbs"].includes(mode)) return
+    if (!this.stereoView) {
       try {
         this.stereoView = new StereoSpaceView(this.root.querySelector("#space-viewport-3d"))
       } catch (_error) {
-        this.showError("WebGL is unavailable; keeping the classic 2D renderer.")
+        this.showError("WebGL is required for the 3D cockpit. Check browser GPU support.")
         const select = this.root.querySelector("#display-mode")
-        if (select) select.value = "2d"
+        if (select) select.value = "3d"
         return
       }
     }
@@ -1152,10 +1165,8 @@ class SpaceClient {
     this.root.dataset.displayMode = mode
     const select = this.root.querySelector("#display-mode")
     if (select) select.value = mode
-    if (mode !== "2d") {
-      this.stereoView.setMode(mode)
-      this.resize()
-    }
+    this.stereoView.setMode(mode)
+    this.resize()
   }
 
   createStars() {

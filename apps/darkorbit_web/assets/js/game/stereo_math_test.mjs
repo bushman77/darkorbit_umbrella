@@ -27,3 +27,15 @@ test("invalid and outside-viewport pointers are rejected", () => {
   assert.equal(pointerNdc({clientX: Infinity, clientY: 100}, rect), null)
   assert.equal(pointerNdc({clientX: 20, clientY: 100}, {...rect, width: 0}), null)
 })
+
+test("vertical space coordinate is real 3D height without altering atlas plane", () => {
+  const start = {x: 1500, y: 3200, z: 0}
+  const high = {x: 1500, y: 3200, z: 750}
+  const a = toScene(start)
+  const b = toScene(high)
+  assert.equal(a.x, b.x)
+  assert.equal(a.z, b.z)
+  assert.ok(b.y > a.y)
+  const back = toWorld(b)
+  assert.ok(Math.abs(back.z - 750) < 1e-7)
+})
