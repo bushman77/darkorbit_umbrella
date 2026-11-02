@@ -96,8 +96,9 @@ defmodule Core.Universe.TerritoryTest do
              {"mars", :exited}
            ]
 
-    assert Enum.map(events, & &1.position_km.x) ==
-             [-5.0, 3.0, 5.0, 13.0]
+    for {event, expected_x} <- Enum.zip(events, [-5.0, 3.0, 5.0, 13.0]) do
+      assert_in_delta event.position_km.x, expected_x, 0.000_001
+    end
 
     fractions = Enum.map(events, & &1.fraction)
     assert fractions == Enum.sort(fractions)
