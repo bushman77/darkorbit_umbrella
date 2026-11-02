@@ -8,7 +8,7 @@ defmodule DarkorbitWeb.GameController do
     account = conn.assigns.current_player
 
     render(conn, :show,
-      page_title: "Sector 1-1",
+      page_title: "Solar System Atlas",
       socket_token: GameAuth.socket_token(account),
       layout_player_id: account.id,
       action_hotbar: World.action_hotbar(),

@@ -66,3 +66,42 @@ test("planet selection does not corrupt sector waypoints or create fake routes",
   nav.selectSolarBody("bad-id")
   assert.equal(nav.solarSelection,"saturn")
 })
+
+test("starting in Solar System Atlas blocks cockpit controls until explicitly closed",()=>{
+  const {nodes,root}=fakeRoot()
+  let opens=0
+  let closes=0
+  // The actual map SVG renderer is covered by solar_atlas_test.mjs.
+  // Here we test the modal's initial visibility and release lifecycle.
+  const closer={
+    ...root.querySelector("#nav-view-system"),
+    focus(){this.focused=true},
+  }
+  nodes.set("#nav-close",closer)
+  nodes.set("#nav-z",{min:"",max:"",value:""})
+  root.hidden=false // server markup presents the Atlas before JS loads
+  const nav=new NavigationComputer({
+    root,getEntities:()=>new Map(),getSelfId:()=>null,
+    getBoundaries:()=>({width:20000,height:12000,altitude_min:-3000,altitude_max:3000}),
+    isConnected:()=>false,engage:()=>{},halt:()=>{},
+    onOpen:()=>{opens++},onClose:()=>{closes++},
+  })
+  // Stub the visual renderer only; open() must still execute setView().
+  nav.renderSolarView=()=>{}
+  nav.open()
+  assert.equal(nav.isOpen,true)
+  assert.equal(root.hidden,false)
+  assert.equal(nav.view,"system")
+  assert.equal(nodes.get("#nav-sector-view").hidden,true)
+  assert.equal(nodes.get("#nav-solar-view").hidden,false)
+  assert.equal(closer.focused,true)
+  assert.equal(opens,1)
+  nav.open() // idempotent, including its flight release callback
+  assert.equal(opens,1)
+  nav.close()
+  assert.equal(nav.isOpen,false)
+  assert.equal(root.hidden,true)
+  assert.equal(closes,1)
+  nav.close()
+  assert.equal(closes,1)
+})

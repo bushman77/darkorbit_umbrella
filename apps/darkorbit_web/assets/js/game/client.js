@@ -151,6 +151,12 @@ class SpaceClient {
     }
     // Capture Space before a focused HTML control can activate itself.
     window.addEventListener("keydown", event => this.handleCombatKey(event), true)
+
+    // New sessions begin in the SOL system Atlas, not in the combat
+    // cockpit. Initialize all flight/weapon input guards first so the
+    // Atlas can safely own focus even before the world socket joins.
+    // Closing it hands focus back to the existing 3D / SBS cockpit.
+    this.navComputer.open()
     this.connect()
     requestAnimationFrame(time => this.frame(time))
   }
