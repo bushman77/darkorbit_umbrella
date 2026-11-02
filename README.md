@@ -110,8 +110,8 @@ After updating this branch, rebuild web assets and hard-refresh the browser.
 
 
 ### Fly the ship manually (experimental SBS branch)
-The cockpit now accepts signed throttle (`+`/`-`), pitch (`W`/`X`),
-yaw (`A`/`D`), roll (`Z`/`C`) and rotation release (`S`).
+The cockpit uses signed throttle (`W`/`S`, or `+`/`-`), yaw (`A`/`D`),
+pitch (Up/Down arrows), roll (`Z`/`C`), and rotation release (`F`).
 Use `Ctrl+E` to toggle Cruise (assisted velocity) and Newtonian
 (momentum-preserving thrust). Throttle can cross zero into reverse.
 This is server-owned XYZ motion; **M** opens atlas autopilot separately.

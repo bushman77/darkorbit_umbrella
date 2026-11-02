@@ -178,12 +178,13 @@ There are now two separate movement paths:
 
 | Key | Function |
 | --- | --- |
-| `+` / `=` or numpad `+` | Increase signed throttle in 10% steps |
-| `-` or numpad `-` | Decrease signed throttle, passing through zero into reverse |
-| `W` / `X` | Pitch down / up |
+| `+` / `=` or numpad `+` | Increase signed throttle in 10% steps (alternative to W) |
+| `-` or numpad `-` | Decrease signed throttle, passing through zero into reverse (alternative to S) |
+| `W` / `S` | Ramp forward / reverse signed throttle while held |
 | `A` / `D` | Yaw left / right |
 | `Z` / `C` | Roll counterclockwise / clockwise |
-| `S` | Release all held rotational controls |
+| `Up` / `Down` arrows | Pitch up / down |
+| `F` | Release held rotational controls |
 | `Ctrl+E` | Toggle assisted Cruise Flight / Newtonian Flight |
 | `V` | Switch single-view 3D / stereoscopic SBS |
 | `M` | Open/close the navigation atlas |

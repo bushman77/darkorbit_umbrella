@@ -88,6 +88,21 @@ defmodule Core.World.FlightDynamicsTest do
     assert updated.route_waypoints == []
   end
 
+  test "yaw and roll remain independent server-owned attitude axes" do
+    map = MapDefinition.starting_map()
+    {:ok, yaw} = FlightDynamics.controls(ship(), %{yaw: 1.0}, 0)
+    {:ok, roll} = FlightDynamics.controls(ship(), %{roll: 1.0}, 0)
+    turned = FlightDynamics.step(yaw, map, 0.2, 1)
+    banked = FlightDynamics.step(roll, map, 0.2, 1)
+
+    assert turned.attitude.yaw > 0
+    assert turned.attitude.roll == 0.0
+    assert banked.attitude.roll > 0
+    assert banked.attitude.yaw == 0.0
+    assert FlightDynamics.forward(turned.attitude).x > 0
+    assert FlightDynamics.forward(banked.attitude).x == 0.0
+  end
+
   test "rotation input expires without renewed commands" do
     map = MapDefinition.starting_map()
     {:ok, turning} = FlightDynamics.controls(ship(), %{yaw: 1.0}, 0)
