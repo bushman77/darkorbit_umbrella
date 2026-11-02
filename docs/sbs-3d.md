@@ -178,13 +178,15 @@ There are now two separate movement paths:
 
 | Key | Function |
 | --- | --- |
-| `+` / `=` or numpad `+` | Increase signed throttle in 10% steps (alternative to W) |
-| `-` or numpad `-` | Decrease signed throttle, passing through zero into reverse (alternative to S) |
-| `W` / `S` | Ramp forward / reverse signed throttle while held |
-| `A` / `D` | Yaw left / right |
-| `Z` / `C` | Roll counterclockwise / clockwise |
-| `Up` / `Down` arrows | Pitch up / down |
-| `F` | Release held rotational controls |
+| `W` | Pitch nose up |
+| `S` | Pitch nose down |
+| `A` | Turn left (yaw) |
+| `D` | Turn right (yaw) |
+| `Q` | Roll left |
+| `E` | Roll right |
+| `=` or numpad `+` | Accelerate / raise signed throttle in 10% steps; hold to ramp |
+| `-` or numpad `-` | Decelerate / lower signed throttle, through zero into reverse; hold to ramp |
+| `F` | Release all held attitude controls |
 | `Ctrl+E` | Toggle assisted Cruise Flight / Newtonian Flight |
 | `V` | Switch single-view 3D / stereoscopic SBS |
 | `M` | Open/close the navigation atlas |
@@ -216,15 +218,20 @@ isolated runtime check. The new Core and Channel tests need to be run
 with Elixir on the developer's Pop!_OS machine. Physics feel and 3D/SBS
 orientation require in-browser evaluation.
 
-## Ergonomic flight input correction
+## Player-selected six-key flight layout
 
-The original first-pass mapping used W/X as pitch and S as a rotation
-stop key; this confused WASD piloting. The revised controls use **W/S**
-to ramp positive or negative throttle while held; **A/D** yaw;
-**Up/Down arrows** pitch; **Z/C** roll; **F** releases rotational inputs;
-and + / - still step the signed throttle. Press Ctrl+E to switch between
-Cruise Flight and Newtonian Flight. The default ship attitude is displayed
-in the mono overlay and stereoscopic HUD as degrees for heading/pitch/roll.
+The flight keys are now **W/S pitch**, **A/D yaw**, **Q/E roll**, with
+**=/- reserved exclusively for signed throttle**. Holding =/- ramps
+the throttle in deterministic 10% steps (120 ms per step), independent
+of operating-system key repeat. Releasing the keys leaves the requested
+throttle at its current setting; in Cruise mode the server converges
+toward that speed and in Newtonian mode it continuously applies the
+selected thrust. Ctrl+E switches modes while a bare E rolls right.
+Holding two opposite keys on one attitude axis cancels that axis.
+F releases attitude controls without resetting throttle.
+
+The HUD exposes heading, pitch and roll independently to confirm correct
+camera response. Earlier WASD-throttle mappings are obsolete.
 
 The Three.js camera now uses the server's world-space forward direction
 and a separately rolled up vector. This explicitly separates yaw from

@@ -1,9 +1,7 @@
-// WASD space piloting; throttle is a signed setpoint in [-1, 1].
+// Six-key flight attitude plus +/- throttle; signed setpoint in [-1, 1].
 // The server owns orientation, position, velocity and thrust physics.
-const ROTATION_KEYS = new Set([
-  "KeyA", "KeyD", "ArrowUp", "ArrowDown", "KeyZ", "KeyC", "KeyX",
-])
-const THROTTLE_KEYS = new Set(["KeyW", "KeyS"])
+const ROTATION_KEYS = new Set(["KeyW", "KeyS", "KeyA", "KeyD", "KeyQ", "KeyE"])
+const THROTTLE_KEYS = new Set(["Equal", "Minus", "NumpadAdd", "NumpadSubtract"])
 const THROTTLE_INTERVAL_MS = 120
 
 const typing = target => Boolean(target?.isContentEditable ||
@@ -26,9 +24,8 @@ export class FlightControls {
       Number(this.pressed.has(positive)) - Number(this.pressed.has(negative))
     return {
       yaw: axis("KeyD", "KeyA"),
-      pitch: Math.max(-1, Math.min(1,
-        axis("ArrowUp", "ArrowDown") + Number(this.pressed.has("KeyX")))),
-      roll: axis("KeyC", "KeyZ"),
+      pitch: axis("KeyW", "KeyS"),
+      roll: axis("KeyE", "KeyQ"),
     }
   }
 
@@ -42,7 +39,8 @@ export class FlightControls {
   }
 
   throttleDirection() {
-    return Number(this.pressed.has("KeyW")) - Number(this.pressed.has("KeyS"))
+    return Number(this.pressed.has("Equal") || this.pressed.has("NumpadAdd")) -
+      Number(this.pressed.has("Minus") || this.pressed.has("NumpadSubtract"))
   }
 
   stepThrottle(direction, time) {
@@ -71,20 +69,11 @@ export class FlightControls {
     if (event.altKey || event.ctrlKey || event.metaKey ||
         (event.shiftKey && event.code !== "Equal")) return false
 
-    const plus = ["Equal", "NumpadAdd"].includes(event.code)
-    const minus = ["Minus", "NumpadSubtract"].includes(event.code)
-    if (plus || minus) {
-      event.preventDefault()
-      this.stepThrottle(plus ? 1 : -1, this.now())
-      return true
-    }
-
     if (event.code === "KeyF") {
       event.preventDefault()
-      if (this.pressed.size) {
-        this.pressed.clear()
-        this.emit()
-      }
+      let changed = false
+      for (const code of ROTATION_KEYS) changed = this.pressed.delete(code) || changed
+      if (changed) this.emit()
       return true
     }
 
@@ -93,7 +82,8 @@ export class FlightControls {
     if (!this.pressed.has(event.code)) {
       this.pressed.add(event.code)
       if (THROTTLE_KEYS.has(event.code)) {
-        // Immediate response, then a time-based ramp while held.
+        // One immediate 10% step, then a time-based ramp while held.
+        // Browser key-repeat does not change the ramp rate.
         if (!this.stepThrottle(this.throttleDirection(), this.now())) this.emit()
       } else {
         this.emit()
@@ -124,7 +114,7 @@ export class FlightControls {
 
   heartbeat(time) {
     if (!this.active() || !this.pressed.size) return
-    // W/S ramp the signed throttle while held, independent of OS key repeats.
+    // =/- ramp the signed throttle while held, independent of OS key repeats.
     if (this.throttleDirection() !== 0) this.stepThrottle(this.throttleDirection(), time)
     if (time - this.lastEmit > 300) this.emit()
   }

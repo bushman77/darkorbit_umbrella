@@ -2,83 +2,145 @@ import assert from "node:assert/strict"
 import test from "node:test"
 import {FlightControls} from "./flight_controls.mjs"
 
-const press = (code, extras = {}) => ({code, repeat:false, defaultPrevented:false,
-  preventDefault(){this.prevented=true}, ...extras})
+const press = (code, extras = {}) => ({
+  code, repeat: false, defaultPrevented: false,
+  preventDefault() { this.prevented = true },
+  ...extras,
+})
 
-test("W increases and S decreases throttle including into reverse", () => {
-  let time = 1000
+test("W/S pitch up/down, A/D yaw left/right, Q/E roll left/right independently", () => {
   const events = []
-  const flight = new FlightControls({send: value => events.push(value), now: () => time})
-  flight.keyDown(press("KeyW"))
+  const flight = new FlightControls({send: payload => events.push(payload), now: () => 1000})
+
+  const cases = [
+    ["KeyW", {pitch: 1, yaw: 0, roll: 0}],
+    ["KeyS", {pitch: -1, yaw: 0, roll: 0}],
+    ["KeyA", {pitch: 0, yaw: -1, roll: 0}],
+    ["KeyD", {pitch: 0, yaw: 1, roll: 0}],
+    ["KeyQ", {pitch: 0, yaw: 0, roll: -1}],
+    ["KeyE", {pitch: 0, yaw: 0, roll: 1}],
+  ]
+  for (const [code, expected] of cases) {
+    const event = press(code)
+    assert.equal(flight.keyDown(event), true)
+    assert.equal(event.prevented, true)
+    assert.deepEqual(flight.axes(), {yaw: expected.yaw, pitch: expected.pitch, roll: expected.roll})
+    assert.equal(flight.throttle, 0)
+    assert.equal(events.at(-1).throttle, 0)
+    assert.equal(flight.keyUp(press(code)), true)
+    assert.deepEqual(flight.axes(), {yaw: 0, pitch: 0, roll: 0})
+  }
+})
+
+test("simultaneous pitch, yaw, and roll and opposing inputs cancel", () => {
+  const flight = new FlightControls({send: () => {}, now: () => 1000})
+  for (const code of ["KeyW", "KeyD", "KeyQ"]) flight.keyDown(press(code))
+  assert.deepEqual(flight.axes(), {yaw: 1, pitch: 1, roll: -1})
+  for (const code of ["KeyS", "KeyA", "KeyE"]) flight.keyDown(press(code))
+  assert.deepEqual(flight.axes(), {yaw: 0, pitch: 0, roll: 0})
+  flight.keyUp(press("KeyS"))
+  flight.keyUp(press("KeyA"))
+  flight.keyUp(press("KeyE"))
+  assert.deepEqual(flight.axes(), {yaw: 1, pitch: 1, roll: -1})
+  flight.keyDown(press("KeyF"))
+  assert.deepEqual(flight.axes(), {yaw: 0, pitch: 0, roll: 0})
+})
+
+test("= accelerates and - decelerates through zero into reverse while held", () => {
+  let time = 1000
+  const sent = []
+  const flight = new FlightControls({send: p => sent.push(p), now: () => time})
+
+  flight.keyDown(press("Equal"))
   assert.equal(flight.throttle, 0.1)
   for (let i = 0; i < 5; i++) {
     time += 125
     flight.heartbeat(time)
   }
-  assert.equal(flight.throttle,0.6)
-  flight.keyUp(press("KeyW"))
+  assert.equal(flight.throttle, 0.6)
+  flight.keyUp(press("Equal"))
   time += 125
-  flight.keyDown(press("KeyS"))
-  for (let i = 0; i < 13; i++) {
+  flight.keyDown(press("Minus"))
+  for (let i = 0; i < 12; i++) {
     time += 125
     flight.heartbeat(time)
   }
-  assert.equal(flight.throttle, -0.8)
-  flight.keyUp(press("KeyS"))
-  assert.equal(events.at(-1).throttle,-0.8)
+  assert.equal(flight.throttle, -0.7)
+  flight.keyUp(press("Minus"))
+  assert.equal(sent.at(-1).throttle, -0.7)
+  assert.deepEqual(flight.axes(), {yaw: 0, pitch: 0, roll: 0})
 })
 
-test("plus/minus still adjust signed throttle in steps and clamp", () => {
-  let time=1000
-  const flight=new FlightControls({send:()=>{}, now:()=>time})
-  for(let i=0;i<15;i++) {flight.keyDown(press("Minus"));time+=125}
-  assert.equal(flight.throttle,-1)
-  for(let i=0;i<10;i++) {flight.keyDown(press("Equal"));time+=125}
-  assert.equal(flight.throttle,0)
+test("throttle clamps, numpad works, and OS key repeat cannot speed up the ramp", () => {
+  let time = 1000
+  const flight = new FlightControls({send: () => {}, now: () => time})
+  flight.keyDown(press("NumpadSubtract"))
+  for (let i = 0; i < 20; i++) {
+    time += 125
+    flight.heartbeat(time)
+  }
+  assert.equal(flight.throttle, -1)
+  flight.keyUp(press("NumpadSubtract"))
+  time += 125
   flight.keyDown(press("NumpadAdd"))
-  assert.equal(flight.throttle,0.1)
+  assert.equal(flight.throttle, -0.9)
+  for (let i = 0; i < 5; i++) flight.keyDown(press("NumpadAdd", {repeat: true}))
+  assert.equal(flight.throttle, -0.9)
+  for (let i = 0; i < 25; i++) {
+    time += 125
+    flight.heartbeat(time)
+  }
+  assert.equal(flight.throttle, 1)
+  flight.keyUp(press("NumpadAdd"))
 })
 
-test("A/D strictly yaw; arrows pitch; Z/C strictly roll", () => {
-  const flight=new FlightControls({send:()=>{}, now:()=>2000})
-  flight.keyDown(press("KeyD"))
-  assert.deepEqual(flight.axes(),{yaw:1,pitch:0,roll:0})
-  flight.keyDown(press("ArrowUp"))
-  assert.deepEqual(flight.axes(),{yaw:1,pitch:1,roll:0})
-  flight.keyDown(press("KeyC"))
-  assert.deepEqual(flight.axes(),{yaw:1,pitch:1,roll:1})
-  flight.keyUp(press("KeyD"))
-  assert.equal(flight.axes().yaw,0)
-  flight.keyDown(press("KeyF"))
-  assert.deepEqual(flight.axes(),{yaw:0,pitch:0,roll:0})
+test("unmodified E rolls, Ctrl+E toggles mode without rolling; text inputs protected", () => {
+  const sent = []
+  const flight = new FlightControls({send: p => sent.push(p), now: () => 2000})
+  flight.keyDown(press("KeyE"))
+  assert.equal(flight.axes().roll, 1)
+  flight.keyUp(press("KeyE"))
+  assert.equal(flight.axes().roll, 0)
+  flight.keyDown(press("KeyE", {ctrlKey: true}))
+  assert.equal(flight.mode, "newtonian")
+  assert.equal(flight.axes().roll, 0)
+  flight.keyDown(press("KeyE", {ctrlKey: true, repeat: true}))
+  assert.equal(flight.mode, "newtonian")
+  assert.equal(flight.keyDown(press("KeyW", {target: {tagName: "INPUT"}})), false)
+  assert.deepEqual(flight.axes(), {yaw: 0, pitch: 0, roll: 0})
+  assert.equal(flight.throttle, 0)
+  assert.equal(sent.at(-1).mode, "newtonian")
 })
 
-test("Ctrl+E toggles modes; typing is protected", () => {
-  let count=0
-  const flight=new FlightControls({send:()=>count++,now:()=>2000})
-  assert.equal(flight.keyDown(press("KeyE",{ctrlKey:true})),true)
-  assert.equal(flight.mode,"newtonian")
-  flight.keyDown(press("KeyE",{ctrlKey:true,repeat:true}))
-  assert.equal(flight.mode,"newtonian")
-  assert.equal(flight.keyDown(press("KeyW",{target:{tagName:"INPUT"}})),false)
-  assert.equal(flight.throttle,0)
-  assert.equal(count,1)
-})
-
-test("held axis heartbeats, focus loss releases, atlas release is silent", () => {
-  let time=2000
-  const events=[]
-  const flight=new FlightControls({send: p=>events.push(p),now:()=>time})
+test("held rotation heartbeats, focus loss releases, atlas release remains silent", () => {
+  let time = 2000
+  const sent = []
+  const flight = new FlightControls({send: p => sent.push(p), now: () => time})
   flight.keyDown(press("KeyA"))
-  assert.equal(events.length,1)
-  time+=310
+  assert.equal(sent.length, 1)
+  time += 310
   flight.heartbeat(time)
-  assert.equal(events.length,2)
+  assert.equal(sent.length, 2)
   flight.release()
-  assert.equal(events.at(-1).yaw,0)
-  flight.keyDown(press("KeyC"))
-  const count=events.length
-  flight.release({silent:true})
-  assert.equal(events.length,count)
-  assert.deepEqual(flight.axes(),{yaw:0,pitch:0,roll:0})
+  assert.equal(sent.at(-1).yaw, 0)
+  flight.keyDown(press("KeyQ"))
+  const count = sent.length
+  flight.release({silent: true})
+  assert.equal(sent.length, count)
+  assert.deepEqual(flight.axes(), {yaw: 0, pitch: 0, roll: 0})
+})
+
+test("F releases attitude controls without cancelling held throttle", () => {
+  let time = 2000
+  const flight = new FlightControls({send: () => {}, now: () => time})
+  flight.keyDown(press("Equal"))
+  flight.keyDown(press("KeyQ"))
+  assert.equal(flight.axes().roll, -1)
+  const throttleBefore = flight.throttle
+  flight.keyDown(press("KeyF"))
+  assert.equal(flight.axes().roll, 0)
+  time += 150
+  flight.heartbeat(time)
+  assert.ok(flight.throttle > throttleBefore)
+  flight.keyUp(press("Equal"))
 })

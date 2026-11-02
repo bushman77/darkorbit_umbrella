@@ -110,16 +110,13 @@ After updating this branch, rebuild web assets and hard-refresh the browser.
 
 
 ### Fly the ship manually (experimental SBS branch)
-The cockpit uses signed throttle (`W`/`S`, or `+`/`-`), yaw (`A`/`D`),
-pitch (Up/Down arrows), roll (`Z`/`C`), and rotation release (`F`).
-Use `Ctrl+E` to toggle Cruise (assisted velocity) and Newtonian
-(momentum-preserving thrust). Throttle can cross zero into reverse.
-This is server-owned XYZ motion; **M** opens atlas autopilot separately.
+
+The flight layout is **W/S pitch up/down**, **A/D turn left/right**,
+**Q/E roll left/right**, **= accelerate**, and **- decelerate**.
+Holding the throttle keys ramps in 10% steps; signed throttle can cross
+zero into reverse. **Ctrl+E** switches Cruise (assisted velocity) and
+Newtonian (momentum-preserving thrust). **F** releases held attitude
+controls. The flight HUD shows heading, pitch, roll and speed.
+**M** opens the navigation atlas for optional XYZ autopilot routes.
+
 See [SBS flight and navigation notes](docs/sbs-3d.md).
-
-### Updated WASD controls on SBS
-
-**W/S** ramp forward/reverse throttle, **A/D** yaw, **Up/Down arrows**
-pitch, **Z/C** roll, **F** releases rotational keys. Plus/minus adjust
-signed throttle in steps; **Ctrl+E** selects Cruise/Newtonian.
-The HUD shows heading, pitch and roll so steering can be diagnosed.

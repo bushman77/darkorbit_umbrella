@@ -249,3 +249,12 @@
   roll-adjusted camera up vector, matching server-positive yaw/pitch.
 - Added live heading, pitch, roll indicators and deterministic input/basis tests.
 - Atlas input release is now silent, avoiding cancellation of an active route.
+
+### SBS branch — finalized player flight keymap (2026-11-01)
+
+- W/S pitch up/down; A/D yaw left/right; Q/E roll left/right.
+- = accelerates and - decelerates signed throttle, including reverse.
+- Throttle keys are hold-to-ramp in normalized 10% steps every 120 ms,
+  independent of OS key repeat; numeric keypad +/- are supported.
+- Preserved Ctrl+E for Cruise/Newtonian switching and F to release steering.
+- Updated UI instructions and automated mapping/modifier tests.
