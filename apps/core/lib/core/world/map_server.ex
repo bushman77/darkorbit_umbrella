@@ -395,45 +395,108 @@ defmodule Core.World.MapServer do
          :ok <- living_attacker(attacker),
          :ok <- armed_weapon(attacker),
          true <- Combat.cooldown_ready?(state.tick, attacker.next_attack_tick) do
-      direction = FlightDynamics.forward(attacker)
+      orientation = attacker.orientation || Orientation.from_angles(attacker.attitude)
+      shots =
+        Core.Combat.LineOfFire.trace_pair(
+          attacker.position, orientation, Map.values(state.npcs), attacker.attack_range
+        )
 
-      case Core.Combat.LineOfFire.trace(
-             attacker.position, direction, Map.values(state.npcs), attacker.attack_range
-           ) do
-        {:hit, target, impact} ->
-          case Combat.validate_attack(attacker, target, state.tick) do
-            :ok ->
-              {new_state, payload} =
-                resolve_player_attack(state, attacker, target,
-                  %{from: position_3d(attacker.position), to: impact})
-              {:reply, {:ok, payload}, new_state}
-
-            {:error, reason} ->
-              {:reply, {:error, reason}, state}
-          end
-
-        {:miss, endpoint} ->
-          updated = %{attacker | next_attack_tick: Combat.next_attack_tick(attacker, state.tick)}
-          new_state = %{state | entities: Map.put(state.entities, attacker.id, updated)}
-          payload = %{
-            attacker_id: attacker.id,
-            target_id: nil,
-            hit: false,
-            from: position_3d(attacker.position),
-            to: endpoint,
-            damage: 0,
-            shield_damage: 0,
-            hull_damage: 0,
-            next_attack_tick: updated.next_attack_tick,
-            tick: state.tick
-          }
-          broadcast(new_state, :laser_fired, payload)
-          {:reply, {:ok, payload}, new_state}
-      end
+      {next_state, payload} = resolve_manual_wing_burst(state, attacker, shots)
+      {:reply, {:ok, payload}, next_state}
     else
       false -> {:reply, {:error, :weapon_cooldown}, state}
       error -> {:reply, error, state}
     end
+  end
+
+  # One synchronized weapon activation. When both beams strike the same
+  # NPC, combine the damage once; if two NPCs intersect separate rays,
+  # distribute that same authorized damage budget across both.
+  defp resolve_manual_wing_burst(state, attacker, shots) do
+    hits_by_target =
+      shots
+      |> Enum.filter(& &1.hit)
+      |> Enum.group_by(& &1.target_id)
+
+    total_connections = Enum.count(shots, & &1.hit)
+    ordered_targets = hits_by_target |> Map.keys() |> Enum.sort_by(&to_string/1)
+
+    {npcs, impacts} =
+      Enum.reduce(ordered_targets, {state.npcs, []}, fn id, {npcs, impacts} ->
+        target = Map.fetch!(npcs, id)
+        connected = length(Map.fetch!(hits_by_target, id))
+        amount = if length(ordered_targets) == 1,
+          do: attacker.damage,
+          else: max(1, div(attacker.damage * connected, total_connections))
+
+        {updated, damage} = Combat.apply_damage(target, amount)
+        impact = %{
+          target_id: id,
+          target: combat_target_state(updated),
+          damage: damage.requested_damage,
+          shield_damage: damage.shield_damage,
+          hull_damage: damage.hull_damage,
+          destroyed: damage.destroyed,
+          beams_hit: connected
+        }
+
+        {Map.put(npcs, id, updated), impacts ++ [impact]}
+      end)
+
+    updated_attacker =
+      %{attacker | next_attack_tick: Combat.next_attack_tick(attacker, state.tick)}
+
+    updated_state = %{
+      state |
+      entities: Map.put(state.entities, attacker.id, updated_attacker),
+      npcs: npcs
+    }
+
+    first = List.first(impacts)
+    visual_beams =
+      Enum.map(shots, fn shot ->
+        Map.take(shot, [:side, :from, :to, :hit, :target_id])
+      end)
+
+    payload = %{
+      attacker_id: attacker.id,
+      target_id: if(first, do: first.target_id, else: nil),
+      target: if(first, do: first.target, else: nil),
+      hits: impacts,
+      hit: impacts != [],
+      beams: visual_beams,
+      from: position_3d(attacker.position),
+      to: hd(List.wrap(Enum.map(shots, & &1.to))),
+      damage: Enum.sum(Enum.map(impacts, & &1.damage)),
+      shield_damage: Enum.sum(Enum.map(impacts, & &1.shield_damage)),
+      hull_damage: Enum.sum(Enum.map(impacts, & &1.hull_damage)),
+      destroyed: Enum.any?(impacts, & &1.destroyed),
+      next_attack_tick: updated_attacker.next_attack_tick,
+      tick: state.tick
+    }
+
+    broadcast(updated_state, :laser_fired, payload)
+
+    final_state =
+      Enum.reduce(impacts, updated_state, fn impact, acc ->
+        if impact.destroyed do
+          destroyed = Map.fetch!(acc.npcs, impact.target_id)
+          {after_destroy, _} = destroy_npc(acc, destroyed, attacker.id, payload)
+          after_destroy
+        else
+          acc
+        end
+      end)
+
+    {final_state, payload}
+  end
+
+  defp combat_target_state(target) do
+    %{
+      id: target.id, hull: target.hull, max_hull: target.max_hull,
+      shields: target.shields, max_shields: target.max_shields,
+      status: target.status
+    }
   end
 
   def handle_call({:attack, session_id, entity_id}, _from, state) do
@@ -569,6 +632,7 @@ defmodule Core.World.MapServer do
       combat_payload(updated_attacker, damaged_target, damage, state.tick)
       |> Map.put(:hit, true)
       |> maybe_add_beam(beam)
+      |> maybe_add_player_wing_beams(attacker, target, beam)
     broadcast(state, :laser_fired, payload)
 
     if damage.destroyed do
@@ -580,6 +644,15 @@ defmodule Core.World.MapServer do
 
   defp maybe_add_beam(payload, nil), do: payload
   defp maybe_add_beam(payload, beam), do: Map.merge(payload, beam)
+
+  defp maybe_add_player_wing_beams(payload, attacker, target, nil) do
+    orientation = attacker.orientation || Orientation.from_angles(attacker.attitude)
+    beams = Core.Combat.LineOfFire.locked_pair(
+      attacker.position, orientation, target.position
+    )
+    Map.put(payload, :beams, beams)
+  end
+  defp maybe_add_player_wing_beams(payload, _attacker, _target, _beam), do: payload
 
   defp resolve_npc_attack(state, {npc_id, player_id}) do
     with {:ok, attacker} <- Map.fetch(state.npcs, npc_id),

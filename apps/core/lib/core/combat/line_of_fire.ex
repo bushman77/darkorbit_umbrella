@@ -6,10 +6,82 @@ defmodule Core.Combat.LineOfFire do
   client target or ray. A miss remains a shot and consumes weapon cooldown.
   """
   alias Core.Combat
+  alias Core.World.Orientation
+
+  # Geometry is in the same scaled units as the 3D cockpit. These are two
+  # independent emitters attached to the ship, NOT client-side offsets.
+  # A wing lies 1.75 scene units either side of the nose, behind each
+  # forward-facing muzzle. Camera local origin is (0, 2.75, 0).
+  @scene_scale 0.06
+  @muzzle_forward_scene 3.2
+  @muzzle_up_scene 1.3
+  @wing_half_span_scene 1.75
+  @wings [:left, :right]
 
   # NPC octahedrons render at radius ~2 world-scaled scene units (0.06),
   # so 40 world units gives a little aiming tolerance from the cockpit.
   @npc_radius 40.0
+
+  @doc "Absolute server-owned XYZ positions for symmetric, rotating gun mounts."
+  @spec wing_muzzles(map(), Orientation.t()) :: [map()]
+  def wing_muzzles(position, orientation) do
+    Enum.map(@wings, fn side ->
+      offset = %{
+        x: (if side == :left, do: -1.0, else: 1.0) * @wing_half_span_scene,
+        y: @muzzle_up_scene,
+        z: -@muzzle_forward_scene
+      }
+
+      scene = Orientation.rotate(orientation, offset)
+      %{
+        side: side,
+        from: %{
+          x: position.x + scene.x / @scene_scale,
+          y: position.y + scene.z / @scene_scale,
+          z: Map.get(position, :z, 0.0) + scene.y / @scene_scale
+        }
+      }
+    end)
+  end
+
+  @doc """
+  Trace both parallel nose-aimed wing lasers against the same world state.
+  Returns two beams (hit or miss). No lock-on, client ray or damage required.
+  """
+  @spec trace_pair(map(), Orientation.t(), [map()], number()) :: [map()]
+  def trace_pair(position, orientation, npcs, max_distance)
+      when is_list(npcs) and is_number(max_distance) and max_distance > 0 do
+    heading = Orientation.forward(orientation)
+    # Muzzle already extends forward from ship center. Keep the physical
+    # maximum range measured from the player, not from the new muzzle.
+    remaining = max(0.01, max_distance - @muzzle_forward_scene / @scene_scale)
+    eligible =
+      Enum.filter(npcs, fn npc ->
+        Combat.alive?(npc) and
+          Combat.in_range?(%{position: position}, npc, max_distance)
+      end)
+
+    Enum.map(wing_muzzles(position, orientation), fn %{side: side, from: origin} ->
+      case trace(origin, heading, eligible, remaining) do
+        {:hit, target, impact} ->
+          %{side: side, from: origin, to: impact, target: target,
+            target_id: target.id, hit: true}
+
+        {:miss, endpoint} ->
+          %{side: side, from: origin, to: endpoint, target: nil,
+            target_id: nil, hit: false}
+      end
+    end)
+  end
+
+  @doc "Server-approved pair of lock-on beams, drawn towards one actual NPC."
+  def locked_pair(position, orientation, npc_position) do
+    to = %{x: npc_position.x, y: npc_position.y,
+           z: Map.get(npc_position, :z, 0.0)}
+    Enum.map(wing_muzzles(position, orientation), fn %{side: side, from: origin} ->
+      %{side: side, from: origin, to: to, hit: true}
+    end)
+  end
 
   @spec trace(map(), map(), [map()], number()) ::
           {:hit, map(), map()} | {:miss, map()}
