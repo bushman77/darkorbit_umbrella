@@ -239,3 +239,38 @@ general shields**, 0.6 shield absorption, 210 world units/sec,
 The latter combat/flight values are *provisional*, not copies of the
 1989 weapon/directional-shield model. SM-1, ECM and forward-only shields
 are not implemented yet.
+
+### Solar System Atlas V1 (2026-11-02)
+
+Press **M** to open the Atlas. The first/main view is now a readable
+**Solar System** catalog containing **Sun, Mercury, Venus, Earth, Mars,
+Jupiter, Saturn, Uranus, Neptune and Pluto** (Pluto is correctly
+identified as a dwarf planet). Click a body in the orbital diagram or
+the right-side list for its mean solar distance in AU and orbital
+period. **Full system** and **Inner planets** provide two levels of
+detail. The chart's orbits and relative distances are intentionally
+compressed, and drawn orbital phases are *illustrative*, not calculated
+current positions or a navigable simulation.
+
+The existing, fully functional **Sector 1-1** XYZ waypoint/helm
+planner remains a separate tab. Changing map levels or inspecting a
+celestial body does NOT plot a route or transmit a command to the
+server. Existing NPC AI, flight, 3D/SBS cockpit and player combat remain
+unchanged. This establishes the system-vs-local navigation UI boundary
+ahead of server-owned star-system regions, real ephemeris/celestial
+coordinates, travel, stations and an encounter director.
+
+Presentation modules:
+- `apps/darkorbit_web/assets/js/game/solar_system.mjs` — Solar System
+  catalog; star/planet/dwarf classification, mean AU, orbital period and
+  schematic chart projection
+- `apps/darkorbit_web/assets/js/game/solar_atlas.mjs` — SVG orbital
+  rings, selectable object markers, information pane
+- `apps/darkorbit_web/assets/js/game/navigation_computer.mjs` —
+  system/sector tab orchestration and isolation of existing helm
+  commands
+
+Astronomical references:
+- https://science.nasa.gov/solar-system/planet-sizes-and-locations-in-our-solar-system/
+- https://science.nasa.gov/solar-system/solar-system-facts/
+- https://science.nasa.gov/dwarf-planets/pluto/

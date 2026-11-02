@@ -368,3 +368,18 @@
   the single-Dart demo, including destruction and delayed respawn.
 - Left the current cockpit, player flight, twin laser hit logic,
   damage authorization and bounded AI control unchanged.
+
+### Solar System Atlas V1 — Sun through Pluto (2026-11-02)
+
+- Replaced the tactical sector map as the initial Atlas screen with a
+  custom SOL overview displaying the Sun, eight planets and Pluto.
+- Added mean astronomical distances in AU, orbital periods, selectable
+  body details, differentiated colors, orbital rings, compressed radius
+  projection and an inner-planets magnification.
+- Preserved the working Sector 1-1 XY/Z route planner under its own tab.
+  Planet selections are display-only and cannot send map coordinates.
+- Added regression tests for ordering, Pluto's dwarf-planet category,
+  scaling, SVG object rendering, view changes and isolation of
+  existing tactical waypoint drafts.
+- Documented that planet positions are schematic: no live ephemerides,
+  interplanetary flight or encounter simulation has been added yet.

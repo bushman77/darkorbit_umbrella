@@ -298,3 +298,23 @@ validation remain deferred.
 - [ ] Run `mix precommit` and `npm test` on the laptop and test the flight feel.
 - [ ] Improve to quaternion-based attitude and body-frame 6DOF handling.
 - [ ] Add throttle controls on screen, smoothing, remapping, docking and inertia tuning.
+
+### Solar System Atlas foundation (2026-11-02)
+
+- [x] SOL system overview is the default main Atlas view; the Sun,
+  Mercury through Neptune, and Pluto are all visible/selectable.
+- [x] One astronomical catalog with mean AU distances and orbital
+  periods; compressed visual orbits and optional inner-system detail.
+- [x] Preserve Sector 1-1 as a distinct functional XYZ waypoint chart.
+  Clicking an AU marker cannot submit an invalid tactical waypoint.
+- [x] No change to currently working flight, weapon, Dart NPC or
+  authoritative combat simulation.
+- [ ] Server-authoritative star-system and celestial body catalog,
+  faction ownership and planetary orbital/region models.
+- [ ] Define coordinate transformations and ship's astronomical
+  position separately from local per-sector XYZ coordinates.
+- [ ] Introduce star-system travel, orbital approach and true
+  navigable destinations after the above state model is established.
+- [ ] Build EncounterDirector using system region, ship contacts,
+  navigation progress and factions; do not tie encounters to a
+  fixed NPC respawn coordinate.

@@ -442,3 +442,33 @@ generic fallback mesh.
 
 Reference manual illustration and specifications:
 https://cdn.steamstatic.com/steam/apps/569200/manuals/space_rogue_manual.pdf#page=36
+
+## Solar System Atlas V1: scope and coordinate boundary (2026-11-02)
+
+The primary Atlas page is now `Solar System`, with the star Sun,
+all eight recognized planets and Pluto. The client-side catalog stores
+the bodies' real mean heliocentric orbital distances in astronomical
+units, approximated periods and presentation-only colors/phase angles.
+The UI projects those distances nonlinearly because 0.387 AU Mercury
+and ~39.482 AU Pluto cannot be equally legible on a single linear
+overview. The orbital rings are schematic circles, ignoring actual
+inclinations and eccentricities. Diagram body phases are intentionally
+static illustrative angles: **do not treat them as current ephemerides
+or use them for physics, collision or navigation.**
+
+`NavigationComputer` now owns two separate views:
+- `system`: a static, selectable solar-body catalog rendered by
+  `solar_atlas.mjs`, with Full system and Inner planets focus.
+- `sector`: the existing 20,000×12,000 Sector 1-1 local XYZ tactical
+  chart with working waypoint, route and helm commands.
+
+The `solar_system.mjs` catalog is currently **client presentation
+data only**; it is deliberately not wired to the authoritative
+`Core.World.MapServer` coordinate space or its existing `plot_course`
+API. Future phases must introduce a server-side Universe catalog and
+explicit navigable astronomical regions/transfers rather than directly
+converting `AU` into a 1-1 sector waypoint. The system UI should
+be treated as a star-map *foundation*, not interplanetary travel.
+
+Astronomical references: NASA Solar System Facts, Planet Sizes and
+Locations, and Pluto (NASA Science).
