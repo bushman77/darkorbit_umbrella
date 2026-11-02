@@ -335,3 +335,22 @@ validation remain deferred.
 - [ ] Dynamic encounters with NPC-v-NPC skirmishes, contact discovery,
   faction relationships, piracy and neutral traffic.
 - [ ] Ephemeris/orbital positions, credible transfer paths, game-time scaling.
+
+### Sub-light interplanetary cruise V2 (2026-11-02)
+
+- [x] Explicit `:conventional` vs `:interplanetary_cruise` propulsion states.
+- [x] Independent server-owned, compressed system-level ship position
+  computed from drive speed and the same one-second multiplayer clock.
+- [x] Travel budgets approximately 3–5 minutes inner system, 10 minutes
+  Jupiter, 15–22 minutes outer system, without FTL or time compression.
+- [x] Disable conventional flight/combat commands during interplanetary cruise.
+- [x] Atlas shows current drive, system cruise speed, distance and ETA.
+- [x] Cover concurrent players, ticks, position, duration, and command
+  isolation in regression tests.
+- [ ] Integrate local cockpit movement/velocities into an authoritative
+  system-level ship position at sector boundaries.
+- [ ] Generate safe semi-random planetary approach positions and real
+  celestial bodies in their local sector centers.
+- [ ] Preserve the actual midcourse position when abandoning cruise instead
+  of restoring the departure region.
+- [ ] Implement drive acceleration/deceleration and possible interception.

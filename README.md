@@ -305,8 +305,9 @@ explicitly.
 The Solar System Atlas now has a working **Set course** action:
 select Mercury through Pluto (not the Sun), press Set course, and
 watch the server-owned transit status and schematic travel marker.
-A simulated voyage has a bounded game-time duration (~12–120 seconds);
-arrival updates the pilot's current solar destination from Earth to
+The original 12–120-second prototype times have been superseded by
+real-time sublight interplanetary cruise (see V2 below).
+Arrival updates the pilot's current solar destination from Earth to
 the selected body. Aborting returns to the departure *region*
 because V1 does not yet model free flight between orbital positions.
 The state machine is supervised and session-authorized. A pilot's
@@ -332,3 +333,43 @@ restarts, or random encounter generation. Sector 1-1 still remains
 a separate local tactical flight view. We can connect it later to
 the server's solar navigation region as new planetary local sectors
 and an encounter director are built.
+
+### Interplanetary cruise V2 — real-time sublight travel (2026-11-02)
+
+The game now implements two **mutually exclusive propulsion regimes**:
+
+- **Conventional cockpit flight:** the existing slow, precise 3D flight
+  dynamics used for local maneuvering, combat, and eventual docking.
+- **Sublight interplanetary cruise:** a server-authoritative constant-speed
+  navigation mode engaged from the Solar Atlas. It moves through SOL in a
+  separate compressed system-level coordinate space at **65,000 game km/s**,
+  numerically below the configured light-speed bound. It is not FTL.
+
+**Time is not accelerated for any player.** Each server navigation tick
+advances every active voyage by the same real-time second; distance depends
+on drive speed. The per-pilot SOL navigation state exposes the authoritative
+`position_km`, `propulsion_mode`, `travel_distance_km`,
+`distance_travelled_km`, `cruise_speed_km_s`, and a countdown ETA.
+
+SOL uses the planets' real **reference AU** values but a non-linear compressed
+**game-kilometer** geometry for playable travel times. Its angular placements
+are fixed schematic anchors, not current celestial positions. It would be
+incorrect to calculate physical velocities or astrophysical travel times
+directly from the AU catalog.
+
+Sample initial timings from Earth at the default speed:
+- Venus: 2m 56s; Mars: 4m 20s; Jupiter: 9m 56s
+- Saturn: 12m 22s; Neptune: 15m 32s; Pluto: 21m 20s
+
+Cockpit course, flight, targeting, and weapon requests are rejected
+server-side while a sublight voyage is active. On engaging a voyage, the
+local autopilot and combat target are cleared. The 3D client displays a
+flight-lock notice if opened during cruise. Journey state, progress, and
+ETA are shown on the Solar Atlas.
+
+**Not yet implemented:** cockpit motion integrated with the system position;
+arrival into an actual planetary local sector with randomized safe approach;
+physics-based acceleration/deceleration, true orbital ephemerides, planetary
+interception, interdiction/encounters, or database persistence across game
+server restarts. The V2 abort command still returns to the departure region
+until we introduce a playable deep-space local frame.

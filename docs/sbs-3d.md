@@ -497,10 +497,38 @@ No interplanetary travel operation modifies `Core.World.Entity.position`,
 `MapDefinition`, combat ranges, movement velocities or Sector 1-1
 waypoints. The progress marker is a schematic route interpolated
 between the *illustrative* Atlas locations, not physical ship
-coordinates. Durations are intentionally game-scaled (12–120s)
-based on the difference between mean orbital radii, and do not
-claim accurate planetary phases, intercept distance, or thrust.
+coordinates. The former 12–120-second durations have been replaced with real-time
+sublight drive propagation across compressed system coordinates
+(see below); distances still do not claim accurate planetary phases
+or physical interplanetary separation.
 Aborts remain in the departure region; arrivals change only the
 current SOL location ID. Full physical region transfers, actual
 orbital geometry and persistent region ownership must be built
 before connecting the Atlas to simulated space.
+
+## Distinct conventional and sublight cruise regimes (2026-11-02)
+
+`Core.Universe.Sol` supplies a static gameplay geometry in `game km`:
+a logarithmic radius derived from the reference AU and a fixed schematic
+phase per body. This compresses outer-system distances for a multiplayer
+game; these kilometers are **not** physical distances between real planets.
+
+`Core.Universe.Navigation` advances one second per real server tick at a
+fixed 65,000 game km/s when `:interplanetary_cruise` is engaged.
+It publishes the game-space position, current region, route endpoints,
+speed, distance travelled and ETA. Players share a clock; no pilot is
+time-warped. All interplanetary positions are independent of the old
+20,000×12,000×6,000 local combat map.
+
+`Core.World.require_conventional/2` blocks all local movement, targeting
+and weapon APIs for pilots currently cruising. On engaging the route, any
+ongoing local course and active combat targeting are reset. The browser
+also prevents conventional cockpit controls while cruise is active and
+shows the sublight drive status.
+
+The server still has only one local combat map: these new positions are
+**not yet** streamed into 3D sector geometry, nor do they change the
+client's local world. Abort still restores the departure region as a
+temporary limitation. Later work should introduce actual spatial
+mid-course exits, safe approach zones, planetary sector registration and
+the drive encounter/interdiction model.

@@ -414,3 +414,19 @@
 - Updated combat fixtures and added Elixir and JS tests for peaceful
   entry, explicit encounters, Sol catalogue, route validation, progress,
   abort and server/client state isolation.
+
+### Two real-time propulsion modes and sublight SOL cruise (2026-11-02)
+
+- Superseded 12–120-second game-timer voyages with constant-speed
+  interplanetary sublight cruise through deliberately compressed SOL
+  gameplay coordinates. Accurate AU references remain separate.
+- Added authoritative per-pilot SOL coordinates, distance travelled,
+  fixed cruise drive speed and independent voyage state, advanced on the
+  same one-second clock as all players. No clock fast-forwarding.
+- Added server API guards preventing cockpit flight, target/combat and
+  weapon operations while a pilot is in sublight transit.
+- Engaging cruise cancels old local autopilot movement and combat lock.
+- Atlas displays sublight drive speed, route progress and minute:second
+  ETA; cockpit indicates that flight controls are locked during transit.
+- Added V2 regression tests for sample travel times, concurrent voyages,
+  sublight position interpolation and propulsion-mode exclusivity.
