@@ -393,3 +393,26 @@ short bright impact flashes only for actual hits. Automatic targeted
 fire retains its existing lock-on rules and receives a matching pair
 of visual wing beams. Clients must never calculate damage or authoritative
 hits from selected IDs.
+
+## Extended-range combat and unmistakable confirmation (2026-11-01)
+
+The player pulse emitter now reaches **3,600 world units** (previously
+720), equivalent to 216 Three.js scene units using the existing 0.06
+world-to-scene scale. This is a server-side balance change in
+`Core.Combat.player_weapon/2`; `World.MapServer` uses the same
+range for the twin-wing manual ray collision and for existing automatic
+target attack validation. Existing NPC weapon ranges are unchanged.
+Shots past this range still miss and consume cooldown; an enemy being
+selected does not override the manual line of fire.
+
+The cockpit reports `HIT 2/2  SH -24  HULL -16` (using the actual
+server damage values) or `MISS / NO IMPACT` for 1.6 seconds after
+the authoritative `laser_fired` event. 3D gets a small reticle-adjacent
+confirmation and hit/miss reticle color; SBS puts the confirmation into
+each eye's cockpit HUD rather than a flat overlay. The HUD continuously
+shows selected-target Euclidean XYZ distance, maximum player laser
+range, range status, and remaining NPC shields/hull. The red beams
+are thicker, remain visible for 550 ms and have larger impact flashes.
+
+No client-side damage inference, aim assist, automatic target snapping,
+or new weapon recharge behavior was added.

@@ -338,3 +338,16 @@
 - Aligned NPC render positions with collision geometry and included
   twin wing beams on existing targeted automatic fire.
 - Added paired-hit, miss, yaw/roll, multi-target and world damage tests.
+
+### SBS branch — 5× pulse emitter range and explicit laser hits (2026-11-01)
+
+- Increased server-enforced player pulse laser range from 720 to 3,600 units
+  for wing-mounted manual fire and automatic X1 engagements.
+- Added 3,200-unit positive hit/actual NPC damage regression and out-of-range
+  negative tests while preserving existing cooldown and total damage.
+- Added HIT N/2 and MISS confirmation with server-reported shield/hull damage
+  in mono and stereo cockpits; reticle changes color for 1.6 seconds.
+- Added selected-target range in world units with IN RANGE/OUT OF RANGE and
+  shield/hull readings directly on the stereoscopic cockpit HUD.
+- Extended dual red beam rendering to 550ms, increased thickness and impact
+  flash visibility; existing server-owned beam/impact geometry is unchanged.

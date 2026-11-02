@@ -195,3 +195,17 @@ damage budget: double hits on the same NPC do not double the damage.
 Existing lock-on automatic laser fire also renders both wing beams.
 Bright red impact flashes indicate confirmed hits; no-target shots
 show two red streaks with no hit flash.
+
+### Extended player laser reach and clear hit feedback (SBS)
+
+The pulse emitter's **server-enforced range is 3,600 world units**,
+increased from 720 (5×). The same range governs the two manual wing
+rays, automatic X1 engagement, and beam endpoints on misses.
+The 3D/SBS cockpit shows a selected target's actual 3D range,
+`IN RANGE`/`OUT OF RANGE`, and shield/hull values.
+Every server-confirmed shot shows a visible **HIT N/2** or **MISS**
+status for 1.6 seconds, with negative shield/hull damage on hits.
+The reticle briefly changes green on hit and red on miss. The red
+beams persist for 0.55 seconds with enhanced collision flashes.
+A selected target is *not* automatically hit by manual Space fire:
+the player's nose and the two authoritative rays still determine hits.
