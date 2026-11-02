@@ -383,3 +383,15 @@
   existing tactical waypoint drafts.
 - Documented that planet positions are schematic: no live ephemerides,
   interplanetary flight or encounter simulation has been added yet.
+
+### Default Atlas launch instead of cockpit (2026-11-02)
+
+- Launch `/play` with the Solar System Atlas visible from the first
+  HTML paint, and call `NavigationComputer.open()` during JS boot
+  after flight and laser input handlers are ready but before socket
+  connection. Prevent immediate cockpit interaction while Atlas is open.
+- Retain the existing `M`, `Esc` and Return to cockpit controls,
+  3D/SBS renderer, world socket, server-side Sector 1-1 Dart and
+  tactical route planner.
+- Add regression coverage for initial open, idempotent repeated opens,
+  closing the Atlas, and restoring cockpit readiness.

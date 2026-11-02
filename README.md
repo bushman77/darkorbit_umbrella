@@ -274,3 +274,18 @@ Astronomical references:
 - https://science.nasa.gov/solar-system/planet-sizes-and-locations-in-our-solar-system/
 - https://science.nasa.gov/solar-system/solar-system-facts/
 - https://science.nasa.gov/dwarf-planets/pluto/
+
+### Default session entry: Solar System Atlas (2026-11-02)
+
+Opening `/play` now presents the **Solar System Atlas** immediately,
+rather than dropping the player into the Sector 1-1 combat cockpit.
+The map is rendered as the page's initial state, and the browser
+opens the Atlas controller before joining the Phoenix world channel.
+The Sun, eight planets and Pluto can be inspected without initiating
+flight. The existing cockpit remains accessible via **Return to
+cockpit**, **M**, or **Esc**; the Atlas can be reopened with **M**.
+
+This is a **starting-screen change**, not yet a full encounter-system
+change: the Sector 1-1 simulation and its single Dart NPC still run
+behind the map. Building an event-driven encounter director and an
+appropriate noncombat staging area remains future work.
