@@ -116,7 +116,10 @@ class SpaceClient {
       isConnected: () => this.channel?.state === "joined" && Boolean(this.selfId),
       engage: (waypoints, done) => this.plotCourse(waypoints, done),
       halt: done => this.stopNavigation(done),
-      onOpen: () => this.navigation?.cancel(),
+      onOpen: () => {
+        this.navigation?.cancel()
+        this.minimapNavigation?.cancel()
+      },
       onClose: () => this.canvas.focus({preventScroll: true}),
     }).start()
     this.root.querySelector("#nav-open")?.addEventListener("click", () => this.navComputer.open())
