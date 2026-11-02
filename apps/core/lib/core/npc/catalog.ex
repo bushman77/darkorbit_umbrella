@@ -1,9 +1,11 @@
 defmodule Core.NPC.Catalog do
   @moduledoc """
-  Configurable catalog of original NPC definitions.
+  Configurable NPC ship definitions, grounded where possible in the original
+  Space Rogue recognition guide. Unimplemented weapons, directional shields,
+  acceleration and ECM are not simulated yet.
 
-  Values are provisional balancing data. Deployments can replace the complete
-  list with `config :core, :npc_catalog, definitions`.
+  Sector 1-1 deliberately fields just one starter Dart at a time. This is a
+  demo encounter, not the future faction/encounter spawning system.
   """
 
   alias Core.NPC.Definition
@@ -11,23 +13,27 @@ defmodule Core.NPC.Catalog do
 
   @default_definitions [
     %Definition{
-      id: "rift_skirmisher",
-      display_name: "Rift Skirmisher",
-      max_hull: 800,
-      max_shields: 400,
+      id: "dart",
+      display_name: "Dart",
+      # Original Space Rogue (1989): Pirate fighter, 12 m, 16 t,
+      # 245 armor, Garnet laser, SM-1, Fwd-2 shields, 10% ECM,
+      # Borelle propulsion, 0.30g acceleration, 45 deg/s turning.
+      #
+      # Only the original 245 armor is mapped 1:1 to current hull.
+      # Current engine has generic rather than directional shields and
+      # no separate missile, ECM or acceleration stats for NPCs.
+      # The following values are provisional gameplay balancing:
+      max_hull: 245,
+      max_shields: 120,
       shield_absorption: 0.6,
-      movement_speed: 175,
-      laser_damage: 45,
+      movement_speed: 210,
+      laser_damage: 35,
       attack_range: 420.0,
       attack_cooldown_ms: 1_200,
       detection_radius: 900.0,
       spawn: %{
         map_id: "1-1",
-        positions: [
-          %Position{x: 1_480.0, y: 1_000.0},
-          %Position{x: 1_720.0, y: 1_320.0},
-          %Position{x: 1_230.0, y: 1_620.0}
-        ],
+        positions: [%Position{x: 1_480.0, y: 1_000.0}],
         patrol_radius: 240.0,
         respawn_delay_ms: 3_000
       }

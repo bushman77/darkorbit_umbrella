@@ -8,7 +8,7 @@ defmodule Core.NPC.AITest do
   alias Core.World.Position
 
   setup do
-    definition = Catalog.fetch!("rift_skirmisher")
+    definition = Catalog.fetch!("dart")
     npc = Entity.spawn(definition, 0, 100)
     %{definition: definition, map: MapDefinition.starting_map(), npc: npc}
   end

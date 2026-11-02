@@ -39,7 +39,7 @@ defmodule Core.WorldTest do
     assert initial.tick_ms == 100
     player = Enum.find(initial.entities, &(&1.kind == :player))
     assert player.position == %{x: 1_000.0, y: 1_000.0}
-    assert Enum.count(initial.entities, &(&1.kind == :npc)) == 3
+    assert Enum.count(initial.entities, &(&1.kind == :npc)) == 1
 
     assert {:ok, command_state} =
              World.move(session.id, %{x: 1_128.0, y: 1_000.0}, context.world_options)
@@ -238,27 +238,26 @@ defmodule Core.WorldTest do
 
     npcs = Enum.filter(initial.entities, &(&1.kind == :npc))
 
-    assert Enum.map(npcs, & &1.id) == [
-             "npc:1-1:rift_skirmisher:1",
-             "npc:1-1:rift_skirmisher:2",
-             "npc:1-1:rift_skirmisher:3"
-           ]
+    assert Enum.map(npcs, & &1.id) == ["npc:1-1:dart:1"]
+    assert hd(npcs).npc_type_id == "dart"
+    assert hd(npcs).display_name == "Dart"
+    assert hd(npcs).max_hull == 245
 
     assert Enum.all?(npcs, &(&1.state == :idle))
     assert Enum.all?(npcs, &(is_binary(&1.id) and &1.id != session.entity_id))
 
     assert {:ok, tick} = World.tick("1-1", context.world_options)
-    first_npc = Enum.find(tick.entities, &(&1.id == "npc:1-1:rift_skirmisher:1"))
+    first_npc = Enum.find(tick.entities, &(&1.id == "npc:1-1:dart:1"))
     assert first_npc.state == :pursue
     assert first_npc.target_id == :npc_observer
-    assert_in_delta first_npc.position.x, 1_462.5, 0.000_001
+    assert_in_delta first_npc.position.x, 1_459.0, 0.000_001
     assert first_npc.position.y == 1_000.0
   end
 
   test "reserved NPC identities cannot collide with player entities", context do
     assert {:error, :entity_already_joined} =
              World.connect(
-               "npc:1-1:rift_skirmisher:1",
+               "npc:1-1:dart:1",
                context.stats,
                context.world_options
              )
@@ -267,8 +266,8 @@ defmodule Core.WorldTest do
   test "authorizes targeting with extended laser range and enforces cooldown", context do
     assert {:ok, session} = World.connect(:combat_pilot, context.stats, context.world_options)
     assert {:ok, snapshot} = World.snapshot("1-1", context.world_options)
-    near_npc = Enum.find(snapshot.entities, &(&1.id == "npc:1-1:rift_skirmisher:1"))
-    far_npc = Enum.find(snapshot.entities, &(&1.id == "npc:1-1:rift_skirmisher:2"))
+    near_npc = Enum.find(snapshot.entities, &(&1.id == "npc:1-1:dart:1"))
+    assert Enum.count(snapshot.entities, &(&1.kind == :npc)) == 1
 
     assert {:error, :session_not_found} =
              World.select_target(-1, near_npc.id, context.world_options)
@@ -279,12 +278,7 @@ defmodule Core.WorldTest do
     assert {:error, :target_not_found} =
              World.select_target(session.id, session.entity_id, context.world_options)
 
-    assert {:ok, %{target: %{id: far_id}}} =
-             World.select_target(session.id, far_npc.id, context.world_options)
-
-    assert far_id == far_npc.id
-    # Previously this target was beyond the 720-unit limit. The upgraded
-    # emitter reaches it, but selecting a target must not consume a shot.
+    # The extended-range emitter remains a server-owned player weapon.
     assert {:ok, selection_snapshot} = World.snapshot("1-1", context.world_options)
     pilot = Enum.find(selection_snapshot.entities, &(&1.id == :combat_pilot))
     assert pilot.attack_range == 3_600.0
@@ -303,14 +297,14 @@ defmodule Core.WorldTest do
 
     assert {:ok, after_attack} = World.snapshot("1-1", context.world_options)
     damaged = Enum.find(after_attack.entities, &(&1.id == near_npc.id))
-    assert damaged.shields == 376
-    assert damaged.hull == 784
+    assert damaged.shields == 96
+    assert damaged.hull == 229
   end
 
   test "laser hit actually reduces shields at 3,200 game units", context do
     opts = context.world_options
     assert {:ok, session} = World.connect(:long_range_pilot, context.stats, opts)
-    npc_id = "npc:1-1:rift_skirmisher:1"
+    npc_id = "npc:1-1:dart:1"
 
     # Place the existing NPC down the ship's +Y axis, within the new
     # weapon range but well beyond the previous 720-unit cutoff.
@@ -337,8 +331,8 @@ defmodule Core.WorldTest do
 
     assert {:ok, state} = World.snapshot("1-1", opts)
     damaged = Enum.find(state.entities, &(&1.id == npc_id))
-    assert damaged.shields == 400 - result.shield_damage
-    assert damaged.hull == 800 - result.hull_damage
+    assert damaged.shields == 120 - result.shield_damage
+    assert damaged.hull == 245 - result.hull_damage
   end
 
   test "manual Space laser works without target lock and consumes cooldown on a miss", context do
@@ -422,7 +416,7 @@ defmodule Core.WorldTest do
 
   test "selection is distinct from persistent tick-owned combat engagement", context do
     assert {:ok, session} = World.connect(:engaged_pilot, context.stats, context.world_options)
-    npc_id = "npc:1-1:rift_skirmisher:1"
+    npc_id = "npc:1-1:dart:1"
 
     assert {:ok, %{selection: %{target_id: ^npc_id}}} =
              World.select_target(session.id, npc_id, context.world_options)
@@ -432,7 +426,7 @@ defmodule Core.WorldTest do
     selected_npc = Enum.find(selected.entities, &(&1.id == npc_id))
     assert selected_player.target_id == npc_id
     assert selected_player.engaged_target_id == nil
-    assert selected_npc.shields == 400
+    assert selected_npc.shields == 120
 
     assert {:ok, %{target_id: ^npc_id, changed: true}} =
              World.engage_combat(session.id, context.world_options)
@@ -444,8 +438,8 @@ defmodule Core.WorldTest do
 
     assert {:ok, first_tick} = World.tick("1-1", context.world_options)
     first_target = Enum.find(first_tick.entities, &(&1.id == npc_id))
-    assert first_target.shields == 376
-    assert first_target.hull == 784
+    assert first_target.shields == 96
+    assert first_target.hull == 229
     assert_receive {"1-1", :laser_fired, %{attacker_id: :engaged_pilot, target_id: ^npc_id}}
 
     for expected_tick <- 2..7 do
@@ -454,22 +448,30 @@ defmodule Core.WorldTest do
 
     assert {:ok, cooling_down} = World.snapshot("1-1", context.world_options)
     cooling_target = Enum.find(cooling_down.entities, &(&1.id == npc_id))
-    assert cooling_target.shields == 376
-    assert cooling_target.hull == 784
+    assert cooling_target.shields == 96
+    assert cooling_target.hull == 229
 
     assert {:ok, eighth_tick} = World.tick("1-1", context.world_options)
     eighth_target = Enum.find(eighth_tick.entities, &(&1.id == npc_id))
-    assert eighth_target.shields == 352
-    assert eighth_target.hull == 768
+    assert eighth_target.shields == 72
+    assert eighth_target.hull == 213
   end
 
   test "out-of-range engagement pauses while navigation remains independent", context do
     assert {:ok, session} = World.connect(:mobile_gunner, context.stats, context.world_options)
-    far_npc_id = "npc:1-1:rift_skirmisher:2"
+    npc_id = "npc:1-1:dart:1"
+
+    # There is only one Dart. Move it beyond the 3,600-unit player weapon
+    # range to test disengaged damage without introducing a second NPC.
+    [{pid, _}] = Registry.lookup(@registry, {:world_map, "1-1"})
+    :sys.replace_state(pid, fn state ->
+      npc = Map.fetch!(state.npcs, npc_id)
+      moved = %{npc | position: %Core.World.Position{x: 5_200.0, y: 1_000.0}}
+      %{state | npcs: Map.put(state.npcs, npc_id, moved)}
+    end)
 
     assert {:ok, _selection} =
-             World.select_target(session.id, far_npc_id, context.world_options)
-
+             World.select_target(session.id, npc_id, context.world_options)
     assert {:ok, %{changed: true}} =
              World.engage_combat(session.id, context.world_options)
 
@@ -478,17 +480,25 @@ defmodule Core.WorldTest do
 
     assert {:ok, tick} = World.tick("1-1", context.world_options)
     player = Enum.find(tick.entities, &(&1.id == :mobile_gunner))
-    untouched = Enum.find(tick.entities, &(&1.id == far_npc_id))
+    untouched = Enum.find(tick.entities, &(&1.id == npc_id))
 
     assert player.position == %{x: 1_032.0, y: 1_000.0}
     assert player.destination == %{x: 1_128.0, y: 1_000.0}
-    assert player.target_id == far_npc_id
-    assert player.engaged_target_id == far_npc_id
+    assert player.target_id == npc_id
+    assert player.engaged_target_id == npc_id
     assert untouched.shields == untouched.max_shields
     assert untouched.hull == untouched.max_hull
 
+    # Returning the same Dart to range resumes laser damage on next tick.
+    :sys.replace_state(pid, fn state ->
+      npc = Map.fetch!(state.npcs, npc_id)
+      moved = %{npc | position: %Core.World.Position{x: 1_280.0, y: 1_000.0},
+                     destination: nil}
+      %{state | npcs: Map.put(state.npcs, npc_id, moved)}
+    end)
+
     assert {:ok, resumed_tick} = World.tick("1-1", context.world_options)
-    resumed = Enum.find(resumed_tick.entities, &(&1.id == far_npc_id))
+    resumed = Enum.find(resumed_tick.entities, &(&1.id == npc_id))
     assert resumed.shields < resumed.max_shields
     assert resumed.hull < resumed.max_hull
   end
@@ -496,7 +506,7 @@ defmodule Core.WorldTest do
   test "Ctrl and slot-one semantics share one laser toggle while preserving selection",
        context do
     assert {:ok, session} = World.connect(:toggle_pilot, context.stats, context.world_options)
-    npc_id = "npc:1-1:rift_skirmisher:1"
+    npc_id = "npc:1-1:dart:1"
 
     assert {:error, :session_not_found} =
              World.toggle_laser_fire(-1, context.world_options)
@@ -547,7 +557,7 @@ defmodule Core.WorldTest do
     assert {:ok, session} =
              World.connect(:cooldown_toggle_pilot, context.stats, context.world_options)
 
-    npc_id = "npc:1-1:rift_skirmisher:1"
+    npc_id = "npc:1-1:dart:1"
 
     assert {:ok, _selection} = World.select_target(session.id, npc_id, context.world_options)
     assert {:ok, %{active: true}} = World.toggle_laser_fire(session.id, context.world_options)
@@ -575,38 +585,45 @@ defmodule Core.WorldTest do
     assert eighth_target.hull < first_target.hull
   end
 
-  test "destroying one NPC permits a fresh toggle engagement with the next NPC", context do
+  test "destroying the only Dart permits a fresh toggle after respawn", context do
     lethal_stats = %{context.stats | damage: 1_200}
     assert {:ok, session} = World.connect(:sequential_hunter, lethal_stats, context.world_options)
-    first_npc_id = "npc:1-1:rift_skirmisher:1"
-    second_npc_id = "npc:1-1:rift_skirmisher:2"
+    npc_id = "npc:1-1:dart:1"
 
     assert {:ok, _selection} =
-             World.select_target(session.id, first_npc_id, context.world_options)
+             World.select_target(session.id, npc_id, context.world_options)
 
     assert {:ok, %{active: true}} = World.toggle_laser_fire(session.id, context.world_options)
     assert {:ok, destroyed_tick} = World.tick("1-1", context.world_options)
     destroyed_player = Enum.find(destroyed_tick.entities, &(&1.id == :sequential_hunter))
     assert destroyed_player.target_id == nil
     assert destroyed_player.engaged_target_id == nil
-    refute Enum.any?(destroyed_tick.entities, &(&1.id == first_npc_id))
+    refute Enum.any?(destroyed_tick.entities, &(&1.id == npc_id))
+    assert {:error, :target_not_found} =
+             World.select_target(session.id, npc_id, context.world_options)
+
+    for tick <- 2..31 do
+      assert {:ok, %{tick: ^tick}} = World.tick("1-1", context.world_options)
+    end
+    assert {:ok, snapshot} = World.snapshot("1-1", context.world_options)
+    assert Enum.count(snapshot.entities, &(&1.kind == :npc)) == 1
 
     assert {:ok, _selection} =
-             World.select_target(session.id, second_npc_id, context.world_options)
+             World.select_target(session.id, npc_id, context.world_options)
 
-    assert {:ok, %{active: true, target_id: ^second_npc_id}} =
+    assert {:ok, %{active: true, target_id: ^npc_id}} =
              World.toggle_laser_fire(session.id, context.world_options)
 
     assert {:ok, next_engagement} = World.snapshot("1-1", context.world_options)
     next_player = Enum.find(next_engagement.entities, &(&1.id == :sequential_hunter))
-    assert next_player.target_id == second_npc_id
-    assert next_player.engaged_target_id == second_npc_id
+    assert next_player.target_id == npc_id
+    assert next_player.engaged_target_id == npc_id
   end
 
   test "repeated engagement, empty actions, invalid actions, and cancellation are safe",
        context do
     assert {:ok, session} = World.connect(:action_pilot, context.stats, context.world_options)
-    npc_id = "npc:1-1:rift_skirmisher:1"
+    npc_id = "npc:1-1:dart:1"
 
     assert {:ok, %{slot: 2, status: :empty, action: nil}} =
              World.activate_action(session.id, 2, context.world_options)
@@ -640,7 +657,7 @@ defmodule Core.WorldTest do
        context do
     lethal_stats = %{context.stats | damage: 1_200}
     assert {:ok, session} = World.connect(:automatic_hunter, lethal_stats, context.world_options)
-    npc_id = "npc:1-1:rift_skirmisher:1"
+    npc_id = "npc:1-1:dart:1"
 
     assert {:ok, _selection} = World.select_target(session.id, npc_id, context.world_options)
     assert {:ok, _engagement} = World.engage_combat(session.id, context.world_options)
@@ -669,7 +686,7 @@ defmodule Core.WorldTest do
   test "destroys, removes, and respawns an NPC on deterministic ticks", context do
     lethal_stats = %{context.stats | damage: 1_200}
     assert {:ok, session} = World.connect(:npc_hunter, lethal_stats, context.world_options)
-    npc_id = "npc:1-1:rift_skirmisher:1"
+    npc_id = "npc:1-1:dart:1"
 
     assert {:ok, _selection} = World.select_target(session.id, npc_id, context.world_options)
 
@@ -688,7 +705,7 @@ defmodule Core.WorldTest do
       assert {:ok, %{tick: ^expected_tick}} = World.tick("1-1", context.world_options)
     end
 
-    assert_receive {"1-1", :npc_spawned, %{id: ^npc_id, hull: 800, shields: 400, state: :idle}}
+    assert_receive {"1-1", :npc_spawned, %{id: ^npc_id, hull: 245, shields: 120, state: :idle}}
 
     assert {:ok, respawned_snapshot} = World.snapshot("1-1", context.world_options)
     respawned = Enum.find(respawned_snapshot.entities, &(&1.id == npc_id))
@@ -699,7 +716,7 @@ defmodule Core.WorldTest do
 
   test "serializes concurrent and repeated attack attempts", context do
     assert {:ok, session} = World.connect(:rapid_pilot, context.stats, context.world_options)
-    npc_id = "npc:1-1:rift_skirmisher:1"
+    npc_id = "npc:1-1:dart:1"
     assert {:ok, _selection} = World.select_target(session.id, npc_id, context.world_options)
 
     results =
@@ -728,7 +745,7 @@ defmodule Core.WorldTest do
     assert {:ok, _selection} =
              World.select_target(
                session.id,
-               "npc:1-1:rift_skirmisher:1",
+               "npc:1-1:dart:1",
                context.world_options
              )
 
@@ -752,7 +769,7 @@ defmodule Core.WorldTest do
     assert {:ok, _selection} =
              World.select_target(
                session.id,
-               "npc:1-1:rift_skirmisher:1",
+               "npc:1-1:dart:1",
                context.world_options
              )
 

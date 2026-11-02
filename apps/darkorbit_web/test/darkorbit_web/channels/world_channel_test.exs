@@ -48,7 +48,8 @@ defmodule DarkorbitWeb.WorldChannelTest do
     assert response.player.stats.speed == 320
     assert response.player.stats.damage == 40
     assert Enum.any?(response.map.entities, &(&1.id == account.id))
-    assert Enum.count(response.map.entities, &(&1.kind == :npc)) == 3
+    assert Enum.count(response.map.entities, &(&1.kind == :npc)) == 1
+    assert Enum.find(response.map.entities, &(&1.kind == :npc)).npc_type_id == "dart"
     assert Enum.map(response.hotbar, & &1.key) == ~w(1 2 3 4 5 6 7 8 9 0)
 
     assert %{
@@ -293,7 +294,7 @@ defmodule DarkorbitWeb.WorldChannelTest do
       subscribe_and_join(second_socket, WorldChannel, "world:1-1")
 
     target =
-      Enum.find(first_response.map.entities, &(&1.id == "npc:1-1:rift_skirmisher:1"))
+      Enum.find(first_response.map.entities, &(&1.id == "npc:1-1:dart:1"))
 
     select_ref =
       push(first_socket, "select_target", %{
