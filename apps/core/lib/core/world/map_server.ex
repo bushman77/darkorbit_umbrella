@@ -835,9 +835,11 @@ defmodule Core.World.MapServer do
       is_binary(definition.id) and definition.id != "" and is_binary(definition.name) and
         definition.name != ""
 
+    valid_volume? = is_number(definition.altitude_min) and is_number(definition.altitude_max) and
+                    definition.altitude_min < definition.altitude_max
     valid_spawn? = match?({:ok, _position}, Movement.destination(definition, definition.spawn))
 
-    if not (valid_dimensions? and valid_identity? and valid_spawn?) do
+    if not (valid_dimensions? and valid_identity? and valid_volume? and valid_spawn?) do
       raise ArgumentError, "invalid world map definition: #{inspect(definition)}"
     end
   end
@@ -853,6 +855,8 @@ defmodule Core.World.MapServer do
       tick: state.tick,
       tick_ms: state.tick_ms,
       boundaries: %{width: state.definition.width, height: state.definition.height},
+      volume: %{altitude_min: state.definition.altitude_min,
+                altitude_max: state.definition.altitude_max},
       entities: entities
     }
   end
@@ -863,7 +867,10 @@ defmodule Core.World.MapServer do
       kind: entity.kind,
       player_id: entity.player_id,
       position: public_position(entity.position),
+      position_3d: position_3d(entity.position),
       destination: public_position(entity.destination),
+      destination_3d: position_3d(entity.destination),
+      route_waypoints_3d: Enum.map(entity.route_waypoints, &position_3d/1),
       navigation_mode: entity.navigation_mode,
       route_waypoints: Enum.map(entity.route_waypoints, &public_position/1),
       speed: entity.speed,
@@ -889,7 +896,9 @@ defmodule Core.World.MapServer do
       npc_type_id: entity.npc_type_id,
       display_name: entity.display_name,
       position: public_position(entity.position),
+      position_3d: position_3d(entity.position),
       destination: public_position(entity.destination),
+      destination_3d: position_3d(entity.destination),
       speed: entity.speed,
       hull: entity.hull,
       max_hull: entity.max_hull,
@@ -907,7 +916,12 @@ defmodule Core.World.MapServer do
   end
 
   defp public_position(nil), do: nil
+
+  # Legacy XY snapshots remain stable for the atlas and earlier clients/tests.
   defp public_position(position), do: %{x: position.x, y: position.y}
+
+  defp position_3d(nil), do: nil
+  defp position_3d(position), do: %{x: position.x, y: position.y, z: position.z}
 
   defp combat_payload(attacker, target, damage, tick) do
     %{

@@ -23,6 +23,14 @@ defmodule DarkorbitWeb.WorldChannel do
   end
 
   @impl true
+  def handle_in("move", %{"x" => x, "y" => y, "z" => z}, socket)
+      when is_number(x) and is_number(y) and is_number(z) do
+    case World.move(socket.assigns.world_session_id, %{x: x, y: y, z: z}) do
+      {:ok, entity} -> {:reply, {:ok, %{entity: entity}}, socket}
+      {:error, reason} -> {:reply, {:error, %{reason: error_reason(reason)}}, socket}
+    end
+  end
+
   def handle_in("move", %{"x" => x, "y" => y}, socket)
       when is_number(x) and is_number(y) do
     case World.move(socket.assigns.world_session_id, %{x: x, y: y}) do

@@ -78,7 +78,8 @@ defmodule Core.NPC.AI do
 
     destination = %Position{
       x: clamp(npc.home_position.x + direction_x * npc.patrol_radius, 0.0, map.width * 1.0),
-      y: clamp(npc.home_position.y + direction_y * npc.patrol_radius, 0.0, map.height * 1.0)
+      y: clamp(npc.home_position.y + direction_y * npc.patrol_radius, 0.0, map.height * 1.0),
+      z: npc.home_position.z
     }
 
     {%{
@@ -93,7 +94,8 @@ defmodule Core.NPC.AI do
   defp distance_squared(left, right) do
     delta_x = right.x - left.x
     delta_y = right.y - left.y
-    delta_x * delta_x + delta_y * delta_y
+    delta_z = right.z - left.z
+    delta_x * delta_x + delta_y * delta_y + delta_z * delta_z
   end
 
   defp clamp(value, minimum, maximum), do: min(maximum, max(minimum, value))

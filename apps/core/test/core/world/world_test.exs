@@ -133,6 +133,29 @@ defmodule Core.WorldTest do
     assert current.navigation_mode == :autopilot
   end
 
+  test "authoritative route changes altitude and preserves full 3D position", context do
+    assert {:ok, session} = World.connect(:altitude_pilot, context.stats, context.world_options)
+    opts = context.world_options
+
+    assert {:ok, command} =
+             World.plot_course(session.id, [%{x: 1_000.0, y: 1_000.0, z: 64.0}], opts)
+
+    assert command.destination_3d == %{x: 1_000.0, y: 1_000.0, z: 64.0}
+    assert command.position == %{x: 1_000.0, y: 1_000.0}
+    assert command.position_3d == %{x: 1_000.0, y: 1_000.0, z: 0.0}
+
+    for _tick <- 1..2 do
+      assert {:ok, _snapshot} = World.tick("1-1", opts)
+    end
+
+    assert {:ok, snapshot} = World.snapshot("1-1", opts)
+    ship = Enum.find(snapshot.entities, &(&1.id == :altitude_pilot))
+    assert_in_delta ship.position_3d.z, 64.0, 1.0e-6
+    assert ship.destination == nil
+    assert ship.navigation_mode == :manual
+    assert snapshot.volume == %{altitude_min: -3_000, altitude_max: 3_000}
+  end
+
   test "validates movement against map boundaries and the owning session", context do
     assert {:ok, session} = World.connect(:pilot_two, context.stats, context.world_options)
 

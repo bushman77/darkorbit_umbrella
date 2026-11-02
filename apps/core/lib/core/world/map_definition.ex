@@ -8,13 +8,15 @@ defmodule Core.World.MapDefinition do
   @starting_map_id "1-1"
 
   @enforce_keys [:id, :name, :width, :height, :spawn]
-  defstruct [:id, :name, :width, :height, :spawn]
+  defstruct [:id, :name, :width, :height, :spawn, altitude_min: -3_000, altitude_max: 3_000]
 
   @type t :: %__MODULE__{
           id: String.t(),
           name: String.t(),
           width: pos_integer(),
           height: pos_integer(),
+          altitude_min: number(),
+          altitude_max: number(),
           spawn: Position.t()
         }
 
@@ -41,14 +43,22 @@ defmodule Core.World.MapDefinition do
       name: fetch_value!(definition, :name),
       width: fetch_value!(definition, :width),
       height: fetch_value!(definition, :height),
+      altitude_min: optional_value(definition, :altitude_min, -3_000),
+      altitude_max: optional_value(definition, :altitude_max, 3_000),
       spawn: position(fetch_value!(definition, :spawn))
     }
   end
 
   defp position(%Position{} = position), do: position
+  defp position({x, y, z}), do: %Position{x: x, y: y, z: z}
   defp position({x, y}), do: %Position{x: x, y: y}
-  defp position(%{x: x, y: y}), do: %Position{x: x, y: y}
-  defp position(%{"x" => x, "y" => y}), do: %Position{x: x, y: y}
+  defp position(%{x: x, y: y} = input),
+    do: %Position{x: x, y: y, z: Map.get(input, :z, 0.0)}
+  defp position(%{"x" => x, "y" => y} = input),
+    do: %Position{x: x, y: y, z: Map.get(input, "z", 0.0)}
+
+  defp optional_value(map, key, default),
+    do: Map.get(map, key, Map.get(map, Atom.to_string(key), default))
 
   defp fetch_value!(map, key) do
     case Map.fetch(map, key) do
