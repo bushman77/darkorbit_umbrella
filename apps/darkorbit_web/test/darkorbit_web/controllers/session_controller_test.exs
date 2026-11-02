@@ -47,7 +47,14 @@ defmodule DarkorbitWeb.SessionControllerTest do
            ) == 1
 
     assert Enum.count(LazyHTML.query(document, "#hotbar-slot-10")) == 1
-    assert Enum.count(LazyHTML.query(document, "[data-cockpit-window]")) == 3
+    # The old target-info window was retired; the active cockpit HUD has
+    # ship-status and minimap windows. The Solar Atlas is now the entry view.
+    assert Enum.count(LazyHTML.query(document, "[data-cockpit-window]")) == 2
+    assert Enum.count(LazyHTML.query(document, "[data-cockpit-window='ship_status']")) == 1
+    assert Enum.count(LazyHTML.query(document, "[data-cockpit-window='minimap']")) == 1
+    assert Enum.count(LazyHTML.query(document, "#navigation-computer")) == 1
+    assert Enum.count(LazyHTML.query(document, "#nav-solar-view")) == 1
+    assert Enum.count(LazyHTML.query(document, "#nav-solar-engage")) == 1
     assert Enum.count(LazyHTML.query(document, "#cockpit-minimap-canvas")) == 1
     assert Enum.count(LazyHTML.query(document, "#minimap-decrease")) == 1
     assert Enum.count(LazyHTML.query(document, "#minimap-increase")) == 1
