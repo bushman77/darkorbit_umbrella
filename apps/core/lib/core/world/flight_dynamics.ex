@@ -11,6 +11,7 @@ defmodule Core.World.FlightDynamics do
 
   alias Core.World.Entity
   alias Core.World.MapDefinition
+  alias Core.World.Orientation
   alias Core.World.Position
 
   # Tuned for deliberate ship handling rather than instant camera panning.
@@ -41,7 +42,7 @@ defmodule Core.World.FlightDynamics do
       # cancels sideways drift from that point onward.
       cruise_speed =
         if mode == :cruise and entity.flight_mode != :cruise do
-          dot(entity.velocity, forward(entity.attitude))
+          dot(entity.velocity, forward(entity))
           |> clamp(-entity.speed * 1.0, entity.speed * 1.0)
         else
           entity.cruise_speed
@@ -89,7 +90,15 @@ defmodule Core.World.FlightDynamics do
         {Map.put(angles, axis, angle), Map.put(rates, axis, next_rate)}
       end)
 
-    heading = forward(attitude)
+    # Angles are retained as legacy telemetry. Physical rotation uses
+    # quaternion increments in the CURRENT ship axes, not world axes.
+    delta = Map.new([:yaw, :pitch, :roll], fn axis ->
+      {axis, wrap_angle(Map.fetch!(attitude, axis) - Map.fetch!(entity.attitude, axis))}
+    end)
+    orientation = Orientation.rotate_local(
+      entity.orientation || Orientation.from_angles(entity.attitude), delta
+    )
+    heading = Orientation.forward(orientation)
     acceleration = max(24.0, entity.speed * 1.5) * dt
     speed = entity.speed * 1.0
     {velocity, cruise_speed} =
@@ -135,10 +144,15 @@ defmodule Core.World.FlightDynamics do
     }
 
     %{entity | position: position, velocity: velocity, cruise_speed: cruise_speed,
-               attitude: attitude, angular_velocity: angular_velocity}
+               attitude: attitude, orientation: orientation, angular_velocity: angular_velocity}
   end
 
-  @spec forward(map()) :: %{x: float(), y: float(), z: float()}
+  @spec forward(Entity.t() | map()) :: %{x: float(), y: float(), z: float()}
+  def forward(%Entity{} = entity) do
+    Orientation.forward(entity.orientation || Orientation.from_angles(entity.attitude))
+  end
+
+  # Retain static Euler input for legacy map and test fixtures.
   def forward(%{yaw: yaw, pitch: pitch}) do
     %{
       x: :math.sin(yaw) * :math.cos(pitch),

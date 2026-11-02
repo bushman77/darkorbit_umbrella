@@ -18,6 +18,7 @@ defmodule Core.World.MapServer do
   alias Core.World.EventSink
   alias Core.World.MapDefinition
   alias Core.World.Movement
+  alias Core.World.Orientation
   alias Core.World.Session
 
   def child_spec(opts) do
@@ -394,7 +395,7 @@ defmodule Core.World.MapServer do
          :ok <- living_attacker(attacker),
          :ok <- armed_weapon(attacker),
          true <- Combat.cooldown_ready?(state.tick, attacker.next_attack_tick) do
-      direction = FlightDynamics.forward(attacker.attitude)
+      direction = FlightDynamics.forward(attacker)
 
       case Core.Combat.LineOfFire.trace(
              attacker.position, direction, Map.values(state.npcs), attacker.attack_range
@@ -971,6 +972,7 @@ defmodule Core.World.MapServer do
       throttle: entity.throttle,
       forward_speed: entity.cruise_speed,
       attitude: entity.attitude,
+      orientation: entity.orientation || Orientation.from_angles(entity.attitude),
       angular_velocity: entity.angular_velocity,
       velocity: entity.velocity,
       route_waypoints: Enum.map(entity.route_waypoints, &public_position/1),

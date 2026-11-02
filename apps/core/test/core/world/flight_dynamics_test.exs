@@ -4,6 +4,7 @@ defmodule Core.World.FlightDynamicsTest do
   alias Core.World.Entity
   alias Core.World.FlightDynamics
   alias Core.World.MapDefinition
+  alias Core.World.Orientation
   alias Core.World.Position
 
   defp ship do
@@ -14,6 +15,47 @@ defmodule Core.World.FlightDynamicsTest do
       shield_absorption: 0.0, damage: 1, attack_range: 720.0,
       attack_cooldown_ticks: 1, next_attack_tick: 0, status: :alive
     }
+  end
+
+  test "after rolling 90 degrees, pitch follows ship-local right axis" do
+    map = MapDefinition.starting_map()
+    rolled = %{ship() | orientation: Orientation.from_angles(%{
+      yaw: 0.0, pitch: 0.0, roll: :math.pi() / 2
+    })}
+    {:ok, control} = FlightDynamics.controls(rolled, %{pitch: 1.0, throttle: 1.0}, 0)
+    moving = FlightDynamics.step(control, map, 0.2, 1)
+    nose = FlightDynamics.forward(moving)
+
+    assert nose.x < -0.01
+    assert_in_delta nose.z, 0.0, 1.0e-8
+    assert moving.velocity.x < 0.0
+    assert_in_delta moving.velocity.z, 0.0, 1.0e-8
+  end
+
+  test "pitch after yaw follows current heading, not spawn north" do
+    map = MapDefinition.starting_map()
+    east = %{ship() | orientation: Orientation.from_angles(%{
+      yaw: :math.pi() / 2, pitch: 0.0, roll: 0.0
+    })}
+    {:ok, control} = FlightDynamics.controls(east, %{pitch: 1.0, throttle: 1.0}, 0)
+    moving = FlightDynamics.step(control, map, 0.2, 1)
+    nose = FlightDynamics.forward(moving)
+
+    assert nose.x > 0.0
+    assert nose.z > 0.0
+    assert_in_delta nose.y, 0.0, 1.0e-8
+    assert_in_delta moving.velocity.z, moving.cruise_speed * nose.z, 1.0e-8
+  end
+
+  test "yaw after roll acts around the rotated local up axis" do
+    map = MapDefinition.starting_map()
+    rolled = %{ship() | orientation: Orientation.from_angles(%{
+      yaw: 0.0, pitch: 0.0, roll: :math.pi() / 2
+    })}
+    {:ok, control} = FlightDynamics.controls(rolled, %{yaw: 1.0}, 0)
+    turned = FlightDynamics.step(control, map, 0.2, 1)
+    assert_in_delta FlightDynamics.forward(turned).x, 0.0, 1.0e-8
+    assert FlightDynamics.forward(turned).z > 0
   end
 
   test "signed cruise throttle accelerates forward then brakes and reverses" do
@@ -48,6 +90,7 @@ defmodule Core.World.FlightDynamicsTest do
     # northward velocity must not dictate the new cruise travel direction.
     facing_east = %{moving_north |
       attitude: %{yaw: :math.pi() / 2, pitch: 0.0, roll: 0.0},
+      orientation: nil,
       angular_velocity: %{yaw: 0.0, pitch: 0.0, roll: 0.0}}
     {:ok, thrusting_east} = FlightDynamics.controls(facing_east, %{throttle: 1.0}, 1)
     after_turn = FlightDynamics.step(thrusting_east, map, 0.1, 2)
