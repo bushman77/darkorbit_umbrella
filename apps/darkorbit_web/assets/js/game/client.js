@@ -592,30 +592,47 @@ class SpaceClient {
   laserFired(attack) {
     const attacker = this.entities.get(entityKey(attack.attacker_id))
     const target = this.entities.get(entityKey(attack.target_id))
-    if (target && attack.hit !== false && attack.target) {
+    // Twin manual rays can strike two separate NPCs. Apply every
+    // authoritative server result; never derive damage in the client.
+    if (Array.isArray(attack.hits)) {
+      for (const impact of attack.hits) {
+        const victim = this.entities.get(entityKey(impact.target_id))
+        if (victim && impact.target) applyAuthoritativeDamage(victim, impact.target)
+      }
+    } else if (target && attack.hit !== false && attack.target) {
       applyAuthoritativeDamage(target, attack.target)
     }
     if (attacker) attacker.nextAttackTick = attack.next_attack_tick
     this.worldTick = Math.max(this.worldTick, Number(attack.tick) || 0)
 
     const startedAt = performance.now()
-    const beamFrom = attack.from || attacker?.render
-    const beamTo = attack.to || target?.render
-    if (beamFrom && beamTo) {
+    const legacyBeam = {
+      from: attack.from || attacker?.render,
+      to: attack.to || target?.render,
+      hit: attack.hit !== false && Boolean(target),
+    }
+    const rays = Array.isArray(attack.beams) && attack.beams.length > 0
+      ? attack.beams
+      : [legacyBeam]
+    for (const ray of rays) {
+      if (!ray.from || !ray.to) continue
       this.beams.push({
-        from: {...beamFrom},
-        to: {...beamTo},
+        from: {...ray.from},
+        to: {...ray.to},
+        hit: Boolean(ray.hit),
+        side: ray.side || null,
         hostile: attacker?.kind === "npc",
         shooterId: entityKey(attack.attacker_id),
-        manual: Boolean(attack.from && attack.to),
         startedAt,
-        expiresAt: startedAt + 260,
+        expiresAt: startedAt + 300,
       })
     }
 
     if (entityKey(attack.attacker_id) === this.selfId) {
       this.setCombatMessage(
-        attack.hit === false ? "Laser fired · no impact" :
+        attack.hit === false ? "Twin lasers fired · missed" :
+          `Laser impact · ${Array.isArray(attack.beams) ?
+            attack.beams.filter(beam => beam.hit).length + "/" + attack.beams.length + " beams · " : ""}` +
           `${number(attack.shield_damage)} shield · ${number(attack.hull_damage)} hull damage`
       )
     }

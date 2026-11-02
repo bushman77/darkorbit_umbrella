@@ -127,6 +127,21 @@ export class StereoSpaceView {
     framing.add(beam([-2.0, -0.96, -2.75], [-1.75, 1.0, -3.25], 0.023, steel))
     framing.add(beam([2.0, -0.96, -2.75], [1.75, 1.0, -3.25], 0.023, steel))
     framing.add(beam([-2.0, -0.96, -2.75], [2.0, -0.96, -2.75], 0.028, steel))
+    // Two visible wing-mounted emitters. Their tips correspond exactly to
+    // Core.Combat.LineOfFire's server-owned muzzle positions: ship-local
+    // (+/-1.75, +1.3, -3.2), relative to the cockpit eye at Y=+2.75.
+    const emitterMetal = material(0x42576b)
+    for (const side of [-1, 1]) {
+      const x = side * 1.75
+      framing.add(beam([x, -1.45, -2.60], [x, -1.45, -3.20],
+        0.095, emitterMetal))
+      const tip = new THREE.Mesh(
+        new THREE.SphereGeometry(0.095, 10, 8),
+        new THREE.MeshBasicMaterial({color: 0xff424a}),
+      )
+      tip.position.set(x, -1.45, -3.20)
+      framing.add(tip)
+    }
     const dash = new THREE.Mesh(new THREE.BoxGeometry(2.38, 0.72, 0.25), material(0x0d2238))
     dash.position.set(0, -0.72, -2.65)
     framing.add(dash)
@@ -178,7 +193,19 @@ export class StereoSpaceView {
     if (!ownShip) return
     const pos = toScene(ownShip.render)
     const angle = Number.isFinite(ownShip.angle) ? ownShip.angle : -Math.PI / 2
-    this.camera.position.set(pos.x, pos.y + 2.75, pos.z)
+    // The pilot eye is ship-local too. Rotating this offset with the ship
+    // keeps the wing emitters physically anchored after rolls and loops.
+    const pose = !ownShip.destination &&
+      (ownShip.renderOrientation || ownShip.orientation)
+    if (pose) {
+      const localEye = new THREE.Vector3(0, 2.75, 0).applyQuaternion(
+        new THREE.Quaternion(pose.x, pose.y, pose.z, pose.w).normalize()
+      )
+      this.camera.position.set(pos.x + localEye.x, pos.y + localEye.y,
+        pos.z + localEye.z)
+    } else {
+      this.camera.position.set(pos.x, pos.y + 2.75, pos.z)
+    }
     // Ship attitude is authoritative. The atlas autopilot retains its
     // independent destination-heading view.
     const attitude = ownShip.renderAttitude || ownShip.attitude ||
@@ -234,7 +261,9 @@ export class StereoSpaceView {
         this.nodes.set(entity.id, node)
       }
       const pos = toScene(entity.render)
-      node.position.set(pos.x, pos.y + (entity.kind === "npc" ? 1.8 : 1.2), pos.z)
+      // Match rendered NPC centre to the server's XYZ collision sphere.
+      // Decorative Y offsets previously made the reticle miss real targets.
+      node.position.set(pos.x, pos.y, pos.z)
       if (entity.kind === "player" && !entity.destination && entity.orientation) {
         const q = entity.renderOrientation || entity.orientation
         node.quaternion.set(q.x, q.y, q.z, q.w).normalize()
@@ -266,28 +295,35 @@ export class StereoSpaceView {
       const to = toScene(beamData.to)
       const fraction = clamp((beamData.expiresAt - time) /
         Math.max(1, beamData.expiresAt - beamData.startedAt), 0, 1)
-      const laserColor = beamData.hostile ? 0xffa35c : 0xff193d
-      // Offset the cockpit muzzle a little below/right of the sight line so
-      // a player looking straight down the ray can actually see a red streak.
-      const ownShot = beamData.shooterId === client.selfId
-      const muzzle = new THREE.Vector3(from.x, from.y + 1.5, from.z)
-      if (ownShot) {
-        const right = new THREE.Vector3(1, 0, 0).applyQuaternion(this.camera.quaternion)
-        const down = new THREE.Vector3(0, -1, 0).applyQuaternion(this.camera.quaternion)
-        muzzle.addScaledVector(right, 0.55).addScaledVector(down, 0.55)
-      }
-      const endpoint = new THREE.Vector3(to.x, to.y + 1.5, to.z)
-      const start = muzzle.toArray()
-      const finish = endpoint.toArray()
-      const core = beam(start, finish, 0.09, new THREE.MeshBasicMaterial({
+      const laserColor = beamData.hostile ? 0xffa35c : 0xff243d
+
+      // Never invent local muzzle offsets here. These endpoints come from
+      // the authoritative world event, including real hit/miss geometry.
+      const start = [from.x, from.y, from.z]
+      const finish = [to.x, to.y, to.z]
+      const core = beam(start, finish, 0.085, new THREE.MeshBasicMaterial({
         color: laserColor, transparent: true, opacity: fraction,
         blending: THREE.AdditiveBlending, depthWrite: false,
       }))
-      const glow = beam(start, finish, 0.22, new THREE.MeshBasicMaterial({
-        color: laserColor, transparent: true, opacity: fraction * 0.25,
+      const glow = beam(start, finish, 0.21, new THREE.MeshBasicMaterial({
+        color: laserColor, transparent: true, opacity: fraction * 0.32,
         blending: THREE.AdditiveBlending, depthWrite: false,
       }))
       this.beamGroup.add(core, glow)
+
+      if (beamData.hit) {
+        const flash = new THREE.Mesh(
+          new THREE.SphereGeometry(0.50, 12, 8),
+          new THREE.MeshBasicMaterial({
+            color: beamData.hostile ? 0xffd08d : 0xffe2d8,
+            transparent: true, opacity: fraction * 0.92,
+            blending: THREE.AdditiveBlending, depthWrite: false,
+          }),
+        )
+        flash.position.set(to.x, to.y, to.z)
+        flash.scale.setScalar(0.65 + (1 - fraction) * 1.6)
+        this.beamGroup.add(flash)
+      }
     }
   }
 
