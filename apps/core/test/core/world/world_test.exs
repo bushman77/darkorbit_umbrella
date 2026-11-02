@@ -83,6 +83,20 @@ defmodule Core.WorldTest do
     assert last.route_waypoints == []
   end
 
+  test "NPC patrol destinations remain independent of player-only course fields", context do
+    assert {:ok, session} = World.connect(:npc_path_guard, context.stats, context.world_options)
+    assert {:ok, _course} =
+             World.plot_course(session.id, [%{x: 1_096, y: 1_000}], context.world_options)
+
+    # NPC movement and arrival execute in the same tick path as player movement.
+    # This regression covers an NPC reaching a patrol destination without
+    # attempting to read route_waypoints or navigation_mode from its struct.
+    for _tick <- 1..120 do
+      assert {:ok, snapshot} = World.tick("1-1", context.world_options)
+      assert is_list(snapshot.entities)
+    end
+  end
+
   test "manual steering and stop cancel autopilot without client positions", context do
     assert {:ok, session} = World.connect(:route_override, context.stats, context.world_options)
     opts = context.world_options

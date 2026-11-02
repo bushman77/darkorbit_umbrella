@@ -101,3 +101,6 @@ mix precommit
 Then manually verify chart opening/closing from all display modes, route
 engagement and multi-waypoint progression, stopping, manual overrides,
 invalid coordinates, disconnects, and multiplayer visibility.
+
+The shared tick loop still advances NPCs through their existing single-target
+movement path; only player entities participate in queued waypoint transitions.

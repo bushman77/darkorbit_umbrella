@@ -746,9 +746,13 @@ defmodule Core.World.MapServer do
 
   defp advance_entity(%{destination: nil} = entity, _distance), do: entity
 
-  defp advance_entity(entity, distance) do
+  # Only player ships carry a plotted route. NPC patrols retain the original
+  # one-destination movement behavior and never read player-only struct fields.
+  defp advance_entity(%Entity{} = entity, distance) do
     case Movement.advance(entity.position, entity.destination, distance) do
-      {position, :moving} -> %{entity | position: position}
+      {position, :moving} ->
+        %{entity | position: position}
+
       {position, :arrived} ->
         case entity.route_waypoints do
           [next | remaining] ->
@@ -757,6 +761,13 @@ defmodule Core.World.MapServer do
           [] ->
             %{entity | position: position, destination: nil, navigation_mode: :manual}
         end
+    end
+  end
+
+  defp advance_entity(entity, distance) do
+    case Movement.advance(entity.position, entity.destination, distance) do
+      {position, :moving} -> %{entity | position: position}
+      {position, :arrived} -> %{entity | position: position, destination: nil}
     end
   end
 

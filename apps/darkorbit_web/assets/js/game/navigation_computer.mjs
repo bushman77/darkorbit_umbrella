@@ -188,12 +188,17 @@ export class NavigationComputer {
     this.root.querySelector("#nav-clear").disabled = this.pending || !this.draft.length
     const list = this.root.querySelector("#nav-waypoints")
     list.replaceChildren()
-    for (const [index, waypoint] of this.draft.entries()) {
+    const routeList = this.draft.length ? this.draft :
+      running ? [self.destination, ...self.routeWaypoints] : []
+    for (const [index, waypoint] of routeList.entries()) {
       const item = document.createElement("li")
-      item.textContent = `WP ${index + 1}   ${coordText(waypoint)}`
+      const prefix = this.draft.length ? "WP" : "ACTIVE"
+      item.textContent = `${prefix} ${index + 1}   ${coordText(waypoint)}`
       list.appendChild(item)
     }
-    this.root.querySelector("#nav-waypoint-count").textContent = `${this.draft.length} / ${MAX_WAYPOINTS}`
+    this.root.querySelector("#nav-waypoint-count").textContent =
+      this.draft.length ? `${this.draft.length} / ${MAX_WAYPOINTS} DRAFT` :
+      running ? `${routeList.length} ACTIVE` : `0 / ${MAX_WAYPOINTS}`
   }
 
   draw(time, force = false) {
