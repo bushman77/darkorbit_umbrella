@@ -106,8 +106,19 @@ defmodule Core.WorldTest do
     assert {:error, :session_not_found} = World.solar_set_course(-1, "mars", opts)
     assert {:error, :invalid_solar_destination} =
       World.solar_set_course(session.id, "sun", opts)
-    assert {:ok, %{destination_id: "mars", status: :traveling}} =
+    assert {:ok, %{destination_id: "mars", status: :traveling,
+                    propulsion_mode: :interplanetary_cruise}} =
       World.solar_set_course(session.id, "mars", opts)
+    assert {:error, :interplanetary_cruise_active} =
+      World.move(session.id, %{x: 1_200, y: 1_200}, opts)
+    assert {:error, :interplanetary_cruise_active} =
+      World.plot_course(session.id, [%{x: 1_250, y: 1_250}], opts)
+    assert {:error, :interplanetary_cruise_active} =
+      World.flight_controls(session.id, %{}, opts)
+    assert {:error, :interplanetary_cruise_active} =
+      World.fire_ready_weapon(session.id, opts)
+    assert {:error, :interplanetary_cruise_active} =
+      World.attack(session.id, opts)
     assert {:error, :already_traveling} =
       World.solar_set_course(session.id, "pluto", opts)
     assert :ok = SolarNavigation.tick(@solar_navigation_server)
@@ -117,8 +128,11 @@ defmodule Core.WorldTest do
     assert Enum.find(sector.entities, &(&1.id == 981)).position ==
       %{x: 1_000.0, y: 1_000.0}
     refute Enum.any?(sector.entities, &(&1.kind == :npc))
-    assert {:ok, %{status: :idle, location_id: "earth"}} =
+    assert {:ok, %{status: :idle, location_id: "earth",
+                    propulsion_mode: :conventional}} =
       World.solar_cancel_course(session.id, opts)
+    assert {:ok, %{destination: %{x: 1_200.0, y: 1_200.0}}} =
+      World.move(session.id, %{x: 1_200, y: 1_200}, opts)
   end
 
   test "server-owned course advances ordered waypoints and finishes", context do

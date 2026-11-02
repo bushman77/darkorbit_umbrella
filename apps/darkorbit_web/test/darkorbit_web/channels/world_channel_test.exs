@@ -92,6 +92,10 @@ defmodule DarkorbitWeb.WorldChannelTest do
     assert player_id == account.id
     ref = push(socket, "solar_set_course", %{"body_id" => "pluto"})
     assert_reply ref, :error, %{reason: "already_traveling"}
+    ref = push(socket, "flight_controls", %{"throttle" => 1.0})
+    assert_reply ref, :error, %{reason: "interplanetary_cruise_active"}
+    ref = push(socket, "laser_attack", %{})
+    assert_reply ref, :error, %{reason: "interplanetary_cruise_active"}
     ref = push(socket, "solar_cancel_course", %{"player_id" => -1})
     assert_reply ref, :ok, %{navigation: %{location_id: "earth",
       status: :idle, destination_id: nil}}

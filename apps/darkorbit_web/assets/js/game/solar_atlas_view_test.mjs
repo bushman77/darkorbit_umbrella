@@ -110,7 +110,8 @@ test("SOL course controls use authenticated callbacks without touching sector ro
   const {nodes,root}=fakeRoot()
   const added=["#nav-solar-state","#nav-solar-location","#nav-solar-route",
     "#nav-solar-progress","#nav-solar-progress-label",
-    "#nav-solar-engage","#nav-solar-cancel"]
+    "#nav-solar-drive","#nav-solar-speed","#nav-solar-distance-travelled",
+    "#nav-solar-eta","#nav-solar-engage","#nav-solar-cancel"]
   for(const id of added)nodes.set(id,{textContent:"",disabled:false,value:0})
   const calls=[]
   const nav=new NavigationComputer({
@@ -120,6 +121,8 @@ test("SOL course controls use authenticated callbacks without touching sector ro
     solarSetCourse:(body,done)=>{calls.push(body);done(true,{
       system_id:"sol",location_id:"earth",origin_id:"earth",status:"traveling",
       destination_id:body,progress:0,remaining_ms:12000,
+      cruise_speed_km_s:65000,travel_distance_km:1_000_000,
+      distance_travelled_km:0,
     })},
     solarCancelCourse:done=>{calls.push("abort");done(true,{
       system_id:"sol",location_id:"earth",origin_id:"earth",status:"idle",
@@ -140,6 +143,9 @@ test("SOL course controls use authenticated callbacks without touching sector ro
   assert.equal(nodes.get("#nav-solar-route").textContent,"Earth → Mars")
   nav.setSolarNavigation({...nav.solarNavigation,progress:.5,remaining_ms:6000})
   assert.equal(nodes.get("#nav-solar-progress").value,50)
+  assert.equal(nodes.get("#nav-solar-drive").textContent,"SUBLIGHT INTERPLANETARY CRUISE")
+  assert.equal(nodes.get("#nav-solar-speed").textContent,"65,000 game km/s")
+  assert.equal(nodes.get("#nav-solar-progress-label").textContent,"50% · 0:06 remaining")
   nav.cancelSolarCourse()
   assert.deepEqual(calls,["mars","abort"])
   assert.equal(nav.solarNavigation.status,"idle")

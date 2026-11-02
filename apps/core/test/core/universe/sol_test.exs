@@ -13,10 +13,32 @@ defmodule Core.Universe.SolTest do
     assert :error == Sol.fetch(nil)
   end
 
-  test "demo travel durations are positive and bounded, not ship combat XY" do
-    assert Sol.travel_duration_ms("earth", "mars") >= 12_000
-    assert Sol.travel_duration_ms("earth", "pluto") <= 120_000
-    assert Sol.travel_duration_ms("earth", "pluto") >
-             Sol.travel_duration_ms("earth", "mars")
+  test "sublight cruise covers compressed game distances in several real minutes" do
+    assert Sol.cruise_speed_km_s() < Sol.light_speed_km_s()
+    assert Sol.cruise_speed_km_s() > 0
+    mars = Sol.travel_duration_ms("earth", "mars")
+    jupiter = Sol.travel_duration_ms("earth", "jupiter")
+    neptune = Sol.travel_duration_ms("earth", "neptune")
+    pluto = Sol.travel_duration_ms("earth", "pluto")
+    assert mars in 180_000..360_000
+    assert jupiter in 420_000..780_000
+    assert neptune > jupiter
+    assert pluto >= 1_200_000
+    assert pluto > mars
+    assert rem(mars, 1_000) == 0
+  end
+
+  test "gameplay SOL positions are finite and distinct from physical AU" do
+    assert {:ok, earth} = Sol.game_position_km("earth")
+    assert {:ok, mars} = Sol.game_position_km("mars")
+    assert earth.z == 0.0
+    assert Sol.game_position_km("bogus") == :error
+    assert Sol.cruise_distance_km("earth", "mars") > 0
+    middle = Sol.interpolate_game_position(earth, mars, 0.5)
+    assert_in_delta middle.x, (earth.x + mars.x) / 2, 0.0001
+    assert_in_delta middle.y, (earth.y + mars.y) / 2, 0.0001
+    assert_in_delta Sol.cruise_distance_km("earth", "mars"),
+      Sol.cruise_speed_km_s() * Sol.travel_duration_ms("earth", "mars") / 1000,
+      Sol.cruise_speed_km_s()
   end
 end
