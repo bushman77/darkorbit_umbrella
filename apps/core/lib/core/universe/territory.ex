@@ -252,5 +252,8 @@ defmodule Core.Universe.Territory do
   defp add(a, b), do: %{x: a.x + b.x, y: a.y + b.y, z: a.z + b.z}
   defp scale(a, t), do: %{x: a.x * t, y: a.y * t, z: a.z * t}
   defp dot(a, b), do: a.x * b.x + a.y * b.y + a.z * b.z
-  defp distance(a, b), do: a |> subtract(b) |> then(&:math.sqrt(dot(&1, &1)))
+  defp distance(a, b) do
+    delta = subtract(a, b)
+    :math.sqrt(dot(delta, delta))
+  end
 end
