@@ -472,3 +472,35 @@ be treated as a star-map *foundation*, not interplanetary travel.
 
 Astronomical references: NASA Solar System Facts, Planet Sizes and
 Locations, and Pluto (NASA Science).
+
+## Peaceful SOL travel vs local sector combat (2026-11-02)
+
+Production `MapServer.init/1` starts with `npcs: %{}`: a player entering
+the solar Atlas is no longer attacked by an automatically spawned Dart.
+A Dart still exists in `Core.NPC.Catalog` for future encounter events.
+The only materialization path is server-side
+`Core.World.start_encounter/2` (not a Phoenix player channel
+command). Encounter destruction ends the event, with no production
+auto-respawn. Legacy deterministic combat tests opt into old spawning
+behavior through test-only options.
+
+`Core.Universe.Navigation` runs under `Core.World.Supervisor` as
+a separate GenServer. New player records start at Earth. Authenticated
+`solar_set_course` and `solar_cancel_course` calls are routed through
+session-validated `Core.World` APIs. The server owns state, tick-based
+progress, and arrival; `Core.Universe.Sol` supplies allowed destinations.
+The Phoenix channel joins with a `solar_navigation` snapshot and
+receives `solar_navigation_updated` events. Clients ignore updates
+whose player ID does not match the connected pilot.
+
+No interplanetary travel operation modifies `Core.World.Entity.position`,
+`MapDefinition`, combat ranges, movement velocities or Sector 1-1
+waypoints. The progress marker is a schematic route interpolated
+between the *illustrative* Atlas locations, not physical ship
+coordinates. Durations are intentionally game-scaled (12–120s)
+based on the difference between mean orbital radii, and do not
+claim accurate planetary phases, intercept distance, or thrust.
+Aborts remain in the departure region; arrivals change only the
+current SOL location ID. Full physical region transfers, actual
+orbital geometry and persistent region ownership must be built
+before connecting the Atlas to simulated space.

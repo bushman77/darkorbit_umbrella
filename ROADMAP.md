@@ -318,3 +318,20 @@ validation remain deferred.
 - [ ] Build EncounterDirector using system region, ship contacts,
   navigation progress and factions; do not tie encounters to a
   fixed NPC respawn coordinate.
+
+### Peaceful login and SOL journey V1 (2026-11-02)
+
+- [x] Remove default Sector 1-1 NPC materialization; no hostile Dart on login.
+- [x] Retain Dart NPC definition and its authoritative 3D combat behavior
+  behind explicit server-only `start_encounter/1`.
+- [x] Production encounters do not automatically respawn after destruction.
+- [x] Introduce independent, supervised SOL navigation state per pilot.
+- [x] Authenticated planet destination selection, system travel progress,
+  arrival, abort and server-owned transit broadcasts.
+- [x] Atlas display of SOL region, voyage plan and schematic progress marker.
+- [ ] Persist current SOL region across full game server restarts (database).
+- [ ] Associate the player's physical ship with orbital region/planet sectors.
+- [ ] Implement proper navigation transitions into and out of local flight.
+- [ ] Dynamic encounters with NPC-v-NPC skirmishes, contact discovery,
+  faction relationships, piracy and neutral traffic.
+- [ ] Ephemeris/orbital positions, credible transfer paths, game-time scaling.

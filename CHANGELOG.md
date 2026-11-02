@@ -395,3 +395,22 @@
   tactical route planner.
 - Add regression coverage for initial open, idempotent repeated opens,
   closing the Atlas, and restoring cockpit readiness.
+
+### Peaceful entry and SOL navigation prototype (2026-11-02)
+
+- Disabled startup Dart spawning in the production authoritative map:
+  Sector 1-1 now begins free of encounters and players cannot take NPC
+  damage while examining the initial Atlas.
+- Added explicit server-only NPC encounter spawn/clear APIs. Production
+  encounters now end on destruction rather than restarting endlessly.
+- Added `Core.Universe.Sol` and independent supervised
+  `Core.Universe.Navigation`, keyed by authenticated player identity,
+  with bounded game-scaled interplanetary transit, arrival and abort.
+- Integrated SOL course requests and broadcasts in the Phoenix
+  WorldChannel; no client-controlled player ID or AU-to-sector coordinate
+  translation is accepted.
+- Added Solar Atlas route controls and schematic moving transit marker,
+  separate from the still-functional Sector 1-1 XYZ tactical planner.
+- Updated combat fixtures and added Elixir and JS tests for peaceful
+  entry, explicit encounters, Sol catalogue, route validation, progress,
+  abort and server/client state isolation.

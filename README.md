@@ -289,3 +289,46 @@ This is a **starting-screen change**, not yet a full encounter-system
 change: the Sector 1-1 simulation and its single Dart NPC still run
 behind the map. Building an event-driven encounter director and an
 appropriate noncombat staging area remains future work.
+
+### Peaceful Atlas login and SOL transit V1 (2026-11-02)
+
+The game now **starts with zero NPCs** in Sector 1-1, not a Dart
+already attacking the player behind the Atlas. The default
+`Core.World.MapServer` retains NPC definitions but does not materialize
+them at startup. Only a server-authorized
+`Core.World.start_encounter("dart")` command creates the Dart.
+It is **not exposed as a client channel event**, and production
+encounters no longer use the old three-second automatic respawn.
+Legacy combat tests can opt in to initial NPCs and automatic respawn
+explicitly.
+
+The Solar System Atlas now has a working **Set course** action:
+select Mercury through Pluto (not the Sun), press Set course, and
+watch the server-owned transit status and schematic travel marker.
+A simulated voyage has a bounded game-time duration (~12–120 seconds);
+arrival updates the pilot's current solar destination from Earth to
+the selected body. Aborting returns to the departure *region*
+because V1 does not yet model free flight between orbital positions.
+The state machine is supervised and session-authorized. A pilot's
+destination cannot be spoofed by another player's client input.
+
+The new modules in `apps/core` are:
+- `Core.Universe.Sol` — authoritative Sol destination catalog
+  (body identity, type and mean heliocentric AU);
+- `Core.Universe.Navigation` — supervised independent system
+  travel FSM with Earth as initial location, travel progress, abort,
+  arrival and world event delivery.
+
+`DarkorbitWeb.WorldChannel` provides `solar_set_course` and
+`solar_cancel_course` intentions on the authenticated connection,
+and sends the initial `solar_navigation` snapshot with every
+successful join. SOL progress broadcasts are per player; the client
+uses only the matching authenticated player id.
+
+**Current scope:** No orbital simulation, moving planets, real
+intercept/trajectory calculation, physical movement of the cockpit
+ship between planetary sectors, persistence across full server
+restarts, or random encounter generation. Sector 1-1 still remains
+a separate local tactical flight view. We can connect it later to
+the server's solar navigation region as new planetary local sectors
+and an encounter director are built.
