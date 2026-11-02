@@ -279,3 +279,33 @@ interpolation between 100 ms ticks; the renderer never writes back to
 server positions or attitude. The rate overlay reports authoritative
 pitch/yaw/roll magnitudes in degrees/sec. Cruise and Newtonian thrust
 remain unchanged.
+
+## Thrust alignment after steering
+
+**Cruise Flight:** `Core.World.FlightDynamics` now stores a signed
+`cruise_speed` instead of slowly rotating the old world-space velocity
+vector toward a new destination. On every simulation tick, the server
+uses the current ship attitude to calculate:
+
+`velocity = forward(attitude) * cruise_speed`
+
+The signed forward speed still accelerates and decelerates smoothly.
+This means turning with zero throttle and then pressing `=` travels
+in the new nose direction; turning while moving also steers travel
+with the nose instead of leaving old-direction drift. It is deliberately
+assisted flight (a full body-frame velocity constraint).
+
+**Newtonian Flight:** Existing XYZ velocity remains independent of
+heading, but new signed thrust is added in the direction the nose
+currently points. A ship drifting north, then facing east and thrusting,
+will move northeast until it cancels the old northward momentum.
+
+Switching Newtonian -> Cruise retains the part of the current velocity
+that points along the nose and removes sideways drift; switching
+Cruise -> Newtonian preserves the current world-space velocity. Atlas
+autopilot remains a separate route-following mode.
+
+The server includes unit tests for turning after acceleration, turning
+during acceleration, pitching into vertical travel, reverse throttle
+and the mode transition. Client world-to-scene basis tests ensure the
+cockpit points along the same direction the server accelerates.

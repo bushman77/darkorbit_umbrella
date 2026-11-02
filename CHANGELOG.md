@@ -283,3 +283,15 @@
 - Added turn-rate telemetry on cockpit and stereoscopic HUD.
 - Added browser interpolation tests, server angular-dynamics tests and
   socket telemetry assertion; full Mix suite must run on the laptop.
+
+### SBS branch — thrust follows current nose (2026-11-01)
+
+- Corrected Cruise Flight to integrate a signed forward-speed scalar and
+  project world-space velocity along the ship's live heading every tick,
+  removing unintended prior-course drift after turning.
+- Newtonian thrust continues to use the live nose while retaining
+  momentum; switching to Cruise converts forward momentum and removes
+  sideways drift.
+- Added regression tests for turn-before-thrust, turn-while-moving,
+  pitched climbs, negative throttle, and Cruise/Newtonian transitions.
+- Reset cruise speed on legacy movement, atlas route and navigation stop.

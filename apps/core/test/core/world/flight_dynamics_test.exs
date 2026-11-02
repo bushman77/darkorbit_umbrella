@@ -113,6 +113,32 @@ defmodule Core.World.FlightDynamicsTest do
     assert moved.cruise_speed < 40
   end
 
+  test "reversed throttle after turning travels behind the current nose" do
+    map = MapDefinition.starting_map()
+    facing_east = %{ship() | attitude: %{yaw: :math.pi() / 2, pitch: 0.0, roll: 0.0}}
+    {:ok, reverse} = FlightDynamics.controls(facing_east, %{throttle: -1.0}, 0)
+    backwards = FlightDynamics.step(reverse, map, 0.1, 1)
+
+    assert backwards.velocity.x < 0
+    assert_in_delta backwards.velocity.y, 0.0, 1.0e-8
+    assert backwards.position.x < facing_east.position.x
+  end
+
+  test "Newtonian thrust follows nose but retains existing sideways inertia" do
+    map = MapDefinition.starting_map()
+    drifting_north = %{ship() | flight_mode: :newtonian,
+      attitude: %{yaw: :math.pi() / 2, pitch: 0.0, roll: 0.0},
+      velocity: %{x: 0.0, y: -40.0, z: 0.0}}
+    {:ok, thrust} =
+      FlightDynamics.controls(drifting_north, %{mode: "newtonian", throttle: 1.0}, 0)
+    after_thrust = FlightDynamics.step(thrust, map, 0.1, 1)
+
+    assert after_thrust.velocity.x > 0
+    assert_in_delta after_thrust.velocity.y, -40.0, 1.0e-8
+    assert after_thrust.position.x > drifting_north.position.x
+    assert after_thrust.position.y < drifting_north.position.y
+  end
+
   test "Newtonian motion persists at zero throttle while rotation changes heading" do
     map = MapDefinition.starting_map()
     {:ok, started} = FlightDynamics.controls(ship(), %{throttle: 1.0, mode: "newtonian"}, 0)

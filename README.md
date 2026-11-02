@@ -147,3 +147,11 @@ turn; pressing the opposite key brakes then reverses rotation. Actual
 angular motion is integrated by the Elixir world server. The cockpit
 renders interpolated attitude between updates for fluid 3D/SBS motion.
 See the tuning table in [SBS flight notes](docs/sbs-3d.md).
+
+### Heading-aligned Cruise Flight
+
+In Cruise mode, the ship moves in the direction its **nose currently
+faces**. Turning then accelerating does not reuse the original spawn
+heading, and turning while moving redirects cruise travel. In
+Newtonian mode, the ship retains momentum while newly applied thrust
+follows its live heading. See [thrust alignment notes](docs/sbs-3d.md).

@@ -56,3 +56,28 @@ test("camera basis keeps descending pitch valid beyond straight down", () => {
        afterVertical.forward.y * afterVertical.up.y +
        afterVertical.forward.z * afterVertical.up.z, 0)
 })
+
+test("rendered nose matches authoritative world-space thrust at all cardinal headings", () => {
+  // The Elixir world uses X east, Y south, Z up. toScene maps world Y to
+  // Three.js Z, so positive yaw should turn both thrust and camera east.
+  const rad = deg => deg * Math.PI / 180
+  const cases = [
+    {yaw: 0, pitch: 0},
+    {yaw: rad(90), pitch: 0},
+    {yaw: rad(180), pitch: 0},
+    {yaw: rad(-90), pitch: 0},
+    {yaw: rad(37), pitch: rad(25)},
+    {yaw: rad(-130), pitch: rad(-42)},
+  ]
+  for (const {yaw, pitch} of cases) {
+    const view = flightBasis({yaw, pitch, roll: 0})
+    const serverForward = {
+      x: Math.sin(yaw) * Math.cos(pitch),
+      y: -Math.cos(yaw) * Math.cos(pitch),
+      z: Math.sin(pitch),
+    }
+    near(view.forward.x, serverForward.x)
+    near(view.forward.z, serverForward.y)
+    near(view.forward.y, serverForward.z)
+  }
+})
