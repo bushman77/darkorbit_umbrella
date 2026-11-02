@@ -32,7 +32,7 @@ export const combatKeyIntent = event => {
   if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return null
 
   if (event.code === "Escape") return {type: "disengage"}
-  if (event.code === "Space") return {type: "rocket_unavailable"}
+  if (event.code === "Space") return {type: "manual_laser"}
 
   const slot = hotbarSlotForCode(event.code)
   return slot ? {type: "activate_slot", slot} : null

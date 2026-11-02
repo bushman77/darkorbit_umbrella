@@ -42,10 +42,13 @@ test("Ctrl toggles once from either physical key and ignores held repeats or cho
   assert.equal(combatKeyIntent({code: "ControlRight", ctrlKey: true, shiftKey: true}), null)
 })
 
-test("combat keys reserve Space and ignore modifiers and editable controls", () => {
+test("Space fires ready laser and ignores modifiers and editable controls", () => {
   const target = selector => ({matches: query => query.includes(selector)})
 
-  assert.deepEqual(combatKeyIntent({code: "Space"}), {type: "rocket_unavailable"})
+  assert.deepEqual(combatKeyIntent({code: "Space"}), {type: "manual_laser"})
+  assert.equal(combatKeyIntent({code: "Space", repeat: true}), null)
+  assert.equal(combatKeyIntent({code: "Space", ctrlKey: true}), null)
+  assert.equal(combatKeyIntent({code: "Space", shiftKey: true}), null)
   assert.deepEqual(combatKeyIntent({code: "Escape"}), {type: "disengage"})
   assert.deepEqual(combatKeyIntent({code: "Digit0"}), {type: "activate_slot", slot: 10})
   assert.equal(combatKeyIntent({code: "Digit1", repeat: true}), null)

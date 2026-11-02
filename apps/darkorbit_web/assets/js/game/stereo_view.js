@@ -253,17 +253,30 @@ export class StereoSpaceView {
       if (beamData.expiresAt <= time) continue
       const from = toScene(beamData.from)
       const to = toScene(beamData.to)
-      const geo = new THREE.BufferGeometry().setFromPoints([
-        new THREE.Vector3(from.x, from.y + 1.5, from.z),
-        new THREE.Vector3(to.x, to.y + 1.5, to.z),
-      ])
-      const fraction = clamp((beamData.expiresAt - time) / Math.max(1, beamData.expiresAt - beamData.startedAt), 0, 1)
-      const beam = new THREE.Line(geo, new THREE.LineBasicMaterial({
-        color: beamData.hostile ? 0xff9f63 : 0x56dbf8,
-        opacity: fraction,
-        transparent: true,
+      const fraction = clamp((beamData.expiresAt - time) /
+        Math.max(1, beamData.expiresAt - beamData.startedAt), 0, 1)
+      const laserColor = beamData.hostile ? 0xffa35c : 0xff193d
+      // Offset the cockpit muzzle a little below/right of the sight line so
+      // a player looking straight down the ray can actually see a red streak.
+      const ownShot = beamData.shooterId === client.selfId
+      const muzzle = new THREE.Vector3(from.x, from.y + 1.5, from.z)
+      if (ownShot) {
+        const right = new THREE.Vector3(1, 0, 0).applyQuaternion(this.camera.quaternion)
+        const down = new THREE.Vector3(0, -1, 0).applyQuaternion(this.camera.quaternion)
+        muzzle.addScaledVector(right, 0.55).addScaledVector(down, 0.55)
+      }
+      const endpoint = new THREE.Vector3(to.x, to.y + 1.5, to.z)
+      const start = muzzle.toArray()
+      const finish = endpoint.toArray()
+      const core = beam(start, finish, 0.09, new THREE.MeshBasicMaterial({
+        color: laserColor, transparent: true, opacity: fraction,
+        blending: THREE.AdditiveBlending, depthWrite: false,
       }))
-      this.beamGroup.add(beam)
+      const glow = beam(start, finish, 0.22, new THREE.MeshBasicMaterial({
+        color: laserColor, transparent: true, opacity: fraction * 0.25,
+        blending: THREE.AdditiveBlending, depthWrite: false,
+      }))
+      this.beamGroup.add(core, glow)
     }
   }
 

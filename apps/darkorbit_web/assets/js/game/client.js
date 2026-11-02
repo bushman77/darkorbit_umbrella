@@ -18,6 +18,7 @@ import {StereoSpaceView} from "./stereo_view.js"
 import {NavigationComputer} from "./navigation_computer.mjs"
 import {FlightControls} from "./flight_controls.mjs"
 import {smoothAttitude} from "./attitude_interpolation.mjs"
+import {SpaceLaserTrigger} from "./space_laser_trigger.mjs"
 import {nextFlightMode, validFlightMode} from "./display_modes.mjs"
 
 const clamp = (value, minimum, maximum) => Math.min(Math.max(value, minimum), maximum)
@@ -83,9 +84,15 @@ class SpaceClient {
     })
     window.addEventListener("keydown", event => this.flightControls.keyDown(event))
     window.addEventListener("keyup", event => this.flightControls.keyUp(event))
-    window.addEventListener("blur", () => this.flightControls.release())
+    window.addEventListener("blur", () => {
+      this.flightControls.release()
+      this.spaceLaser?.release()
+    })
     document.addEventListener("visibilitychange", () => {
-      if (document.hidden) this.flightControls.release()
+      if (document.hidden) {
+        this.flightControls.release()
+        this.spaceLaser?.release()
+      }
     })
     this.navComputer = new NavigationComputer({
       root: this.root.querySelector("#navigation-computer"),
@@ -98,6 +105,7 @@ class SpaceClient {
       onOpen: () => {
         this.navigation?.cancel()
         this.flightControls.release({silent: true})
+        this.spaceLaser?.release()
       },
       onClose: () => this.canvas.focus({preventScroll: true}),
     }).start()
@@ -123,6 +131,17 @@ class SpaceClient {
     this.root.querySelector("#combat-target-nearest")?.addEventListener("click", () => this.selectNearestTarget())
     this.root.querySelector("#combat-clear-target")?.addEventListener("click", () => this.disengageCombat())
     this.root.querySelector("#combat-fire")?.addEventListener("click", () => this.toggleLaserFire())
+    this.spaceLaser = new SpaceLaserTrigger({
+      active: () => !this.navComputer?.isOpen &&
+        this.channel?.state === "joined" &&
+        this.entities.get(this.selfId)?.status !== "destroyed",
+      worldTick: () => this.worldTick,
+      nextAttackTick: () => Number(this.entities.get(this.selfId)?.nextAttackTick) || 0,
+      fire: done => this.fireReadyWeapon(done),
+    })
+    window.addEventListener("keyup", event => {
+      if (event.code === "Space") this.spaceLaser.release()
+    })
     for (const slot of this.root.querySelectorAll("[data-hotbar-slot]")) {
       slot.addEventListener("click", () => this.activateHotbarSlot(Number(slot.dataset.hotbarSlot)))
     }
@@ -393,9 +412,7 @@ class SpaceClient {
     if (intent.type === "toggle_laser") this.toggleLaserFire()
     if (intent.type === "disengage") this.disengageCombat()
     if (intent.type === "activate_slot") this.activateHotbarSlot(intent.slot)
-    if (intent.type === "rocket_unavailable") {
-      this.setCombatMessage("Rocket action unavailable. Space is reserved for future single-shot rockets.")
-    }
+    if (intent.type === "manual_laser") this.spaceLaser.press()
   }
 
   selectNearestTarget() {
@@ -439,6 +456,30 @@ class SpaceClient {
       .receive("ok", engagement => this.combatEngaged(engagement))
       .receive("error", response => this.setCombatMessage(this.attackError(response.reason)))
       .receive("timeout", () => this.setCombatMessage("Engagement command timed out."))
+  }
+
+  fireReadyWeapon(done) {
+    if (this.channel?.state !== "joined" || !this.selfId) {
+      done(false, "disconnected")
+      return
+    }
+
+    this.channel
+      .push("fire_ready_weapon", {}, 3000)
+      .receive("ok", shot => {
+        const own = this.entities.get(this.selfId)
+        if (own) own.nextAttackTick = shot.next_attack_tick
+        this.worldTick = Math.max(this.worldTick, Number(shot.tick) || 0)
+        done(true)
+      })
+      .receive("error", response => {
+        this.setCombatMessage(this.attackError(response.reason))
+        done(false, response.reason)
+      })
+      .receive("timeout", () => {
+        this.setCombatMessage("Manual laser command timed out.")
+        done(false, "timeout")
+      })
   }
 
   toggleLaserFire() {
@@ -535,24 +576,31 @@ class SpaceClient {
   laserFired(attack) {
     const attacker = this.entities.get(entityKey(attack.attacker_id))
     const target = this.entities.get(entityKey(attack.target_id))
-    if (target) applyAuthoritativeDamage(target, attack.target)
+    if (target && attack.hit !== false && attack.target) {
+      applyAuthoritativeDamage(target, attack.target)
+    }
     if (attacker) attacker.nextAttackTick = attack.next_attack_tick
     this.worldTick = Math.max(this.worldTick, Number(attack.tick) || 0)
 
     const startedAt = performance.now()
-    if (attacker && target) {
+    const beamFrom = attack.from || attacker?.render
+    const beamTo = attack.to || target?.render
+    if (beamFrom && beamTo) {
       this.beams.push({
-        from: {...attacker.render},
-        to: {...target.render},
-        hostile: attacker.kind === "npc",
+        from: {...beamFrom},
+        to: {...beamTo},
+        hostile: attacker?.kind === "npc",
+        shooterId: entityKey(attack.attacker_id),
+        manual: Boolean(attack.from && attack.to),
         startedAt,
-        expiresAt: startedAt + 230,
+        expiresAt: startedAt + 260,
       })
     }
 
     if (entityKey(attack.attacker_id) === this.selfId) {
       this.setCombatMessage(
-        `${number(attack.shield_damage)} shield · ${number(attack.hull_damage)} hull damage`
+        attack.hit === false ? "Laser fired · no impact" :
+          `${number(attack.shield_damage)} shield · ${number(attack.hull_damage)} hull damage`
       )
     }
 
@@ -598,6 +646,7 @@ class SpaceClient {
     this.lastFrame = time
     this.interpolate(deltaSeconds)
     this.flightControls?.heartbeat(time)
+    this.spaceLaser?.update(time)
     this.draw(time)
     this.minimap?.draw(time)
     this.navComputer?.draw(time)
