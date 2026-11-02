@@ -131,7 +131,7 @@ defmodule Core.WorldTest do
     assert {:ok, %{status: :idle, location_id: "earth",
                     propulsion_mode: :conventional}} =
       World.solar_cancel_course(session.id, opts)
-    assert {:ok, %{destination: %{x: 1_200.0, y: 1_200.0}}} =
+    assert {:ok, %{destination: %{x: 1_200, y: 1_200}}} =
       World.move(session.id, %{x: 1_200, y: 1_200}, opts)
   end
 

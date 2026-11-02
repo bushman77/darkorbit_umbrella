@@ -430,6 +430,7 @@ class SpaceClient {
   }
 
   sendDestination(destination) {
+    if (this.inSystemCruise()) return false
     if (!validDestination(destination, this.boundaries)) return false
     if (!this.channel || !this.selfId || this.channel.state !== "joined") {
       this.showError("Navigation is unavailable while the sector relay reconnects.")
@@ -456,6 +457,7 @@ class SpaceClient {
   }
 
   selectTargetAtPointer(pointer) {
+    if (this.inSystemCruise()) return false
     const rect = this.canvas.getBoundingClientRect()
     const targetId = this.stereoView?.selectNpc(pointer, rect)
     if (!targetId) return false
@@ -494,6 +496,7 @@ class SpaceClient {
   }
 
   selectTarget(targetId) {
+    if (this.inSystemCruise()) return
     if (!this.channel || !this.selfId) return
 
     this.channel
@@ -564,6 +567,7 @@ class SpaceClient {
   }
 
   activateHotbarSlot(slot) {
+    if (this.inSystemCruise()) return
     if (!this.channel || !this.selfId || !Number.isInteger(slot)) return
 
     this.selectedHotbarSlot = slot
