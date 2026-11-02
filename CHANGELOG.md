@@ -208,3 +208,16 @@
 - Added Core, channel, and pure JavaScript tests. Static JS checks and partial
   geometry checks passed; full automated suites and manual browser verification
   remain outstanding.
+
+
+### SBS branch — XYZ world and sector atlas transition (2026-11-01)
+- Made XYZ authoritative on the server with bounded altitude and full 3D
+  Euclidean navigation and combat range.
+- Added backwards-compatible `position_3d`, `destination_3d`, `route_waypoints_3d`
+  and sector `volume` fields to the wire snapshots.
+- Retired Classic 2D from the gameplay view selector: Three.js single-view
+  and true dual-eye SBS are the only presented cockpit views.
+- Recast the top-down SVG chart as the sector atlas with Z altitude selection
+  and real XYZ route distances; legacy minimap is telemetry-only.
+- Added spatial visualization, height interpolation and regression tests.
+- Full suite, asset compilation and in-browser verification remain pending.

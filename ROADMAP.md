@@ -269,3 +269,17 @@ validation remain deferred.
 - [ ] Manually verify course interaction, browser layout, headsets and two-player sync.
 - [ ] Introduce genuine 3D sectors, 6DOF flight and Newtonian/cruise modes.
 - [ ] Add real hazard-aware navigation, station docking and a stereo in-world chart.
+
+
+### Genuine space volume — XYZ first, flight dynamics second
+
+- [x] Server-owned XYZ coordinates with bounded positive/negative altitude.
+- [x] Deterministic 3D waypoint movement, proximity and NPC chase range.
+- [x] Preserve legacy XY snapshot fields while adding explicit XYZ fields.
+- [x] Switch the playable modes to single-view 3D and stereo SBS only.
+- [x] Move point-and-click course planning exclusively to the SVG sector atlas.
+- [x] Add altitude input, spatial route distance and 3D client interpolation.
+- [ ] Run local Elixir, Node and browser regression suites for this migration.
+- [ ] Next milestone: manual 6DOF yaw/pitch/roll and world-frame translation.
+- [ ] After that: assisted Cruise Flight and Newtonian inertia modes.
+- [ ] Later: 3D collision, docking, hazards and server-owned static objects.

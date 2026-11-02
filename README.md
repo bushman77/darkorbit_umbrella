@@ -90,3 +90,13 @@ Click up to eight waypoints, select **Engage autopilot**, then return to
 the cockpit with **M** or **Esc**. A server-owned route advances across
 simulation ticks; **Stop / cancel course** halts it, and manual steering
 overrides the route. See [SBS navigation notes](docs/sbs-3d.md).
+
+
+### True XYZ space foundation (experimental `sbs` branch)
+The cockpit now opens directly in **3D**. **V** toggles 3D and stereo SBS,
+and **M** opens the top-down **sector atlas**. Plot XYZ waypoints by clicking
+the atlas and choosing the Z altitude, or enter all three coordinates.
+Routes are simulated and validated on the Elixir server. The old 2D gameplay
+view has been retired from the selector; the atlas is the overhead map.
+Flight physics (yaw, pitch, roll, Cruise Flight, Newtonian) are the next step.
+See [the SBS architecture notes](docs/sbs-3d.md).

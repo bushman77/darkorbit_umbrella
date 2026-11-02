@@ -124,6 +124,34 @@ defmodule DarkorbitWeb.WorldChannelTest do
     leave_and_wait(second_socket)
   end
 
+  test "socket XYZ routes are validated and preserve authoritative altitude" do
+    account = verified_player_account_fixture()
+    {:ok, socket} = authenticated_socket(account)
+    {:ok, _reply, socket} = subscribe_and_join(socket, WorldChannel, "world:1-1")
+
+    ref = push(socket, "plot_course", %{"waypoints" => [
+      %{"x" => 1_000.0, "y" => 1_000.0, "z" => 96.0}
+    ]})
+    assert_reply ref, :ok, %{entity: %{destination_3d: %{z: 96.0}, navigation_mode: :autopilot}}
+
+    assert {:ok, step} = World.tick()
+    ship = Enum.find(step.entities, &(&1.id == account.id))
+    assert ship.position_3d.z > 0.0
+    assert ship.position_3d.z < 96.0
+    # XY is still available for atlas projections and older map displays.
+    assert ship.position == %{x: 1_000.0, y: 1_000.0}
+
+    ref = push(socket, "plot_course", %{"waypoints" => [
+      %{"x" => 1_000, "y" => 1_000, "z" => 3_001}
+    ]})
+    assert_reply ref, :error, %{reason: "outside_map"}
+
+    ref = push(socket, "move", %{"x" => 1_010, "y" => 1_000, "z" => 160})
+    assert_reply ref, :ok, %{entity: %{destination_3d: %{z: 160}, navigation_mode: :manual}}
+
+    leave_and_wait(socket)
+  end
+
   test "map subscribers receive tick events from the authoritative simulation" do
     account = verified_player_account_fixture()
     {:ok, socket} = authenticated_socket(account)

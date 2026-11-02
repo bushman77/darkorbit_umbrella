@@ -104,3 +104,41 @@ invalid coordinates, disconnects, and multiplayer visibility.
 
 The shared tick loop still advances NPCs through their existing single-target
 movement path; only player entities participate in queued waypoint transitions.
+
+
+## 2026-11-01: first true XYZ world volume (foundation only)
+
+The `sbs` branch now stores real `x`, `y` and `z` coordinates server-side,
+with a bounded volume from Z=-3000 to Z=+3000 around the original 20,000 x 12,000
+atlas plane. `Core.World.Movement` and Combat range use 3D Euclidean distance;
+NPC pursuit uses 3D target positions; the existing deterministic simulation
+ticks own all player position changes. Routes accept XYZ waypoints and the
+flat SVG atlas allows selecting the target altitude.
+
+The web client starts in single-view Three.js, with **V** switching between
+3D and stereoscopic SBS. Classic 2D is no longer selectable as a playable
+view. **M** opens the overhead atlas, which renders the XY projection and
+shows each waypoint's Z altitude. The old 2D canvas remains as an invisible
+input surface and its legacy drawing functions remain temporarily in source
+for safe incremental cleanup; it does not render the main game.
+
+For compatibility, current snapshots retain `position` and `destination`
+as XY-only maps, while new `position_3d`, `destination_3d`, and
+`route_waypoints_3d` fields provide full XYZ values. The sector snapshot
+also carries `volume` altitude limits. This additive contract avoids silently
+breaking old minimap and combat clients while allowing real volumetric travel.
+
+The map overview is a *navigation atlas*, not a third flight camera. Cockpit
+clicks select targets; plotted atlas routes are the way to move in this stage.
+The legacy minimap becomes read-only.
+
+**Deliberately deferred:** manual yaw/pitch/roll, rotational inertia,
+throttle/strafe/lift controls, Cruise Flight assistance, Newtonian velocity
+integration, collision/docking, and proper 3D NPC patrolling. Heading shown
+during autopilot is a camera look direction, **not yet simulated ship attitude**.
+Those systems should be added as an independent server-owned flight-dynamics
+milestone after this volume migration is verified.
+
+The decorative asteroid landmarks are visual reference objects only, not
+server-owned targets or colliders. SBS eye spacing and headsets remain
+experimental. Full `mix precommit` and browser verification are outstanding.

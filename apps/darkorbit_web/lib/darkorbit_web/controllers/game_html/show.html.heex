@@ -10,7 +10,7 @@
     id="space-viewport"
     class="absolute inset-0 size-full cursor-crosshair touch-none focus:outline-none"
     tabindex="0"
-    aria-label="Interactive sector 1-1 space viewport. Left-click an NPC to target it, or left-click and hold empty space to navigate."
+    aria-label="3D space cockpit target selection viewport. Press M for the navigation atlas."
   >
     Your browser needs Canvas 2D support to run the space client.
   </canvas>
@@ -75,14 +75,14 @@
       <div class="nav-heading">
         <div>
           <p class="nav-eyebrow">FLIGHT SYSTEMS // NAVIGATION DECK</p>
-          <h2 id="nav-title">Navigation Computer</h2>
-          <p class="nav-subtitle">Sector 1-1 · Plot a route and engage the server-authoritative helm.</p>
+          <h2 id="nav-title">Sector Atlas</h2>
+          <p class="nav-subtitle">Sector 1-1 · Top-down XY chart with independently selectable Z altitude.</p>
         </div>
         <button id="nav-close" class="nav-button nav-close" type="button" aria-label="Close navigation computer">Return to cockpit <span class="text-cyan-300">[M / Esc]</span></button>
       </div>
       <div class="nav-layout">
         <div class="nav-map-frame">
-          <div class="nav-map-caption"><span>SECTOR OVERVIEW // LIVE TELEMETRY</span><span>CLICK TO ADD WAYPOINT</span></div>
+          <div class="nav-map-caption"><span>SECTOR ATLAS // XY PROJECTION</span><span>CLICK TO ADD WAYPOINT</span></div>
           <svg id="nav-chart" viewBox="0 0 1000 600" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Sector overview map. Click to add a waypoint to a draft flight route.">
             <defs>
               <pattern id="nav-grid-pattern" x="0" y="0" width="50" height="50" patternUnits="userSpaceOnUse">
@@ -605,7 +605,7 @@
   </nav>
 
   <div id="game-controls-hint" class="pointer-events-none absolute bottom-28 left-1/2 z-10 hidden -translate-x-1/2 rounded-xl border border-slate-700/70 bg-slate-950/70 px-3 py-2 text-[0.65rem] text-slate-400 backdrop-blur xl:block">
-    Left-click hostile to target · Hold empty space to steer · Ctrl or 1 toggles laser · Esc clears
+    Click hostile to target · M opens navigation atlas · V toggles 3D/SBS · Ctrl or 1 toggles laser
   </div>
 
   <div

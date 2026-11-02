@@ -75,7 +75,12 @@ export class NavigationComputer {
       pointer.y = event.clientY
       const local = pointer.matrixTransform(matrix.inverse())
       const xy = chartWorldPoint({x: local.x, y: local.y}, this.getBoundaries())
-      const z = Number(this.root.querySelector("#nav-z").value)
+      const altitude = this.root.querySelector("#nav-z").value
+      if (altitude.trim() === "") {
+        this.note("Enter a waypoint altitude before selecting a position.")
+        return
+      }
+      const z = Number(altitude)
       this.addWaypoint(xy && {...xy, z})
     })
     return this

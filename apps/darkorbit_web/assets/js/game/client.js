@@ -93,10 +93,8 @@ class SpaceClient {
       getDestination: () => this.commandDestination,
     }).start()
     const minimapCanvas = this.root.querySelector("#cockpit-minimap-canvas")
-    const canNavigateMinimap = () =>
-      this.cockpit?.windowContentInteractive("minimap") === true &&
-      Boolean(this.selfId) &&
-      this.channel?.state === "joined"
+    // The legacy minimap is read-only telemetry. Only the full atlas plots courses.
+    const canNavigateMinimap = () => false
 
     this.minimapNavigation = new PointerNavigation({
       canvas: minimapCanvas,
