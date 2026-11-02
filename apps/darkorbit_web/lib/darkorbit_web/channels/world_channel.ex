@@ -54,6 +54,24 @@ defmodule DarkorbitWeb.WorldChannel do
     {:reply, {:error, %{reason: "invalid_course"}}, socket}
   end
 
+  def handle_in("solar_set_course", %{"body_id" => body_id}, socket)
+      when is_binary(body_id) do
+    case World.solar_set_course(socket.assigns.world_session_id, body_id) do
+      {:ok, navigation} -> {:reply, {:ok, %{navigation: navigation}}, socket}
+      {:error, reason} -> {:reply, {:error, %{reason: error_reason(reason)}}, socket}
+    end
+  end
+
+  def handle_in("solar_set_course", _payload, socket),
+    do: {:reply, {:error, %{reason: "invalid_solar_destination"}}, socket}
+
+  def handle_in("solar_cancel_course", _payload, socket) do
+    case World.solar_cancel_course(socket.assigns.world_session_id) do
+      {:ok, navigation} -> {:reply, {:ok, %{navigation: navigation}}, socket}
+      {:error, reason} -> {:reply, {:error, %{reason: error_reason(reason)}}, socket}
+    end
+  end
+
   def handle_in("stop_navigation", _payload, socket) do
     case World.stop_navigation(socket.assigns.world_session_id) do
       {:ok, entity} -> {:reply, {:ok, %{entity: entity}}, socket}
@@ -155,7 +173,8 @@ defmodule DarkorbitWeb.WorldChannel do
              :combat_engaged,
              :combat_disengaged,
              :laser_fired,
-             :entity_destroyed
+             :entity_destroyed,
+             :solar_navigation_updated
            ] do
     :ok = push(socket, Atom.to_string(event), payload)
     {:noreply, socket}
@@ -172,8 +191,8 @@ defmodule DarkorbitWeb.WorldChannel do
   end
 
   defp finish_join(socket, map_id, session, status) do
-    case World.snapshot(map_id) do
-      {:ok, snapshot} ->
+    with {:ok, snapshot} <- World.snapshot(map_id),
+         {:ok, solar_navigation} <- World.solar_snapshot(session.id) do
         player_ids =
           snapshot.entities
           |> Enum.filter(&(&1.kind == :player))
@@ -181,6 +200,7 @@ defmodule DarkorbitWeb.WorldChannel do
 
         response = %{
           map: snapshot,
+          solar_navigation: solar_navigation,
           player: status,
           hotbar: World.action_hotbar(),
           pilots: World.player_summaries(player_ids)

@@ -6,6 +6,7 @@ defmodule Core.World do
   state and advance exclusively on simulation ticks.
   """
 
+  alias Core.Universe.Navigation, as: SolarNavigation
   alias Core.World.MapDefinition
   alias Core.World.MapServer
   alias Core.World.Session
@@ -25,6 +26,33 @@ defmodule Core.World do
     else
       {:error, :map_not_found}
     end
+  end
+
+  @doc "Server-owned SOL travel status. Session identity is verified internally."
+  @spec solar_snapshot(pos_integer(), keyword()) :: {:ok, map()} | {:error, term()}
+  def solar_snapshot(session_id, opts \\ []) do
+    with {:ok, session} <- fetch_session(Keyword.get(opts, :sessions, SessionManager), session_id) do
+      SolarNavigation.snapshot(solar_navigation_server(opts), session.player_id)
+    end
+  end
+
+  @spec solar_set_course(pos_integer(), term(), keyword()) :: {:ok, map()} | {:error, term()}
+  def solar_set_course(session_id, destination_id, opts \\ []) do
+    with {:ok, session} <- fetch_session(Keyword.get(opts, :sessions, SessionManager), session_id) do
+      SolarNavigation.set_course(solar_navigation_server(opts), session.player_id, destination_id)
+    end
+  end
+
+  @spec solar_cancel_course(pos_integer(), keyword()) :: {:ok, map()} | {:error, term()}
+  def solar_cancel_course(session_id, opts \\ []) do
+    with {:ok, session} <- fetch_session(Keyword.get(opts, :sessions, SessionManager), session_id) do
+      SolarNavigation.cancel_course(solar_navigation_server(opts), session.player_id)
+    end
+  end
+
+  defp solar_navigation_server(opts) do
+    Keyword.get(opts, :solar_navigation_server,
+      Module.concat(Keyword.get(opts, :sessions, SessionManager), SolarNavigation))
   end
 
   @doc "Server-authorized encounter entry; not a client command."

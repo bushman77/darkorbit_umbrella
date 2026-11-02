@@ -27,6 +27,9 @@ defmodule Darkorbit.World do
   defdelegate move(session_id, destination), to: Simulation
   defdelegate plot_course(session_id, waypoints), to: Simulation
   defdelegate stop_navigation(session_id), to: Simulation
+  defdelegate solar_snapshot(session_id), to: Simulation
+  defdelegate solar_set_course(session_id, destination_id), to: Simulation
+  defdelegate solar_cancel_course(session_id), to: Simulation
   defdelegate flight_controls(session_id, input), to: Simulation
   defdelegate select_target(session_id, target_id), to: Simulation
   defdelegate clear_target(session_id), to: Simulation

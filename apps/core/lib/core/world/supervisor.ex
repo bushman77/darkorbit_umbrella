@@ -8,6 +8,7 @@ defmodule Core.World.Supervisor do
   alias Core.World.NoopEventSink
   alias Core.World.SessionManager
   alias Core.NPC.Catalog, as: NPCCatalog
+  alias Core.Universe.Navigation, as: SolarNavigation
 
   def start_link(opts) do
     Supervisor.start_link(__MODULE__, opts, name: Keyword.get(opts, :name, __MODULE__))
@@ -24,6 +25,8 @@ defmodule Core.World.Supervisor do
     npc_catalog = Keyword.get(opts, :npc_catalog, NPCCatalog.all())
     initial_npcs? = Keyword.get(opts, :initial_npcs?, false)
     auto_respawn? = Keyword.get(opts, :auto_respawn?, false)
+    solar_navigation_server =
+      Keyword.get(opts, :solar_navigation_server, Module.concat(sessions, SolarNavigation))
 
     map_children =
       Enum.map(maps, fn definition ->
@@ -41,7 +44,9 @@ defmodule Core.World.Supervisor do
     children =
       [
         {Registry, keys: :unique, name: registry},
-        {SessionManager, name: sessions}
+        {SessionManager, name: sessions},
+        {SolarNavigation, name: solar_navigation_server, event_sink: event_sink,
+         auto_tick: auto_tick?, tick_ms: 1_000}
       ] ++ map_children
 
     # Sessions and map entities form one ephemeral consistency boundary. If a
