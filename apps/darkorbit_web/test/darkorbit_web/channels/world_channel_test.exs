@@ -16,14 +16,14 @@ defmodule DarkorbitWeb.WorldChannelTest do
     Process.flag(:trap_exit, true)
     Darkorbit.DataCase.setup_sandbox(tags)
     clear_world()
-    :ok = World.clear_encounters()
+    :ok = Core.World.clear_encounters()
     on_exit(fn ->
       clear_world()
-      :ok = World.clear_encounters()
+      :ok = Core.World.clear_encounters()
     end)
     # Only tagged combat tests request a server-owned fixture encounter.
     if Map.get(tags, :encounter) do
-      assert {:ok, _npc} = World.start_encounter("dart")
+      assert {:ok, _npc} = Core.World.start_encounter("dart")
     end
     :ok
   end
