@@ -3,7 +3,8 @@ defmodule Core.Universe.Navigation do
   Authoritative, supervised system-level travel state.
 
   This first slice supports a single system (SOL), one destination per pilot,
-  Earth as a new pilot's start location, and bounded demo transit durations.
+  Earth as a new pilot's start location, and real-time sublight interplanetary
+  cruise through compressed game-scale system coordinates.
   Navigation and map-space combat are separate: no AU values are mapped into
   Sector 1-1 coordinates and travel alone never creates an NPC encounter.
 
@@ -84,9 +85,17 @@ defmodule Core.Universe.Navigation do
 
       true ->
         duration_ms = Sol.travel_duration_ms(voyage.location_id, destination_id)
+        distance_km = Sol.cruise_distance_km(voyage.location_id, destination_id)
+        {:ok, destination_position} = Sol.game_position_km(destination_id)
         updated = %{voyage |
           origin_id: voyage.location_id,
           destination_id: destination_id,
+          origin_position_km: voyage.position_km,
+          destination_position_km: destination_position,
+          propulsion_mode: :interplanetary_cruise,
+          cruise_speed_km_s: Sol.cruise_speed_km_s(),
+          travel_distance_km: distance_km,
+          distance_travelled_km: 0.0,
           status: :traveling,
           elapsed_ms: 0,
           duration_ms: duration_ms
@@ -131,9 +140,15 @@ defmodule Core.Universe.Navigation do
   end
 
   defp idle(location_id) do
+    {:ok, position_km} = Sol.game_position_km(location_id)
     %{system_id: @system_id, status: :idle, location_id: location_id,
-      origin_id: location_id, destination_id: nil, elapsed_ms: 0,
-      duration_ms: 0}
+      origin_id: location_id, destination_id: nil,
+      propulsion_mode: :conventional,
+      origin_position_km: position_km, position_km: position_km,
+      destination_position_km: nil,
+      cruise_speed_km_s: 0.0,
+      travel_distance_km: 0.0, distance_travelled_km: 0.0,
+      elapsed_ms: 0, duration_ms: 0}
   end
 
   defp put_voyage(state, player_id, voyage),
@@ -143,11 +158,17 @@ defmodule Core.Universe.Navigation do
     Enum.reduce(state.voyages, state, fn
       {player_id, %{status: :traveling} = voyage}, current ->
         elapsed = min(voyage.duration_ms, voyage.elapsed_ms + state.tick_ms)
+        distance_covered = min(voyage.travel_distance_km,
+          voyage.cruise_speed_km_s * elapsed / 1_000.0)
         updated =
-          if elapsed >= voyage.duration_ms do
+          if distance_covered >= voyage.travel_distance_km do
             idle(voyage.destination_id)
           else
-            %{voyage | elapsed_ms: elapsed}
+            fraction = distance_covered / voyage.travel_distance_km
+            %{voyage | elapsed_ms: elapsed,
+              distance_travelled_km: distance_covered,
+              position_km: Sol.interpolate_game_position(
+                voyage.origin_position_km, voyage.destination_position_km, fraction)}
           end
         current = put_voyage(current, player_id, updated)
         broadcast(current, player_id, updated)
@@ -158,17 +179,16 @@ defmodule Core.Universe.Navigation do
   end
 
   defp public(voyage) do
-    progress =
-      if voyage.status == :traveling and voyage.duration_ms > 0 do
-        voyage.elapsed_ms / voyage.duration_ms
+    {progress, remaining_ms} =
+      if voyage.status == :traveling and voyage.travel_distance_km > 0 do
+        remaining_km = max(0.0, voyage.travel_distance_km - voyage.distance_travelled_km)
+        {voyage.distance_travelled_km / voyage.travel_distance_km,
+         ceil(remaining_km / voyage.cruise_speed_km_s) * 1_000}
       else
-        0.0
+        {0.0, 0}
       end
 
-    Map.merge(voyage, %{
-      progress: progress,
-      remaining_ms: max(0, voyage.duration_ms - voyage.elapsed_ms)
-    })
+    Map.merge(voyage, %{progress: progress, remaining_ms: remaining_ms})
   end
 
   defp broadcast(state, player_id, voyage) do
