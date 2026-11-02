@@ -105,3 +105,66 @@ test("starting in Solar System Atlas blocks cockpit controls until explicitly cl
   nav.close()
   assert.equal(closes,1)
 })
+
+test("SOL course controls use authenticated callbacks without touching sector route",()=>{
+  const {nodes,root}=fakeRoot()
+  const added=["#nav-solar-state","#nav-solar-location","#nav-solar-route",
+    "#nav-solar-progress","#nav-solar-progress-label",
+    "#nav-solar-engage","#nav-solar-cancel"]
+  for(const id of added)nodes.set(id,{textContent:"",disabled:false,value:0})
+  const calls=[]
+  const nav=new NavigationComputer({
+    root,getEntities:()=>new Map(),getSelfId:()=>42,
+    getBoundaries:()=>({width:20000,height:12000}),
+    isConnected:()=>true,engage:()=>{},halt:()=>{},
+    solarSetCourse:(body,done)=>{calls.push(body);done(true,{
+      system_id:"sol",location_id:"earth",origin_id:"earth",status:"traveling",
+      destination_id:body,progress:0,remaining_ms:12000,
+    })},
+    solarCancelCourse:done=>{calls.push("abort");done(true,{
+      system_id:"sol",location_id:"earth",origin_id:"earth",status:"idle",
+      destination_id:null,progress:0,remaining_ms:0,
+    })},
+  })
+  nav.isOpen=true
+  nav.renderSolarView=()=>nav.renderSolarNavigation()
+  nav.draft=[{x:1400,y:1200,z:100}]
+  nav.setSolarNavigation({system_id:"sol",location_id:"earth",
+    status:"idle",progress:0})
+  assert.equal(nodes.get("#nav-solar-location").textContent,"Earth")
+  nav.selectSolarBody("mars")
+  nav.engageSolarCourse()
+  assert.deepEqual(calls,["mars"])
+  assert.equal(nav.solarNavigation.status,"traveling")
+  assert.equal(nodes.get("#nav-solar-engage").disabled,true)
+  assert.equal(nodes.get("#nav-solar-route").textContent,"Earth → Mars")
+  nav.setSolarNavigation({...nav.solarNavigation,progress:.5,remaining_ms:6000})
+  assert.equal(nodes.get("#nav-solar-progress").value,50)
+  nav.cancelSolarCourse()
+  assert.deepEqual(calls,["mars","abort"])
+  assert.equal(nav.solarNavigation.status,"idle")
+  assert.deepEqual(nav.draft,[{x:1400,y:1200,z:100}])
+})
+
+test("Sun cannot be a travel destination and missing relay disables SOL commands",()=>{
+  const {nodes,root}=fakeRoot()
+  for(const id of ["#nav-solar-state","#nav-solar-location","#nav-solar-route",
+    "#nav-solar-progress","#nav-solar-progress-label","#nav-solar-engage",
+    "#nav-solar-cancel"])nodes.set(id,{textContent:"",disabled:false,value:0})
+  const requests=[]
+  const nav=new NavigationComputer({
+    root,getEntities:()=>new Map(),getSelfId:()=>42,
+    getBoundaries:()=>({width:20000,height:12000}),
+    isConnected:()=>false,engage:()=>{},halt:()=>{},
+    solarSetCourse:id=>requests.push(id),
+  })
+  nav.isOpen=true
+  nav.renderSolarView=()=>nav.renderSolarNavigation()
+  nav.setSolarNavigation({system_id:"sol",status:"idle",location_id:"earth"})
+  nav.selectSolarBody("mars")
+  nav.engageSolarCourse()
+  assert.equal(nodes.get("#nav-solar-engage").disabled,true)
+  nav.selectSolarBody("sun")
+  nav.engageSolarCourse()
+  assert.deepEqual(requests,[])
+})

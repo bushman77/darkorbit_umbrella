@@ -70,3 +70,24 @@ test("clickable body list and selected details include Pluto's classification",(
     assert.equal(list[0].attrs["aria-pressed"],"false")
   })
 })
+
+test("server-owned transit draws travel vector and interpolated pilot marker",()=>{
+  withDocument(()=>{
+    const layer=fakeNode("g")
+    const svg={querySelector:q=>q==="#nav-solar-content"?layer:null}
+    drawSolarAtlas(svg,{selectedId:"mars",navigation:{
+      system_id:"sol",status:"traveling",location_id:"earth",
+      destination_id:"mars",progress:.5,
+    }})
+    const path=layer.children.find(child=>
+      child.type==="line"&&child.attrs["stroke"]==="#67f4ee")
+    assert.ok(path)
+    const marker=layer.children.find(child=>
+      child.type==="circle"&&child.attrs["stroke"]==="#a8ffff")
+    assert.ok(marker)
+    const earth=solarLayout().find(b=>b.id==="earth")
+    const mars=solarLayout().find(b=>b.id==="mars")
+    assert.ok(Math.abs(Number(marker.attrs.cx)-(earth.x+mars.x)/2)<.0001)
+    assert.ok(Math.abs(Number(marker.attrs.cy)-(earth.y+mars.y)/2)<.0001)
+  })
+})

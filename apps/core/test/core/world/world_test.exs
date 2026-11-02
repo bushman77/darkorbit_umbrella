@@ -2,6 +2,7 @@ defmodule Core.WorldTest do
   use ExUnit.Case
 
   alias Core.Ships.Stats
+  alias Core.Universe.Navigation, as: SolarNavigation
   alias Core.World
   alias Core.World.MapDefinition
   alias Core.World.Orientation
@@ -24,7 +25,7 @@ defmodule Core.WorldTest do
        tick_ms: 100,
        auto_tick: false,
        initial_npcs?: !Map.get(tags, :no_initial_encounter, false),
-       auto_respawn?: true,
+       auto_respawn?: !Map.get(tags, :no_auto_respawn, false),
        event_sink: event_sink}
     )
 
@@ -76,6 +77,44 @@ defmodule Core.WorldTest do
     assert {:error, :encounter_active} = World.start_encounter("dart", context.world_options)
     assert {:ok, snapshot} = World.snapshot("1-1", context.world_options)
     assert Enum.count(snapshot.entities, &(&1.kind == :npc)) == 1
+  end
+
+  @tag no_initial_encounter: true, no_auto_respawn: true
+  test "completed encounter stays cleared; Dart never respawns on its own", context do
+    assert {:ok, _npc} = World.start_encounter("dart", context.world_options)
+    stats = %{context.stats | damage: 1_200}
+    assert {:ok, session} = World.connect(:peaceful_hunter, stats, context.world_options)
+    assert {:ok, _selection} =
+      World.select_target(session.id, "npc:1-1:dart:1", context.world_options)
+    assert {:ok, %{destroyed: true, respawn_tick: nil}} =
+      World.attack(session.id, context.world_options)
+    for _ <- 1..40, do: assert({:ok, _} = World.tick("1-1", context.world_options))
+    assert {:ok, snapshot} = World.snapshot("1-1", context.world_options)
+    refute Enum.any?(snapshot.entities, &(&1.kind == :npc))
+  end
+
+  @tag no_initial_encounter: true
+  test "SOL routes are session authorized, Earth-based and independent of combat XY", context do
+    assert {:ok, session} = World.connect(981, context.stats, context.world_options)
+    opts = context.world_options
+    assert {:ok, %{location_id: "earth", status: :idle}} =
+      World.solar_snapshot(session.id, opts)
+    assert {:error, :session_not_found} = World.solar_set_course(-1, "mars", opts)
+    assert {:error, :invalid_solar_destination} =
+      World.solar_set_course(session.id, "sun", opts)
+    assert {:ok, %{destination_id: "mars", status: :traveling}} =
+      World.solar_set_course(session.id, "mars", opts)
+    assert {:error, :already_traveling} =
+      World.solar_set_course(session.id, "pluto", opts)
+    assert :ok = SolarNavigation.tick(Core.WorldTest.Sessions.SolarNavigation)
+    assert {:ok, %{progress: progress}} = World.solar_snapshot(session.id, opts)
+    assert progress > 0
+    assert {:ok, sector} = World.snapshot("1-1", opts)
+    assert Enum.find(sector.entities, &(&1.id == 981)).position ==
+      %{x: 1_000.0, y: 1_000.0}
+    refute Enum.any?(sector.entities, &(&1.kind == :npc))
+    assert {:ok, %{status: :idle, location_id: "earth"}} =
+      World.solar_cancel_course(session.id, opts)
   end
 
   test "server-owned course advances ordered waypoints and finishes", context do

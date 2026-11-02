@@ -57,6 +57,9 @@ defmodule DarkorbitWeb.WorldChannelTest do
     assert response.player.stats.damage == 40
     assert Enum.any?(response.map.entities, &(&1.id == account.id))
     assert Enum.count(response.map.entities, &(&1.kind == :npc)) == 0
+    assert response.solar_navigation.system_id == "sol"
+    assert response.solar_navigation.location_id == "earth"
+    assert response.solar_navigation.status == :idle
     assert Enum.map(response.hotbar, & &1.key) == ~w(1 2 3 4 5 6 7 8 9 0)
 
     assert %{
@@ -69,6 +72,32 @@ defmodule DarkorbitWeb.WorldChannelTest do
     assert Enum.all?(Enum.drop(response.hotbar, 1), &is_nil(&1.action))
 
     leave_and_wait(joined_socket)
+  end
+
+  test "SOL interplanetary courses are server-authorized and no NPC spawns on travel" do
+    account = verified_player_account_fixture()
+    {:ok, socket} = authenticated_socket(account)
+    {:ok, response, socket} =
+      subscribe_and_join(socket, WorldChannel, "world:1-1")
+    assert response.solar_navigation.location_id == "earth"
+
+    ref = push(socket, "solar_set_course", %{"body_id" => "sun"})
+    assert_reply ref, :error, %{reason: "invalid_solar_destination"}
+    ref = push(socket, "solar_set_course", %{"body_id" => "mars",
+      "player_id" => -1, "progress" => 1.0, "location_id" => "pluto"})
+    assert_reply ref, :ok, %{navigation: %{origin_id: "earth",
+      destination_id: "mars", status: :traveling}}
+    assert_push "solar_navigation_updated", %{player_id: player_id,
+      navigation: %{destination_id: "mars"}}
+    assert player_id == account.id
+    ref = push(socket, "solar_set_course", %{"body_id" => "pluto"})
+    assert_reply ref, :error, %{reason: "already_traveling"}
+    ref = push(socket, "solar_cancel_course", %{"player_id" => -1})
+    assert_reply ref, :ok, %{navigation: %{location_id: "earth",
+      status: :idle, destination_id: nil}}
+    assert {:ok, snapshot} = World.snapshot()
+    refute Enum.any?(snapshot.entities, &(&1.kind == :npc))
+    leave_and_wait(socket)
   end
 
   test "movement commands are authorized to the channel session and validated by Core.World" do
