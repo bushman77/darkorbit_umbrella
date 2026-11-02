@@ -17,6 +17,7 @@ defmodule Core.Universe.Navigation do
   use GenServer
 
   alias Core.Universe.Sol
+  alias Core.Universe.Territory
   alias Core.World.EventSink
 
   @tick_ms 1_000
@@ -188,7 +189,18 @@ defmodule Core.Universe.Navigation do
         {0.0, 0}
       end
 
-    Map.merge(voyage, %{progress: progress, remaining_ms: remaining_ms})
+    # Read-only server-computed jurisdiction. Do not expose patrol pressure,
+    # private reputations or interception rolls in the navigation snapshot.
+    {:ok, jurisdiction} = Territory.classify(voyage.position_km)
+
+    Map.merge(voyage, %{
+      progress: progress,
+      remaining_ms: remaining_ms,
+      territory: %{
+        status: jurisdiction.status,
+        faction_ids: Enum.map(jurisdiction.claims, & &1.faction_id)
+      }
+    })
   end
 
   defp broadcast(state, player_id, voyage) do
