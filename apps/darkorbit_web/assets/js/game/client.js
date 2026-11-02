@@ -21,6 +21,7 @@ import {FlightControls} from "./flight_controls.mjs"
 import {smoothAttitude} from "./attitude_interpolation.mjs"
 import {smoothOrientation, orientationTelemetry} from "./orientation_interpolation.mjs"
 import {SpaceLaserTrigger} from "./space_laser_trigger.mjs"
+import {applyLaserBurstDamage, visualLaserRays} from "./laser_burst.mjs"
 import {nextFlightMode, validFlightMode} from "./display_modes.mjs"
 
 const clamp = (value, minimum, maximum) => Math.min(Math.max(value, minimum), maximum)
@@ -592,35 +593,14 @@ class SpaceClient {
   laserFired(attack) {
     const attacker = this.entities.get(entityKey(attack.attacker_id))
     const target = this.entities.get(entityKey(attack.target_id))
-    // Twin manual rays can strike two separate NPCs. Apply every
-    // authoritative server result; never derive damage in the client.
-    if (Array.isArray(attack.hits)) {
-      for (const impact of attack.hits) {
-        const victim = this.entities.get(entityKey(impact.target_id))
-        if (victim && impact.target) applyAuthoritativeDamage(victim, impact.target)
-      }
-    } else if (target && attack.hit !== false && attack.target) {
-      applyAuthoritativeDamage(target, attack.target)
-    }
+    applyLaserBurstDamage(this.entities, attack)
     if (attacker) attacker.nextAttackTick = attack.next_attack_tick
     this.worldTick = Math.max(this.worldTick, Number(attack.tick) || 0)
 
     const startedAt = performance.now()
-    const legacyBeam = {
-      from: attack.from || attacker?.render,
-      to: attack.to || target?.render,
-      hit: attack.hit !== false && Boolean(target),
-    }
-    const rays = Array.isArray(attack.beams) && attack.beams.length > 0
-      ? attack.beams
-      : [legacyBeam]
-    for (const ray of rays) {
-      if (!ray.from || !ray.to) continue
+    for (const ray of visualLaserRays(attack, attacker, target)) {
       this.beams.push({
-        from: {...ray.from},
-        to: {...ray.to},
-        hit: Boolean(ray.hit),
-        side: ray.side || null,
+        ...ray,
         hostile: attacker?.kind === "npc",
         shooterId: entityKey(attack.attacker_id),
         startedAt,

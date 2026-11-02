@@ -466,7 +466,7 @@ defmodule Core.World.MapServer do
       hit: impacts != [],
       beams: visual_beams,
       from: position_3d(attacker.position),
-      to: hd(List.wrap(Enum.map(shots, & &1.to))),
+      to: hd(shots).to,
       damage: Enum.sum(Enum.map(impacts, & &1.damage)),
       shield_damage: Enum.sum(Enum.map(impacts, & &1.shield_damage)),
       hull_damage: Enum.sum(Enum.map(impacts, & &1.hull_damage)),

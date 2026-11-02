@@ -18,8 +18,9 @@ defmodule Core.Combat.LineOfFire do
   @wing_half_span_scene 1.75
   @wings [:left, :right]
 
-  # NPC octahedrons render at radius ~2 world-scaled scene units (0.06),
-  # so 40 world units gives a little aiming tolerance from the cockpit.
+  # NPC octahedrons are rendered with radius 2 scene units (33 world
+  # units); a 40-unit collision sphere allows both wing rays to hit an
+  # enemy centered on the crosshair without invisible target snapping.
   @npc_radius 40.0
 
   @doc "Absolute server-owned XYZ positions for symmetric, rotating gun mounts."
