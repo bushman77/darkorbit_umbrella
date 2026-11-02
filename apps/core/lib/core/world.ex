@@ -55,6 +55,14 @@ defmodule Core.World do
       Module.concat(Keyword.get(opts, :sessions, SessionManager), SolarNavigation))
   end
 
+  @doc "Server-only encounter cleanup, not a client command."
+  @spec clear_encounters(keyword()) :: :ok | {:error, term()}
+  def clear_encounters(opts \\ []) do
+    registry = Keyword.get(opts, :registry, Core.World.Registry)
+    map_id = Keyword.get(opts, :map_id, MapDefinition.starting_map_id())
+    MapServer.clear_encounters(registry, map_id)
+  end
+
   @doc "Server-authorized encounter entry; not a client command."
   @spec start_encounter(String.t(), keyword()) :: {:ok, map()} | {:error, term()}
   def start_encounter(npc_type_id, opts \\ []) when is_binary(npc_type_id) do

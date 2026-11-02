@@ -128,6 +128,11 @@ defmodule Core.World.MapServer do
   @spec tick(atom(), String.t()) :: {:ok, map()} | {:error, :map_not_found}
   def tick(registry, map_id), do: call_map(registry, map_id, :tick)
 
+  @doc "Administrative encounter cleanup. Never a client command."
+  @spec clear_encounters(atom(), String.t()) :: :ok | {:error, term()}
+  def clear_encounters(registry, map_id),
+    do: call_map(registry, map_id, :clear_encounters)
+
   @doc "Create a server-authorized encounter. Not exposed directly to clients."
   @spec start_encounter(atom(), String.t(), String.t()) :: {:ok, map()} | {:error, term()}
   def start_encounter(registry, map_id, npc_type_id) when is_binary(npc_type_id),
@@ -214,6 +219,23 @@ defmodule Core.World.MapServer do
         broadcast(new_state, :entity_joined, payload)
         {:reply, {:ok, payload}, new_state}
     end
+  end
+
+  def handle_call(:clear_encounters, _from, state) do
+    entities =
+      Map.new(state.entities, fn {id, entity} ->
+        if Map.has_key?(state.npcs, entity.target_id) or
+           Map.has_key?(state.npcs, entity.engaged_target_id) do
+          {id, %{entity | target_id: nil, engaged_target_id: nil}}
+        else
+          {id, entity}
+        end
+      end)
+    cleared = %{state | npcs: %{}, respawns: %{}, entities: entities}
+    Enum.each(state.npcs, fn {_id, npc} ->
+      broadcast(cleared, :entity_left, public_entity(npc))
+    end)
+    {:reply, :ok, cleared}
   end
 
   def handle_call({:start_encounter, npc_type_id}, _from, state) do

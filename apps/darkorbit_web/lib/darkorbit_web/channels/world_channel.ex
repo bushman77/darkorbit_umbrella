@@ -210,7 +210,7 @@ defmodule DarkorbitWeb.WorldChannel do
          socket
          |> assign(:map_id, map_id)
          |> assign(:world_session_id, session.id)}
-
+    else
       {:error, reason} ->
         _result = World.disconnect(session.id)
         {:error, %{reason: error_reason(reason)}}
