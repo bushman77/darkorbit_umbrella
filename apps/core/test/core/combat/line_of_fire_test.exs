@@ -33,6 +33,28 @@ defmodule Core.Combat.LineOfFireTest do
     assert right.to.x > enemy.position.x
   end
 
+  test "a distant centered ship can be struck at 3,200 world units" do
+    enemy = npc("distant", 1_000.0, 4_200.0)
+    facing_south = Orientation.from_angles(%{yaw: :math.pi(), pitch: 0.0, roll: 0.0})
+
+    beams = LineOfFire.trace_pair(@origin, facing_south, [enemy], 3_600.0)
+    assert Enum.map(beams, & &1.side) == [:left, :right]
+    assert Enum.all?(beams, & &1.hit)
+    assert Enum.all?(beams, &(&1.target_id == "distant"))
+    assert Enum.all?(beams, &(&1.to.y < enemy.position.y))
+  end
+
+  test "ships outside the extended range are not damaged" do
+    enemy = npc("beyond", 1_000.0, 4_800.0)
+    facing_south = Orientation.from_angles(%{yaw: :math.pi(), pitch: 0.0, roll: 0.0})
+    beams = LineOfFire.trace_pair(@origin, facing_south, [enemy], 3_600.0)
+
+    assert length(beams) == 2
+    refute Enum.any?(beams, & &1.hit)
+    assert Enum.all?(beams, &(is_nil(&1.target_id)))
+    assert Enum.all?(beams, &(&1.to.y < enemy.position.y))
+  end
+
   test "each wing can independently hit a different target" do
     left_npc = npc("left", 1_000.0 - 1.75 / 0.06, 700.0, 1.3 / 0.06)
     right_npc = npc("right", 1_000.0 + 1.75 / 0.06, 700.0, 1.3 / 0.06)

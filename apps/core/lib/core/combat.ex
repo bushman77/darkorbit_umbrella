@@ -7,7 +7,9 @@ defmodule Core.Combat do
   values.
   """
 
-  @player_attack_range 720.0
+  # 3,600 world units = 216 scene units at WORLD_SCALE 0.06.
+  # This is server-enforced for both manual twin beams and locked autofire.
+  @player_attack_range 3_600.0
   @type damage_result :: %{
           requested_damage: non_neg_integer(),
           shield_damage: non_neg_integer(),

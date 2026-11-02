@@ -264,7 +264,7 @@ defmodule Core.WorldTest do
              )
   end
 
-  test "authorizes targeting and enforces range and cooldown", context do
+  test "authorizes targeting with extended laser range and enforces cooldown", context do
     assert {:ok, session} = World.connect(:combat_pilot, context.stats, context.world_options)
     assert {:ok, snapshot} = World.snapshot("1-1", context.world_options)
     near_npc = Enum.find(snapshot.entities, &(&1.id == "npc:1-1:rift_skirmisher:1"))
@@ -283,7 +283,12 @@ defmodule Core.WorldTest do
              World.select_target(session.id, far_npc.id, context.world_options)
 
     assert far_id == far_npc.id
-    assert {:error, :out_of_range} = World.attack(session.id, context.world_options)
+    # Previously this target was beyond the 720-unit limit. The upgraded
+    # emitter reaches it, but selecting a target must not consume a shot.
+    assert {:ok, selection_snapshot} = World.snapshot("1-1", context.world_options)
+    pilot = Enum.find(selection_snapshot.entities, &(&1.id == :combat_pilot))
+    assert pilot.attack_range == 3_600.0
+    assert pilot.next_attack_tick == 0
 
     assert {:ok, %{target: %{id: near_id}}} =
              World.select_target(session.id, near_npc.id, context.world_options)
@@ -300,6 +305,40 @@ defmodule Core.WorldTest do
     damaged = Enum.find(after_attack.entities, &(&1.id == near_npc.id))
     assert damaged.shields == 376
     assert damaged.hull == 784
+  end
+
+  test "laser hit actually reduces shields at 3,200 game units", context do
+    opts = context.world_options
+    assert {:ok, session} = World.connect(:long_range_pilot, context.stats, opts)
+    npc_id = "npc:1-1:rift_skirmisher:1"
+
+    # Place the existing NPC down the ship's +Y axis, within the new
+    # weapon range but well beyond the previous 720-unit cutoff.
+    [{pid, _}] = Registry.lookup(@registry, {:world_map, "1-1"})
+    :sys.replace_state(pid, fn state ->
+      npc = Map.fetch!(state.npcs, npc_id)
+      at_distance = %{npc | position: %Core.World.Position{x: 1_000.0, y: 4_200.0}}
+      pilot = Map.fetch!(state.entities, :long_range_pilot)
+      pilot = %{pilot | orientation: Orientation.from_angles(%{
+        yaw: :math.pi(), pitch: 0.0, roll: 0.0
+      })}
+      %{state | npcs: Map.put(state.npcs, npc_id, at_distance),
+                entities: Map.put(state.entities, :long_range_pilot, pilot)}
+    end)
+
+    assert {:ok, result} = World.fire_ready_weapon(session.id, opts)
+    assert result.hit
+    assert result.target_id == npc_id
+    assert length(result.beams) == 2
+    assert Enum.all?(result.beams, & &1.hit)
+    assert result.shield_damage > 0
+    assert result.hull_damage > 0
+    assert result.next_attack_tick > result.tick
+
+    assert {:ok, state} = World.snapshot("1-1", opts)
+    damaged = Enum.find(state.entities, &(&1.id == npc_id))
+    assert damaged.shields == 400 - result.shield_damage
+    assert damaged.hull == 800 - result.hull_damage
   end
 
   test "manual Space laser works without target lock and consumes cooldown on a miss", context do

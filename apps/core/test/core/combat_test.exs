@@ -4,6 +4,20 @@ defmodule Core.CombatTest do
   alias Core.Combat
   alias Core.World.Position
 
+  test "the equipped player laser has a real 3,600-unit combat range" do
+    weapon = Combat.player_weapon(%{damage: 40}, 100)
+    assert weapon.attack_range == 3_600.0
+    assert weapon.damage == 40
+
+    attacker = combatant(:player, :pilot, {1_000, 1_000},
+      attack_range: weapon.attack_range, damage: weapon.damage)
+    in_range = combatant(:npc, "in", {4_200, 1_000})
+    out_of_range = combatant(:npc, "out", {4_700, 1_000})
+    assert :ok == Combat.validate_attack(attacker, in_range, 0)
+    assert {:error, :out_of_range} =
+             Combat.validate_attack(attacker, out_of_range, 0)
+  end
+
   test "validates PvE targets, range, and deterministic cooldown ticks" do
     player = combatant(:player, :pilot, {0, 0}, damage: 40, next_attack_tick: 8)
     npc = combatant(:npc, "npc:one", {300, 400})
