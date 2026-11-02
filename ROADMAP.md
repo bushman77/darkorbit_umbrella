@@ -283,3 +283,7 @@ validation remain deferred.
 - [ ] Next milestone: manual 6DOF yaw/pitch/roll and world-frame translation.
 - [ ] After that: assisted Cruise Flight and Newtonian inertia modes.
 - [ ] Later: 3D collision, docking, hazards and server-owned static objects.
+
+- [x] Remove Classic 2D flight renderer and retain overhead mapping only in the atlas.
+- [x] Regression-test the two allowed cockpit display modes.
+- [ ] Verify refreshed compiled assets and live 3D/SBS switching in Firefox.

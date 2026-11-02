@@ -221,3 +221,11 @@
   and real XYZ route distances; legacy minimap is telemetry-only.
 - Added spatial visualization, height interpolation and regression tests.
 - Full suite, asset compilation and in-browser verification remain pending.
+
+### SBS branch — remove legacy 2D flight fallback (2026-11-01)
+
+- Removed the legacy 2D ship/grid/stars rendering pipeline from `client.js`.
+- Replaced its Canvas 2D input canvas with a transparent DOM pointer target.
+- Restricted `V` and the selector to 3D/SBS; added display-mode tests.
+- Missing WebGL now reports an error rather than activating an obsolete view.
+- The flat navigation atlas and 3D cockpit CanvasTexture readouts remain.

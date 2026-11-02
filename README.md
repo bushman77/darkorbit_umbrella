@@ -100,3 +100,10 @@ Routes are simulated and validated on the Elixir server. The old 2D gameplay
 view has been retired from the selector; the atlas is the overhead map.
 Flight physics (yaw, pitch, roll, Cruise Flight, Newtonian) are the next step.
 See [the SBS architecture notes](docs/sbs-3d.md).
+
+### Flight display cleanup
+
+Classic 2D is no longer an available flight view on `sbs`. The game
+requires WebGL and presents only **3D** or **Stereo SBS** (`V` toggles).
+The atlas (`M`) remains a separate top-down SVG navigation computer.
+After updating this branch, rebuild web assets and hard-refresh the browser.

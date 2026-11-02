@@ -142,3 +142,23 @@ milestone after this volume migration is verified.
 The decorative asteroid landmarks are visual reference objects only, not
 server-owned targets or colliders. SBS eye spacing and headsets remain
 experimental. Full `mix precommit` and browser verification are outstanding.
+
+## Flight view cleanup — Classic 2D renderer removed
+
+The playable flight UI now has **only** single-view 3D and stereoscopic SBS.
+The V key toggles only these two modes. M opens the separate SVG navigation
+atlas, which retains top-down XY mapping and altitude entry. The full legacy
+Canvas 2D renderer (ship sprites, grid, stars and combat effects) has been
+removed from the browser client.
+
+For combat selection, an invisible focusable DOM input surface overlays the
+visible WebGL canvas. This surface does **not** acquire a Canvas 2D context.
+If WebGL initialization fails, the browser reports that failure instead
+of automatically falling back to the old 2D game. HUD CanvasTexture rendering
+inside the 3D cockpit remains intentionally 2D *instrument graphics*, not
+a separate flight presentation.
+
+**After pulling** the change, run `mix assets.build`, restart Phoenix,
+and hard-reload Firefox (Ctrl+Shift+R) to avoid displaying a stale compiled
+JavaScript or HTML template. Run Node/Elixir tests and visually check both
+view modes; this commit was not browser-tested remotely.
