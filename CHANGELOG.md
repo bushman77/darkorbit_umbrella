@@ -295,3 +295,14 @@
 - Added regression tests for turn-before-thrust, turn-while-moving,
   pitched climbs, negative throttle, and Cruise/Newtonian transitions.
 - Reset cruise speed on legacy movement, atlas route and navigation stop.
+
+### SBS branch — Space Rogue manual red laser firing (2026-11-01)
+
+- Added Space hold-to-fire, server-authoritative nose-aimed 3D raycasts
+  against living NPCs, including misses consuming real weapon cooldown.
+- Separate red manual laser beams with glowing streaks in 3D and SBS;
+  damage and beam endpoints are replicated by authoritative events.
+- Left existing Ctrl/slot-1 automatic fire intact; added L as an original-
+  style shortcut for automatic X1 fire and T for nearest-hostile targeting.
+- Added ray collision, no-lock fire, session anti-spoofing, cooldown and
+  keyboard regressions. R weapon cycling remains deferred.

@@ -33,6 +33,8 @@ export const combatKeyIntent = event => {
 
   if (event.code === "Escape") return {type: "disengage"}
   if (event.code === "Space") return {type: "manual_laser"}
+  if (event.code === "KeyL") return {type: "toggle_laser"}
+  if (event.code === "KeyT") return {type: "target_nearest"}
 
   const slot = hotbarSlotForCode(event.code)
   return slot ? {type: "activate_slot", slot} : null

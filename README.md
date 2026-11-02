@@ -155,3 +155,21 @@ faces**. Turning then accelerating does not reuse the original spawn
 heading, and turning while moving redirects cruise travel. In
 Newtonian mode, the ship retains momentum while newly applied thrust
 follows its live heading. See [thrust alignment notes](docs/sbs-3d.md).
+
+### Space Rogue-style manual red lasers (SBS)
+
+In the 3D or stereo cockpit, **Space** fires the currently ready X1
+laser along the *ship's present nose direction*. Holding Space fires
+additional shots only when the server-owned cooldown allows them.
+Shots that miss still draw a visible bright red laser beam and consume
+the same cooldown. An enemy must actually intersect the forward laser
+ray within weapon range to take damage; merely having a target selected
+does not cause manual shots to hit.
+
+**T** acquires the nearest hostile for the targeting computer.
+**L** switches the existing X1 automatic laser engagement on/off;
+the legacy Ctrl and hotbar slot 1 remain available for the same toggle.
+Manual shots do not replace or alter the automatic laser toggle and
+do not require a selected target. **R** weapon cycling can be added
+when a second ready weapon exists. The server exclusively owns shot
+origin, heading, damage, range and cooldown.

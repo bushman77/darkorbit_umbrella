@@ -46,9 +46,13 @@ test("Space fires ready laser and ignores modifiers and editable controls", () =
   const target = selector => ({matches: query => query.includes(selector)})
 
   assert.deepEqual(combatKeyIntent({code: "Space"}), {type: "manual_laser"})
+  assert.deepEqual(combatKeyIntent({code: "KeyL"}), {type: "toggle_laser"})
+  assert.deepEqual(combatKeyIntent({code: "KeyT"}), {type: "target_nearest"})
   assert.equal(combatKeyIntent({code: "Space", repeat: true}), null)
   assert.equal(combatKeyIntent({code: "Space", ctrlKey: true}), null)
   assert.equal(combatKeyIntent({code: "Space", shiftKey: true}), null)
+  assert.equal(combatKeyIntent({code: "KeyL", repeat: true}), null)
+  assert.equal(combatKeyIntent({code: "KeyT", target: target("input")}), null)
   assert.deepEqual(combatKeyIntent({code: "Escape"}), {type: "disengage"})
   assert.deepEqual(combatKeyIntent({code: "Digit0"}), {type: "activate_slot", slot: 10})
   assert.equal(combatKeyIntent({code: "Digit1", repeat: true}), null)

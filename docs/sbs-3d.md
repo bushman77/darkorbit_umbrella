@@ -309,3 +309,28 @@ The server includes unit tests for turning after acceleration, turning
 during acceleration, pitching into vertical travel, reverse throttle
 and the mode transition. Client world-to-scene basis tests ensure the
 cockpit points along the same direction the server accelerates.
+
+## Space Rogue-style manual lasers
+
+Space now fires the ready X1 laser along the **server-authoritative
+live heading**, rather than resolving the selected target automatically.
+The server tests the forward 3D ray against living NPC collision spheres
+(40 world-unit radius, comparable to the current rendered NPC size);
+the closest intersection within the laser's range is hit. An unselected
+NPC directly ahead can be hit, while a locked target outside the sight
+line is missed. Every valid shot consumes the emitter's existing cooldown
+and broadcasts `laser_fired` with authoritative XYZ endpoints and
+`hit: true/false`. The 3D/SBS renderer draws a bright red laser with a
+soft red glow even on a miss.
+
+Holding Space can request another shot when the *server-reported*
+cooldown completes; key repeats cannot spam the channel. Losing focus,
+opening the navigation atlas or releasing Space stops held manual fire.
+Core continues to own damage and multiplayer synchronization.
+
+T is currently a nearest-hostile acquisition shortcut; L toggles the
+existing automatic laser lock (same as Ctrl or slot 1). Classic
+Space Rogue had T targeting, R ready-weapon switching and L manual/
+automatic laser mode. R is deferred until additional weapons exist.
+Automatic lock-on currently uses the existing selected-target system,
+while manual fire uses the new actual forward ray.

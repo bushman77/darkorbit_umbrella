@@ -413,6 +413,7 @@ class SpaceClient {
     if (intent.type === "disengage") this.disengageCombat()
     if (intent.type === "activate_slot") this.activateHotbarSlot(intent.slot)
     if (intent.type === "manual_laser") this.spaceLaser.press()
+    if (intent.type === "target_nearest") this.selectNearestTarget()
   }
 
   selectNearestTarget() {

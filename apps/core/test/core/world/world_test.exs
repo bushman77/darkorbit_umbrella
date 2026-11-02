@@ -301,6 +301,29 @@ defmodule Core.WorldTest do
     assert damaged.hull == 784
   end
 
+  test "manual Space laser works without target lock and consumes cooldown on a miss", context do
+    assert {:error, :session_not_found} =
+             World.fire_ready_weapon(-1, context.world_options)
+    assert {:ok, session} = World.connect(:manual_gunner, context.stats, context.world_options)
+
+    assert {:ok, shot} = World.fire_ready_weapon(session.id, context.world_options)
+    assert shot.attacker_id == :manual_gunner
+    assert shot.hit in [true, false]
+    assert shot.from == %{x: 1_000.0, y: 1_000.0, z: 0.0}
+    assert is_number(shot.to.x) and is_number(shot.to.y) and is_number(shot.to.z)
+    assert shot.next_attack_tick > shot.tick
+
+    assert_receive {"1-1", :laser_fired, %{attacker_id: :manual_gunner}}
+    assert {:error, :weapon_cooldown} =
+             World.fire_ready_weapon(session.id, context.world_options)
+
+    assert {:ok, snapshot} = World.snapshot("1-1", context.world_options)
+    pilot = Enum.find(snapshot.entities, &(&1.id == :manual_gunner))
+    assert pilot.target_id == nil
+    assert pilot.engaged_target_id == nil
+    assert pilot.next_attack_tick == shot.next_attack_tick
+  end
+
   test "selection is distinct from persistent tick-owned combat engagement", context do
     assert {:ok, session} = World.connect(:engaged_pilot, context.stats, context.world_options)
     npc_id = "npc:1-1:rift_skirmisher:1"

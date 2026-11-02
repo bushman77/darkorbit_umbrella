@@ -182,6 +182,32 @@ defmodule DarkorbitWeb.WorldChannelTest do
     leave_and_wait(second_socket)
   end
 
+  test "Space laser ignores spoofed target, ship identity and client direction" do
+    first = verified_player_account_fixture()
+    second = verified_player_account_fixture()
+    {:ok, first_socket} = authenticated_socket(first)
+    {:ok, second_socket} = authenticated_socket(second)
+    {:ok, _reply, first_socket} = subscribe_and_join(first_socket, WorldChannel, "world:1-1")
+    {:ok, _reply, second_socket} = subscribe_and_join(second_socket, WorldChannel, "world:1-1")
+
+    ref = push(first_socket, "fire_ready_weapon", %{
+      "entity_id" => second.id, "session_id" => -1,
+      "target_id" => "npc:1-1:made_up", "yaw" => 4.5,
+      "damage" => 1_000_000
+    })
+    assert_reply ref, :ok, shot
+    assert shot.attacker_id == first.id
+    assert shot.from == %{x: 1_000.0, y: 1_000.0, z: 0.0}
+    assert shot.hit in [true, false]
+    assert shot.next_attack_tick > 0
+
+    ref = push(first_socket, "fire_ready_weapon", %{})
+    assert_reply ref, :error, %{reason: "weapon_cooldown"}
+
+    leave_and_wait(first_socket)
+    leave_and_wait(second_socket)
+  end
+
   test "map subscribers receive tick events from the authoritative simulation" do
     account = verified_player_account_fixture()
     {:ok, socket} = authenticated_socket(account)
