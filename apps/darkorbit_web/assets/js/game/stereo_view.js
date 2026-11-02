@@ -3,6 +3,7 @@ import {pointerNdc, toScene, toWorld} from "./stereo_math.mjs"
 import {cockpitHudFit, HUD_GEOMETRY} from "./stereo_layout.mjs"
 import {flightBasis, degrees} from "./flight_basis.mjs"
 import {orientationTelemetry} from "./orientation_interpolation.mjs"
+import {targetRange, LASER_FEEDBACK_MS} from "./laser_feedback.mjs"
 
 // Rendering only: no Phoenix socket, no movement authority, no combat calculations.
 const clamp = (value, min, max) => Math.max(min, Math.min(value, max))
@@ -168,6 +169,7 @@ export class StereoSpaceView {
     sight.position.z = -5
     sight.renderOrder = 50
     framing.add(sight)
+    this.sight = sight
     this.camera.add(framing)
   }
 
@@ -301,11 +303,11 @@ export class StereoSpaceView {
       // the authoritative world event, including real hit/miss geometry.
       const start = [from.x, from.y, from.z]
       const finish = [to.x, to.y, to.z]
-      const core = beam(start, finish, 0.085, new THREE.MeshBasicMaterial({
+      const core = beam(start, finish, 0.13, new THREE.MeshBasicMaterial({
         color: laserColor, transparent: true, opacity: fraction,
         blending: THREE.AdditiveBlending, depthWrite: false,
       }))
-      const glow = beam(start, finish, 0.21, new THREE.MeshBasicMaterial({
+      const glow = beam(start, finish, 0.32, new THREE.MeshBasicMaterial({
         color: laserColor, transparent: true, opacity: fraction * 0.32,
         blending: THREE.AdditiveBlending, depthWrite: false,
       }))
@@ -313,7 +315,7 @@ export class StereoSpaceView {
 
       if (beamData.hit) {
         const flash = new THREE.Mesh(
-          new THREE.SphereGeometry(0.50, 12, 8),
+          new THREE.SphereGeometry(1.1, 12, 8),
           new THREE.MeshBasicMaterial({
             color: beamData.hostile ? 0xffd08d : 0xffe2d8,
             transparent: true, opacity: fraction * 0.92,
@@ -321,7 +323,7 @@ export class StereoSpaceView {
           }),
         )
         flash.position.set(to.x, to.y, to.z)
-        flash.scale.setScalar(0.65 + (1 - fraction) * 1.6)
+        flash.scale.setScalar(0.9 + (1 - fraction) * 1.7)
         this.beamGroup.add(flash)
       }
     }
@@ -357,15 +359,29 @@ export class StereoSpaceView {
     const hdg = ((degrees(attitude.yaw) % 360) + 360) % 360
     ctx.fillText("HDG " + hdg + "  PITCH " + degrees(attitude.pitch) +
       "  ROLL " + degrees(attitude.roll) + "  V " + speed, 30, 135)
-    ctx.fillStyle = selected ? "#ffbe89" : "#7aa9cb"
-    ctx.fillText(selected ? "TARGET " + (selected.displayName || "HOSTILE").slice(0, 23) :
+    const feedback = client.lastLaserFeedback
+    const recent = feedback && time - feedback.at < LASER_FEEDBACK_MS
+    ctx.fillStyle = recent ? (feedback.hit ? "#81ffaf" : "#ff9a99") :
+      selected ? "#ffbe89" : "#7aa9cb"
+    ctx.font = recent ? "bold 36px monospace" : "30px monospace"
+    ctx.fillText(recent ? feedback.label :
+      selected ? "TARGET " + (selected.displayName || "HOSTILE").slice(0, 23) :
       "P/Y/R  " + Math.abs(degrees(rates.pitch)) + " / " +
       Math.abs(degrees(rates.yaw)) + " / " + Math.abs(degrees(rates.roll)) +
-      " deg/s   W/S PITCH", 30, 199)
+      " deg/s", 30, 194)
+    const range = targetRange(own, selected)
+    ctx.fillStyle = range?.inRange === false ? "#ff9b96" : "#9fc7df"
+    ctx.font = "bold 22px monospace"
+    ctx.fillText(range ? range.label :
+      "LASER " + Math.round(own?.attackRange || 0) + "u  ·  SPACE FIRE  ·  T TARGET", 30, 234)
     this.hudTexture.needsUpdate = true
   }
 
   render(client, time) {
+    const feedback = client.lastLaserFeedback
+    const active = feedback && time - feedback.at < LASER_FEEDBACK_MS
+    this.sight?.material?.color?.setHex(active ?
+      feedback.hit ? 0x79ff9b : 0xff7272 : 0x78e6fc)
     this.setCamera(client.entities.get(client.selfId))
     this.syncShips(client)
     this.syncBeams(client, time)

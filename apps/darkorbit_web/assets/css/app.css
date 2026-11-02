@@ -772,3 +772,7 @@ body {
 
 /* SBS HUD is a stereoscopic cockpit texture, not monoscopic overlay. */
 #game-client[data-display-mode="sbs"] #flight-indicators { display: none; }
+
+/* Stereo hit confirmation is drawn independently for each eye on the
+   authoritative cockpit HUD texture; never draw mono DOM over SBS. */
+#game-client[data-display-mode="sbs"] #laser-hit-confirmation { display: none !important; }

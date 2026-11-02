@@ -22,6 +22,7 @@ import {smoothAttitude} from "./attitude_interpolation.mjs"
 import {smoothOrientation, orientationTelemetry} from "./orientation_interpolation.mjs"
 import {SpaceLaserTrigger} from "./space_laser_trigger.mjs"
 import {applyLaserBurstDamage, visualLaserRays} from "./laser_burst.mjs"
+import {laserFeedback, LASER_FEEDBACK_MS} from "./laser_feedback.mjs"
 import {nextFlightMode, validFlightMode} from "./display_modes.mjs"
 
 const clamp = (value, minimum, maximum) => Math.min(Math.max(value, minimum), maximum)
@@ -56,6 +57,7 @@ class SpaceClient {
     this.worldTick = 0
     this.tickMs = 100
     this.beams = []
+    this.lastLaserFeedback = null
     this.lastFrame = performance.now()
   }
 
@@ -604,17 +606,14 @@ class SpaceClient {
         hostile: attacker?.kind === "npc",
         shooterId: entityKey(attack.attacker_id),
         startedAt,
-        expiresAt: startedAt + 300,
+        expiresAt: startedAt + 550,
       })
     }
 
     if (entityKey(attack.attacker_id) === this.selfId) {
-      this.setCombatMessage(
-        attack.hit === false ? "Twin lasers fired · missed" :
-          `Laser impact · ${Array.isArray(attack.beams) ?
-            attack.beams.filter(beam => beam.hit).length + "/" + attack.beams.length + " beams · " : ""}` +
-          `${number(attack.shield_damage)} shield · ${number(attack.hull_damage)} hull damage`
-      )
+      this.lastLaserFeedback = laserFeedback(attack, this.entities, startedAt)
+      const feedback = this.lastLaserFeedback
+      this.setCombatMessage(feedback.label + "  " + feedback.detail)
     }
 
     this.updateCombatHud()
@@ -708,6 +707,19 @@ class SpaceClient {
 
     this.stereoView.render(this, time)
     this.beams = this.beams.filter(beam => beam.expiresAt > time)
+    const feedback = this.lastLaserFeedback
+    const element = this.root.querySelector("#laser-hit-confirmation")
+    if (element) {
+      const active = feedback && time - feedback.at < LASER_FEEDBACK_MS
+      element.classList.toggle("hidden", !active)
+      if (active) {
+        element.textContent = feedback.label
+        element.classList.toggle("text-emerald-200", feedback.hit)
+        element.classList.toggle("text-rose-200", !feedback.hit)
+        element.classList.toggle("border-emerald-400/50", feedback.hit)
+        element.classList.toggle("border-rose-400/50", !feedback.hit)
+      }
+    }
   }
 
   populateHud() {

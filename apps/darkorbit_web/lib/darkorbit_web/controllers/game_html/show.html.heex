@@ -457,6 +457,12 @@
     </div>
   </nav>
 
+  <%!-- A prominent but non-interactive 3D-only confirmation near the crosshair.
+       Stereo uses the in-world holographic HUD instead of a flat overlay. --%>
+  <div id="laser-hit-confirmation" aria-live="polite"
+    class="pointer-events-none absolute left-1/2 top-[39%] z-30 hidden -translate-x-1/2 rounded-lg border border-transparent bg-slate-950/85 px-4 py-2 text-center font-mono text-sm font-bold tracking-wider shadow-lg backdrop-blur-sm">
+  </div>
+
   <p id="combat-status" role="status" aria-live="polite"
      class="pointer-events-none absolute bottom-24 left-4 z-30 max-w-[min(22rem,40vw)] font-mono text-xs text-rose-200 drop-shadow-md">
     SPACE red laser · T nearest target · L autofire
