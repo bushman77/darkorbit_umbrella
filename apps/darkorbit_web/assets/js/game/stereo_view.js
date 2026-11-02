@@ -177,8 +177,14 @@ export class StereoSpaceView {
     const pos = toScene(ownShip.render)
     const angle = Number.isFinite(ownShip.angle) ? ownShip.angle : -Math.PI / 2
     this.camera.position.set(pos.x, pos.y + 2.75, pos.z)
-    // Stage 1: track the authoritative 3D course heading. Full manual
-    // yaw/pitch/roll and inertia will be a separate flight-dynamics milestone.
+    // Ship attitude is authoritative. The atlas autopilot retains its
+    // independent destination-heading view.
+    const attitude = ownShip.attitude || {yaw: 0, pitch: 0, roll: 0}
+    if (!ownShip.destination) {
+      this.camera.rotation.set(attitude.pitch, -attitude.yaw, attitude.roll, "YXZ")
+      this.camera.updateMatrixWorld(true)
+      return
+    }
     const destination = ownShip.destination ? toScene(ownShip.destination) : null
     const dx = destination ? destination.x - pos.x : 0
     const dy = destination ? destination.y - pos.y : 0
@@ -211,7 +217,12 @@ export class StereoSpaceView {
       }
       const pos = toScene(entity.render)
       node.position.set(pos.x, pos.y + (entity.kind === "npc" ? 1.8 : 1.2), pos.z)
-      node.rotation.y = -entity.angle
+      if (entity.kind === "player" && !entity.destination && entity.attitude) {
+        node.rotation.set(entity.attitude.pitch, -entity.attitude.yaw,
+          entity.attitude.roll, "YXZ")
+      } else {
+        node.rotation.y = -entity.angle
+      }
       node.userData.ring.visible = entity.id === client.selectedTargetId
     }
     for (const [id, node] of this.nodes) {
@@ -260,11 +271,16 @@ export class StereoSpaceView {
     ctx.fillStyle = "#aaf6ff"
     ctx.font = "bold 36px monospace"
     const altitude = Math.round(own?.render?.z || 0)
-    ctx.fillText("SECTOR 1-1   ALT " + (altitude >= 0 ? "+" : "") + altitude, 30, 65)
+    const speed = own?.velocity ? Math.round(Math.hypot(own.velocity.x, own.velocity.y,
+      own.velocity.z)) : 0
+    const throttle = Math.round((own?.throttle || 0) * 100)
+    const mode = own?.flightMode === "newtonian" ? "NF" : "CF"
+    ctx.fillText("ALT " + (altitude >= 0 ? "+" : "") + altitude + "   " +
+      mode + "   THR " + throttle + "%", 30, 65)
     ctx.font = "30px monospace"
     const hp = own ? Math.round(100 * (own.hull || 0) / Math.max(own.maxHull || 1, 1)) : 0
     const shield = own ? Math.round(100 * (own.shields || 0) / Math.max(own.maxShields || 1, 1)) : 0
-    ctx.fillText("HULL " + hp + "%   SHIELD " + shield + "%", 30, 135)
+    ctx.fillText("HULL " + hp + "%   SHIELD " + shield + "%   V " + speed, 30, 135)
     ctx.fillStyle = selected ? "#ffbe89" : "#7aa9cb"
     ctx.fillText(selected ? "TARGET " + (selected.displayName || "HOSTILE").slice(0, 23) : "NO TARGET / V: CHANGE VIEW", 30, 199)
     this.hudTexture.needsUpdate = true

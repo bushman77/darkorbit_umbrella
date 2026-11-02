@@ -16,6 +16,7 @@ import {MinimapRenderer} from "./minimap_renderer.mjs"
 import {PointerNavigation} from "./pointer_navigation.mjs"
 import {StereoSpaceView} from "./stereo_view.js"
 import {NavigationComputer} from "./navigation_computer.mjs"
+import {FlightControls} from "./flight_controls.mjs"
 import {nextFlightMode, validFlightMode} from "./display_modes.mjs"
 
 const clamp = (value, minimum, maximum) => Math.min(Math.max(value, minimum), maximum)
@@ -74,6 +75,17 @@ class SpaceClient {
       getSelfId: () => this.selfId,
       getDestination: () => this.commandDestination,
     }).start()
+    this.flightControls = new FlightControls({
+      active: () => !this.navComputer?.isOpen && this.channel?.state === "joined" &&
+        this.entities.get(this.selfId)?.status !== "destroyed",
+      send: input => this.sendFlightControls(input),
+    })
+    window.addEventListener("keydown", event => this.flightControls.keyDown(event))
+    window.addEventListener("keyup", event => this.flightControls.keyUp(event))
+    window.addEventListener("blur", () => this.flightControls.release())
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) this.flightControls.release()
+    })
     this.navComputer = new NavigationComputer({
       root: this.root.querySelector("#navigation-computer"),
       getEntities: () => this.entities,
@@ -82,7 +94,10 @@ class SpaceClient {
       isConnected: () => this.channel?.state === "joined" && Boolean(this.selfId),
       engage: (waypoints, done) => this.plotCourse(waypoints, done),
       halt: done => this.stopNavigation(done),
-      onOpen: () => this.navigation?.cancel(),
+      onOpen: () => {
+        this.navigation?.cancel()
+        this.flightControls.release()
+      },
       onClose: () => this.canvas.focus({preventScroll: true}),
     }).start()
     this.root.querySelector("#nav-open")?.addEventListener("click", () => this.navComputer.open())
@@ -167,6 +182,8 @@ class SpaceClient {
     for (const entity of response.map.entities) this.upsertEntity(entity, true)
     this.syncOwnCombatState()
 
+    this.flightControls.resetThrottle()
+    this.flightControls.mode = "cruise"
     this.populateHud()
     this.setConnection("Authoritative sync", "online")
   }
@@ -204,12 +221,18 @@ class SpaceClient {
     const d3 = entity.destination_3d || entity.destination
     const destination = d3 ? {x: d3.x, y: d3.y, z: d3.z ?? 0} : null
     const route3d = entity.route_waypoints_3d || entity.route_waypoints || []
+    const attitude = entity.attitude || {yaw: 0, pitch: 0, roll: 0}
+    const velocity = entity.velocity || {x: 0, y: 0, z: 0}
 
     if (existing) {
       existing.target = target
       existing.destination = destination
       existing.navigationMode = entity.navigation_mode || "manual"
       existing.routeWaypoints = route3d
+      existing.attitude = attitude
+      existing.velocity = velocity
+      existing.throttle = entity.throttle ?? 0
+      existing.flightMode = entity.flight_mode || "cruise"
       existing.speed = entity.speed
       existing.kind = entity.kind || existing.kind
       existing.playerId = entity.player_id == null ? existing.playerId : entityKey(entity.player_id)
@@ -249,6 +272,10 @@ class SpaceClient {
         destination,
         navigationMode: entity.navigation_mode || "manual",
         routeWaypoints: route3d,
+        attitude,
+        velocity,
+        throttle: entity.throttle ?? 0,
+        flightMode: entity.flight_mode || "cruise",
         speed: entity.speed,
         hull: entity.hull,
         maxHull: entity.max_hull,
@@ -282,11 +309,22 @@ class SpaceClient {
     }
   }
 
+  sendFlightControls(input) {
+    if (this.channel?.state !== "joined") return
+    this.channel.push("flight_controls", input, 3000)
+      .receive("ok", response => {
+        if (response.entity) this.upsertEntity(response.entity)
+      })
+      .receive("error", response => this.showError(`Flight controls rejected: ${response.reason}`))
+      .receive("timeout", () => this.showError("Flight control link timed out."))
+  }
+
   plotCourse(waypoints, done) {
     if (this.channel?.state !== "joined") return done(false, "relay offline")
     this.channel.push("plot_course", {waypoints}, 5000)
       .receive("ok", response => {
         if (response.entity) this.upsertEntity(response.entity)
+        this.flightControls.resetThrottle()
         done(true)
       })
       .receive("error", response => done(false, response.reason))
@@ -551,6 +589,7 @@ class SpaceClient {
     const deltaSeconds = Math.min((time - this.lastFrame) / 1000, 0.1)
     this.lastFrame = time
     this.interpolate(deltaSeconds)
+    this.flightControls?.heartbeat(time)
     this.draw(time)
     this.minimap?.draw(time)
     this.navComputer?.draw(time)
@@ -612,6 +651,10 @@ class SpaceClient {
     const ownShip = this.entities.get(this.selfId)
     if (!ownShip) return
     this.text("#hud-coordinates", `${number(ownShip.render.x)} / ${number(ownShip.render.y)} / ${number(ownShip.render.z)}`)
+    this.text("#hud-flight-mode", (ownShip.flightMode || "cruise").toUpperCase())
+    this.text("#hud-throttle", `${Math.round((ownShip.throttle || 0) * 100)}%`)
+    const v = ownShip.velocity || {x: 0, y: 0, z: 0}
+    this.text("#hud-actual-speed", `${Math.round(Math.hypot(v.x, v.y, v.z))} u/s`)
   }
 
   updateNavigationStatus() {

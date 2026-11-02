@@ -604,8 +604,14 @@
     </div>
   </nav>
 
+  <div id="flight-indicators" class="pointer-events-none absolute bottom-32 right-3 z-30 hidden rounded-lg border border-cyan-400/20 bg-slate-950/80 px-3 py-2 font-mono text-xs text-cyan-100 backdrop-blur sm:block">
+    FLIGHT <span id="hud-flight-mode" class="text-cyan-300">CRUISE</span>
+    · THR <span id="hud-throttle">0%</span>
+    · SPEED <span id="hud-actual-speed">0 u/s</span>
+  </div>
+
   <div id="game-controls-hint" class="pointer-events-none absolute bottom-28 left-1/2 z-10 hidden -translate-x-1/2 rounded-xl border border-slate-700/70 bg-slate-950/70 px-3 py-2 text-[0.65rem] text-slate-400 backdrop-blur xl:block">
-    Click hostile to target · M opens navigation atlas · V toggles 3D/SBS · Ctrl or 1 toggles laser
+    + / − thrust · W/X pitch · A/D yaw · Z/C roll · S center · Ctrl+E CF/NF · M atlas · V 3D/SBS
   </div>
 
   <div

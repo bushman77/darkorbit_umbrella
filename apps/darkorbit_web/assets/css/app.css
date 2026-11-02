@@ -769,3 +769,6 @@ body {
 
 /* Classic 2D gameplay is retired; the atlas remains the overhead map. */
 .nav-coordinate-form .nav-altitude-label { grid-column: span 2; }
+
+/* SBS HUD is a stereoscopic cockpit texture, not monoscopic overlay. */
+#game-client[data-display-mode="sbs"] #flight-indicators { display: none; }
