@@ -129,9 +129,28 @@
               <div><dt>ORBITAL PERIOD</dt><dd id="nav-solar-period">1 Earth year</dd></div>
             </dl>
           </div>
-          <p class="solar-system-note">SYSTEM CHART ONLY · Interplanetary routes
-            and planetary sector locations are not yet connected to the helm.
-            Open Sector 1-1 to plot working flight waypoints.</p>
+          <div class="solar-navigation-console">
+            <p class="nav-eyebrow">INTERPLANETARY NAVIGATION / SOL-01</p>
+            <div id="nav-solar-state" class="nav-state">CONNECTING</div>
+            <dl class="solar-body-metrics">
+              <div><dt>CURRENT REGION</dt><dd id="nav-solar-location">—</dd></div>
+              <div><dt>FLIGHT PLAN</dt><dd id="nav-solar-route">NO ACTIVE TRANSIT</dd></div>
+            </dl>
+            <label for="nav-solar-progress" id="nav-solar-progress-label" class="solar-progress-label">
+              Ready to plot course
+            </label>
+            <progress id="nav-solar-progress" max="100" value="0"></progress>
+            <button id="nav-solar-engage" type="button" class="nav-button nav-primary">
+              Set course to Earth
+            </button>
+            <button id="nav-solar-cancel" type="button" class="nav-button nav-danger" disabled>
+              Abort transit
+            </button>
+          </div>
+          <p class="solar-system-note">V1 system travel is server-authoritative, with
+            game-scaled transit times. It updates your current solar region but does
+            not yet move the 3D ship or simulate orbital mechanics. Sector 1-1
+            remains the separate tactical flight chart.</p>
         </aside>
       </section>
 

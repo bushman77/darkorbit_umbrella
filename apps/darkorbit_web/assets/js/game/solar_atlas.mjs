@@ -57,6 +57,30 @@ function renderOrbits(svg,layout,focus){
     "font-family":"monospace"},"AU VALUES REAL · DRAWING DISTANCES COMPRESSED")
 }
 
+function renderVoyage(svg,layout,navigation){
+  if(navigation?.system_id!=="sol")return
+  const find=id=>layout.find(body=>body.id===id)
+  const departure=find(navigation.location_id)
+  if(!departure)return
+  if(navigation.status==="traveling"){
+    const destination=find(navigation.destination_id)
+    if(!destination)return
+    const progress=Math.min(1,Math.max(0,Number(navigation.progress)||0))
+    add(svg,"line",{x1:departure.x,y1:departure.y,
+      x2:destination.x,y2:destination.y,stroke:"#67f4ee",
+      "stroke-width":2.4,"stroke-dasharray":"6 7",opacity:.9})
+    const x=departure.x+(destination.x-departure.x)*progress
+    const y=departure.y+(destination.y-departure.y)*progress
+    add(svg,"circle",{cx:x,cy:y,r:10,fill:"#07313b",stroke:"#a8ffff","stroke-width":2.5})
+    add(svg,"circle",{cx:x,cy:y,r:3.5,fill:"#a8ffff"})
+    add(svg,"text",{x:x+14,y:y-12,fill:"#b2ffff",
+      "font-family":"monospace","font-size":13},"IN TRANSIT")
+  }else{
+    add(svg,"circle",{cx:departure.x,cy:departure.y,r:departure.size+15,
+      fill:"none",stroke:"#73f5e8","stroke-width":1.8,opacity:.8})
+  }
+}
+
 function renderBody(svg,body,selectedId){
   const selected=body.id===selectedId
   const group=add(svg,"g",{
@@ -96,13 +120,14 @@ function renderBody(svg,body,selectedId){
   return group
 }
 
-export function drawSolarAtlas(svg,{focus="system",selectedId="earth"}={}){
+export function drawSolarAtlas(svg,{focus="system",selectedId="earth",navigation=null}={}){
   if(!svg)return
   const layer=svg.querySelector("#nav-solar-content")
   if(!layer)return
   layer.replaceChildren()
   const layout=solarLayout(focus)
   renderOrbits(layer,layout,focus)
+  renderVoyage(layer,layout,navigation)
   // Orbit draw order first, then active bodies/labels above orbit lines.
   for(const body of layout)renderBody(layer,body,selectedId)
 }

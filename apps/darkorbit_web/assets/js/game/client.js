@@ -103,6 +103,8 @@ class SpaceClient {
       isConnected: () => this.channel?.state === "joined" && Boolean(this.selfId),
       engage: (waypoints, done) => this.plotCourse(waypoints, done),
       halt: done => this.stopNavigation(done),
+      solarSetCourse: (bodyId, done) => this.solarSetCourse(bodyId, done),
+      solarCancelCourse: done => this.solarCancelCourse(done),
       onOpen: () => {
         this.navigation?.cancel()
         this.flightControls.release({silent: true})
@@ -170,6 +172,11 @@ class SpaceClient {
 
     this.channel = this.socket.channel(`world:${this.mapId}`, {})
     this.channel.on("world_state", state => this.applyWorldState(state))
+    this.channel.on("solar_navigation_updated", payload => {
+      if (String(payload.player_id) === String(this.selfId) && payload.navigation) {
+        this.navComputer.setSolarNavigation(payload.navigation)
+      }
+    })
     this.channel.on("movement_started", entity => this.upsertEntity(entity))
     this.channel.on("entity_joined", entity => this.entityJoined(entity))
     this.channel.on("entity_left", entity => this.removeEntity(entity.id))
@@ -210,6 +217,7 @@ class SpaceClient {
     this.tickMs = response.map.tick_ms
     this.pilots = new Map(Object.entries(response.pilots || {}))
 
+    if(response.solar_navigation)this.navComputer.setSolarNavigation(response.solar_navigation)
     for (const entity of response.map.entities) this.upsertEntity(entity, true)
     this.syncOwnCombatState()
 
@@ -362,6 +370,22 @@ class SpaceClient {
       })
       .receive("error", response => this.showError(`Flight controls rejected: ${response.reason}`))
       .receive("timeout", () => this.showError("Flight control link timed out."))
+  }
+
+  solarSetCourse(bodyId, done) {
+    if(this.channel?.state!=="joined")return done(false,null,"relay offline")
+    this.channel.push("solar_set_course",{body_id:bodyId},5000)
+      .receive("ok",response=>done(true,response.navigation))
+      .receive("error",response=>done(false,null,response.reason))
+      .receive("timeout",()=>done(false,null,"timeout"))
+  }
+
+  solarCancelCourse(done) {
+    if(this.channel?.state!=="joined")return done(false,null,"relay offline")
+    this.channel.push("solar_cancel_course",{},5000)
+      .receive("ok",response=>done(true,response.navigation))
+      .receive("error",response=>done(false,null,response.reason))
+      .receive("timeout",()=>done(false,null,"timeout"))
   }
 
   plotCourse(waypoints, done) {

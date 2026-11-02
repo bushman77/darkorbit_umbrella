@@ -29,7 +29,10 @@ function drawLink(group, projection, from, to, color, dashed = false) {
 }
 
 export class NavigationComputer {
-  constructor({root, getEntities, getSelfId, getBoundaries, isConnected, engage, halt, onOpen, onClose}) {
+  constructor({root, getEntities, getSelfId, getBoundaries, isConnected, engage, halt,
+    solarSetCourse = (_id, done) => done(false, null, "unavailable"),
+    solarCancelCourse = done => done(false, null, "unavailable"),
+    onOpen, onClose}) {
     this.root = root
     this.getEntities = getEntities
     this.getSelfId = getSelfId
@@ -37,6 +40,8 @@ export class NavigationComputer {
     this.isConnected = isConnected
     this.engage = engage
     this.halt = halt
+    this.solarSetCourse = solarSetCourse
+    this.solarCancelCourse = solarCancelCourse
     this.onOpen = onOpen
     this.onClose = onClose
     this.draft = []
@@ -48,11 +53,18 @@ export class NavigationComputer {
     this.view = "system"
     this.solarFocus = "system"
     this.solarSelection = "earth"
+    this.solarNavigation = null
+    this.solarPending = false
+    this.solarStatusMessage = "Connecting to the system navigation computer…"
     this.lastDrawAt = -Infinity
   }
 
   start() {
     this.solarSvg = this.root.querySelector("#nav-solar-chart")
+    this.root.querySelector("#nav-solar-engage")?.addEventListener("click",
+      () => this.engageSolarCourse())
+    this.root.querySelector("#nav-solar-cancel")?.addEventListener("click",
+      () => this.cancelSolarCourse())
     this.root.querySelector("#nav-view-system")?.addEventListener("click",
       () => this.setView("system"))
     this.root.querySelector("#nav-view-sector")?.addEventListener("click",
@@ -164,11 +176,85 @@ export class NavigationComputer {
     if(this.isOpen&&this.view==="system")this.draw(0,true)
   }
 
+  setSolarNavigation(navigation) {
+    if(navigation?.system_id!=="sol" || !["idle","traveling"].includes(navigation.status))return
+    this.solarNavigation=navigation
+    this.solarStatusMessage=navigation.status==="traveling" ?
+      "TRANSIT IN PROGRESS" : "HELM READY"
+    if(this.isOpen&&this.view==="system")this.renderSolarView()
+  }
+
+  engageSolarCourse() {
+    const navigation=this.solarNavigation
+    if(this.solarPending || !this.isConnected() || !navigation ||
+        navigation.status==="traveling" ||
+        navigation.location_id===this.solarSelection ||
+        this.solarSelection==="sun")return
+    const destination=this.solarSelection
+    this.solarPending=true
+    this.solarStatusMessage="Submitting course to the SOL helm…"
+    this.renderSolarNavigation()
+    this.solarSetCourse(destination,(ok,updated,reason)=>{
+      this.solarPending=false
+      this.solarStatusMessage=ok?
+        "Course accepted. En route.": `Course rejected: ${reason || "unavailable"}`
+      if(ok&&updated)this.solarNavigation=updated
+      if(this.isOpen&&this.view==="system")this.renderSolarView()
+    })
+  }
+
+  cancelSolarCourse() {
+    if(this.solarPending || !this.isConnected() || this.solarNavigation?.status!=="traveling")return
+    this.solarPending=true
+    this.solarStatusMessage="Requesting transit abort…"
+    this.renderSolarNavigation()
+    this.solarCancelCourse((ok,updated,reason)=>{
+      this.solarPending=false
+      this.solarStatusMessage=ok?
+        "Transit aborted. Remaining at departure region." :
+        `Abort rejected: ${reason || "unavailable"}`
+      if(ok&&updated)this.solarNavigation=updated
+      if(this.isOpen&&this.view==="system")this.renderSolarView()
+    })
+  }
+
+  renderSolarNavigation() {
+    const nav=this.solarNavigation
+    const name=id=>findSolarBody(id)?.name || "Unknown"
+    const traveling=nav?.status==="traveling"
+    const connected=this.isConnected()
+    const status=this.root.querySelector("#nav-solar-state")
+    if(status)status.textContent=!connected?"WAITING FOR RELAY":this.solarStatusMessage
+    const location=this.root.querySelector("#nav-solar-location")
+    if(location)location.textContent=nav?name(nav.location_id):"—"
+    const route=this.root.querySelector("#nav-solar-route")
+    if(route)route.textContent=traveling?
+      `${name(nav.origin_id)} → ${name(nav.destination_id)}`:"NO ACTIVE TRANSIT"
+    const progress=this.root.querySelector("#nav-solar-progress")
+    const percent=Math.max(0,Math.min(100,Math.round((nav?.progress || 0)*100)))
+    if(progress)progress.value=percent
+    const percentLabel=this.root.querySelector("#nav-solar-progress-label")
+    if(percentLabel)percentLabel.textContent=traveling?
+      `${percent}% · ${Math.ceil((nav.remaining_ms || 0)/1000)}s remaining`:
+      "Ready to plot course"
+    const button=this.root.querySelector("#nav-solar-engage")
+    if(button){
+      button.disabled=this.solarPending||!connected||!nav||traveling||
+        nav.location_id===this.solarSelection||this.solarSelection==="sun"
+      button.textContent=traveling?"Transit in progress":
+        `Set course to ${name(this.solarSelection)}`
+    }
+    const abort=this.root.querySelector("#nav-solar-cancel")
+    if(abort)abort.disabled=this.solarPending||!connected||!traveling
+  }
+
   renderSolarView() {
     drawSolarAtlas(this.solarSvg,{
       focus:this.solarFocus,selectedId:this.solarSelection,
+      navigation:this.solarNavigation,
     })
     renderSolarDetails(this.root,this.solarSelection)
+    this.renderSolarNavigation()
   }
 
   open() {
