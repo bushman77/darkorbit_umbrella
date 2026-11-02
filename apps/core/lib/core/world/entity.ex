@@ -31,6 +31,7 @@ defmodule Core.World.Entity do
               throttle: 0.0,
               attitude: %{yaw: 0.0, pitch: 0.0, roll: 0.0},
               rotation_input: %{yaw: 0.0, pitch: 0.0, roll: 0.0},
+              angular_velocity: %{yaw: 0.0, pitch: 0.0, roll: 0.0},
               velocity: %{x: 0.0, y: 0.0, z: 0.0},
               control_tick: -1_000
             ]
@@ -48,6 +49,7 @@ defmodule Core.World.Entity do
           throttle: float(),
           attitude: %{yaw: float(), pitch: float(), roll: float()},
           rotation_input: %{yaw: float(), pitch: float(), roll: float()},
+          angular_velocity: %{yaw: float(), pitch: float(), roll: float()},
           velocity: %{x: float(), y: float(), z: float()},
           control_tick: integer(),
           speed: number(),

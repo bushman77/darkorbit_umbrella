@@ -226,7 +226,7 @@ defmodule Core.World.MapServer do
       updated_entity = %{
         entity | destination: destination, route_waypoints: [], navigation_mode: :manual,
                  throttle: 0.0, velocity: %{x: 0.0, y: 0.0, z: 0.0},
-                 rotation_input: %{yaw: 0.0, pitch: 0.0, roll: 0.0}
+                 rotation_input: %{yaw: 0.0, pitch: 0.0, roll: 0.0}, angular_velocity: %{yaw: 0.0, pitch: 0.0, roll: 0.0}
       }
       new_state = %{state | entities: Map.put(state.entities, entity.id, updated_entity)}
       payload = public_entity(updated_entity)
@@ -244,7 +244,7 @@ defmodule Core.World.MapServer do
       updated = %{
         entity | destination: first, route_waypoints: remaining, navigation_mode: :autopilot,
                  throttle: 0.0, velocity: %{x: 0.0, y: 0.0, z: 0.0},
-                 rotation_input: %{yaw: 0.0, pitch: 0.0, roll: 0.0}
+                 rotation_input: %{yaw: 0.0, pitch: 0.0, roll: 0.0}, angular_velocity: %{yaw: 0.0, pitch: 0.0, roll: 0.0}
       }
       new_state = %{state | entities: Map.put(state.entities, entity.id, updated)}
       payload = public_entity(updated)
@@ -260,7 +260,7 @@ defmodule Core.World.MapServer do
       updated = %{
         entity | destination: nil, route_waypoints: [], navigation_mode: :manual,
                  throttle: 0.0, velocity: %{x: 0.0, y: 0.0, z: 0.0},
-                 rotation_input: %{yaw: 0.0, pitch: 0.0, roll: 0.0}
+                 rotation_input: %{yaw: 0.0, pitch: 0.0, roll: 0.0}, angular_velocity: %{yaw: 0.0, pitch: 0.0, roll: 0.0}
       }
       new_state = %{state | entities: Map.put(state.entities, entity.id, updated)}
       payload = public_entity(updated)
@@ -912,6 +912,7 @@ defmodule Core.World.MapServer do
       flight_mode: entity.flight_mode,
       throttle: entity.throttle,
       attitude: entity.attitude,
+      angular_velocity: entity.angular_velocity,
       velocity: entity.velocity,
       route_waypoints: Enum.map(entity.route_waypoints, &public_position/1),
       speed: entity.speed,

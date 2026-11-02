@@ -165,7 +165,8 @@ defmodule DarkorbitWeb.WorldChannelTest do
       "roll" => 0.0, "mode" => "newtonian",
       "entity_id" => second.id, "position" => %{"x" => 20_000}
     })
-    assert_reply ref, :ok, %{entity: %{id: owner_id, flight_mode: :newtonian, throttle: 0.6}}
+    assert_reply ref, :ok, %{entity: %{id: owner_id, flight_mode: :newtonian,
+                                      throttle: 0.6, angular_velocity: _rates}}
     assert owner_id == first.id
 
     ref = push(first_socket, "flight_controls", %{"throttle" => 100})

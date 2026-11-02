@@ -12,7 +12,14 @@ defmodule Core.World.FlightDynamics do
   alias Core.World.MapDefinition
   alias Core.World.Position
 
-  @turn_rate :math.pi() / 2.5
+  # Tuned for deliberate ship handling rather than instant camera panning.
+  # All rates are radians/sec, and accelerations are radians/sec^2.
+  # At full input, pitch reaches 38 deg/s in ~0.48 s.
+  @turn_limits %{
+    yaw: %{speed: 44.0, acceleration: 95.0, braking: 145.0},
+    pitch: %{speed: 38.0, acceleration: 80.0, braking: 135.0},
+    roll: %{speed: 56.0, acceleration: 110.0, braking: 165.0}
+  }
   @input_expiry_ticks 10
 
   @spec controls(Entity.t(), map(), non_neg_integer()) ::
@@ -54,13 +61,20 @@ defmodule Core.World.FlightDynamics do
         do: entity.rotation_input,
         else: %{yaw: 0.0, pitch: 0.0, roll: 0.0}
 
-    attitude = %{
-      yaw: wrap_angle(entity.attitude.yaw + input.yaw * @turn_rate * dt),
-      # Free-flight pitch must pass through vertical. Capping at +/-89°
-      # made W/S appear to stop working near straight up/down.
-      pitch: wrap_angle(entity.attitude.pitch + input.pitch * @turn_rate * dt),
-      roll: wrap_angle(entity.attitude.roll + input.roll * @turn_rate * dt)
-    }
+    # Integrate angular velocity as state: held keys ramp up to a safe
+    # maximum, released keys brake to zero, and the reverse key brakes
+    # then builds speed in the opposite direction. The trapezoid prevents
+    # even the first tick from jumping straight to the new angular rate.
+    {attitude, angular_velocity} =
+      Enum.reduce([:yaw, :pitch, :roll], {%{}, %{}}, fn axis, {angles, rates} ->
+        old_rate = Map.fetch!(entity.angular_velocity, axis)
+        next_rate = advance_angular_rate(old_rate, Map.fetch!(input, axis),
+                                         Map.fetch!(@turn_limits, axis), dt)
+        angle = wrap_angle(Map.fetch!(entity.attitude, axis) +
+                           (old_rate + next_rate) * 0.5 * dt)
+
+        {Map.put(angles, axis, angle), Map.put(rates, axis, next_rate)}
+      end)
 
     heading = forward(attitude)
     acceleration = max(24.0, entity.speed * 1.5) * dt
@@ -97,7 +111,8 @@ defmodule Core.World.FlightDynamics do
       z: if(position.z == predicted.z, do: velocity.z, else: 0.0)
     }
 
-    %{entity | position: position, velocity: velocity, attitude: attitude}
+    %{entity | position: position, velocity: velocity,
+               attitude: attitude, angular_velocity: angular_velocity}
   end
 
   @spec forward(map()) :: %{x: float(), y: float(), z: float()}
@@ -108,6 +123,25 @@ defmodule Core.World.FlightDynamics do
       z: :math.sin(pitch)
     }
   end
+
+  defp advance_angular_rate(current, input, limits, dt) do
+    desired = input * degrees_to_radians(limits.speed)
+    # Brake faster when reversing than when speeding up, without an
+    # instantaneous direction flip or a lingering uncontrolled turn.
+    acceleration =
+      if input == 0.0 or current * input < 0,
+        do: limits.braking,
+        else: limits.acceleration
+
+    max_delta = degrees_to_radians(acceleration) * dt
+    difference = desired - current
+    next_rate = current + clamp(difference, -max_delta, max_delta)
+
+    # Avoid subnormal leftovers when an axis reaches neutral.
+    if abs(next_rate) < 1.0e-10, do: 0.0, else: next_rate
+  end
+
+  defp degrees_to_radians(degrees), do: degrees * :math.pi() / 180.0
 
   defp get(map, key, default), do: Map.get(map, key, Map.get(map, String.to_atom(key), default))
 

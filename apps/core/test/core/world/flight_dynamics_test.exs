@@ -88,6 +88,77 @@ defmodule Core.World.FlightDynamicsTest do
     assert updated.route_waypoints == []
   end
 
+  test "a held pitch key ramps smoothly to a capped rate without jumping" do
+    map = MapDefinition.starting_map()
+    {:ok, started} = FlightDynamics.controls(ship(), %{pitch: 1.0}, 0)
+    first = FlightDynamics.step(started, map, 0.1, 1)
+    second = FlightDynamics.step(first, map, 0.1, 2)
+
+    first_rate = first.angular_velocity.pitch * 180.0 / :math.pi()
+    second_rate = second.angular_velocity.pitch * 180.0 / :math.pi()
+    assert first_rate > 0 and first_rate < 38.0
+    assert second_rate > first_rate
+    assert first.attitude.pitch > 0 and first.attitude.pitch < 0.02
+
+    at_cap =
+      Enum.reduce(3..10, second, fn tick, current ->
+        FlightDynamics.step(current, map, 0.1, tick)
+      end)
+
+    assert_in_delta at_cap.angular_velocity.pitch * 180.0 / :math.pi(), 38.0, 1.0e-6
+  end
+
+  test "releasing steering brakes smoothly and stops without snap or reverse" do
+    map = MapDefinition.starting_map()
+    {:ok, started} = FlightDynamics.controls(ship(), %{yaw: 1.0}, 0)
+    turning =
+      Enum.reduce(1..5, started, fn tick, current ->
+        FlightDynamics.step(current, map, 0.1, tick)
+      end)
+
+    {:ok, released} = FlightDynamics.controls(turning, %{yaw: 0.0}, 5)
+    first = FlightDynamics.step(released, map, 0.1, 6)
+    assert first.angular_velocity.yaw > 0
+    assert first.angular_velocity.yaw < turning.angular_velocity.yaw
+    assert first.attitude.yaw > turning.attitude.yaw
+
+    stopped = Enum.reduce(7..15, first, fn tick, current ->
+      FlightDynamics.step(current, map, 0.1, tick)
+    end)
+    assert stopped.angular_velocity.yaw == 0.0
+    assert stopped.attitude.yaw > turning.attitude.yaw
+    assert stopped.attitude.yaw < turning.attitude.yaw + 0.2
+  end
+
+  test "opposite steering must decelerate before changing sign" do
+    map = MapDefinition.starting_map()
+    {:ok, started} = FlightDynamics.controls(ship(), %{roll: 1.0}, 0)
+    turning = Enum.reduce(1..6, started, fn tick, current ->
+      FlightDynamics.step(current, map, 0.1, tick)
+    end)
+    assert turning.angular_velocity.roll > 0
+
+    {:ok, reverse} = FlightDynamics.controls(turning, %{roll: -1.0}, 6)
+    first = FlightDynamics.step(reverse, map, 0.1, 7)
+    assert first.angular_velocity.roll < turning.angular_velocity.roll
+    assert first.angular_velocity.roll > 0
+
+    backwards = Enum.reduce(8..15, first, fn tick, current ->
+      FlightDynamics.step(current, map, 0.1, tick)
+    end)
+    assert backwards.angular_velocity.roll < 0.0
+  end
+
+  test "stale rotational inputs brake to zero instead of rotating forever" do
+    map = MapDefinition.starting_map()
+    {:ok, started} = FlightDynamics.controls(ship(), %{yaw: 1.0}, 0)
+    after_expiry = Enum.reduce(1..16, started, fn tick, current ->
+      FlightDynamics.step(current, map, 0.1, tick)
+    end)
+
+    assert after_expiry.angular_velocity.yaw == 0.0
+  end
+
   test "yaw and roll remain independent server-owned attitude axes" do
     map = MapDefinition.starting_map()
     {:ok, yaw} = FlightDynamics.controls(ship(), %{yaw: 1.0}, 0)
@@ -105,7 +176,8 @@ defmodule Core.World.FlightDynamicsTest do
 
   test "S can pitch down through vertical without stopping at minus 89 degrees" do
     map = MapDefinition.starting_map()
-    {:ok, descending} = FlightDynamics.controls(ship(), %{pitch: -1.0}, 0)
+    inverted = %{ship() | attitude: %{yaw: 0.0, pitch: -1.4, roll: 0.0}}
+    {:ok, descending} = FlightDynamics.controls(inverted, %{pitch: -1.0}, 0)
 
     turned =
       Enum.reduce(1..8, descending, fn tick, entity ->
@@ -125,7 +197,9 @@ defmodule Core.World.FlightDynamicsTest do
 
     {:ok, down} = FlightDynamics.controls(rising, %{pitch: -1.0}, 1)
     descending = FlightDynamics.step(down, map, 0.2, 2)
-    assert_in_delta descending.attitude.pitch, 0.0, 1.0e-8
+    assert descending.attitude.pitch > 0.0
+    assert descending.attitude.pitch < rising.attitude.pitch
+    assert descending.angular_velocity.pitch < rising.angular_velocity.pitch
   end
 
   test "rotation input expires without renewed commands" do
