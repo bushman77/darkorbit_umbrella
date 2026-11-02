@@ -173,3 +173,11 @@ Manual shots do not replace or alter the automatic laser toggle and
 do not require a selected target. **R** weapon cycling can be added
 when a second ready weapon exists. The server exclusively owns shot
 origin, heading, damage, range and cooldown.
+
+### Fully ship-relative flight axes
+
+The SBS branch now integrates local ship yaw, pitch and roll into an
+authoritative quaternion. Pitch is no longer tied to the original world
+orientation: roll the ship and W/S follows its rotated local up/down.
+The same forward orientation drives cruise thrust and nose-aimed red lasers.
+The 3D/SBS client slerps the quaternion between server snapshots.

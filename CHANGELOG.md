@@ -315,3 +315,12 @@
 - Captures Space keydown/keyup to stop button focus from consuming the
   laser trigger or inadvertently toggling autofire.
 - Added layout persistence and keyboard-focus regression tests.
+
+### SBS branch — body-relative quaternion orientation (2026-11-01)
+
+- Replaced fixed-world Euler attitude for simulation and aiming with a
+  normalized body-relative quaternion, retaining old Euler telemetry.
+- Updated cruise and Newtonian thrust, manual laser ray, 3D/SBS camera
+  and other player meshes to share authoritative orientation.
+- Added shortest-path quaternion slerp and actual nose-based HUD heading,
+  pitch and bank readouts plus body-relative regression coverage.

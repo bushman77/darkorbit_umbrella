@@ -19,6 +19,7 @@ import {StereoSpaceView} from "./stereo_view.js"
 import {NavigationComputer} from "./navigation_computer.mjs"
 import {FlightControls} from "./flight_controls.mjs"
 import {smoothAttitude} from "./attitude_interpolation.mjs"
+import {smoothOrientation, orientationTelemetry} from "./orientation_interpolation.mjs"
 import {SpaceLaserTrigger} from "./space_laser_trigger.mjs"
 import {nextFlightMode, validFlightMode} from "./display_modes.mjs"
 
@@ -243,6 +244,7 @@ class SpaceClient {
     const destination = d3 ? {x: d3.x, y: d3.y, z: d3.z ?? 0} : null
     const route3d = entity.route_waypoints_3d || entity.route_waypoints || []
     const attitude = entity.attitude || {yaw: 0, pitch: 0, roll: 0}
+    const orientation = entity.orientation || null
     const velocity = entity.velocity || {x: 0, y: 0, z: 0}
 
     if (existing) {
@@ -251,6 +253,10 @@ class SpaceClient {
       existing.navigationMode = entity.navigation_mode || "manual"
       existing.routeWaypoints = route3d
       existing.attitude = attitude
+      existing.orientation = orientation
+      if (orientation && (!existing.renderOrientation || snap)) {
+        existing.renderOrientation = {...orientation}
+      }
       // Render orientation is independent from server state; never feed the
       // interpolated angles back into the authoritative simulation.
       if (!existing.renderAttitude || snap) existing.renderAttitude = {...attitude}
@@ -300,6 +306,8 @@ class SpaceClient {
         routeWaypoints: route3d,
         attitude,
         renderAttitude: {...attitude},
+        orientation,
+        renderOrientation: orientation ? {...orientation} : null,
         angularVelocity: entity.angular_velocity || {yaw: 0, pitch: 0, roll: 0},
         velocity,
         throttle: entity.throttle ?? 0,
@@ -678,6 +686,12 @@ class SpaceClient {
           deltaSeconds
         )
       }
+      if (entity.orientation) {
+        entity.renderOrientation = smoothOrientation(
+          entity.renderOrientation || entity.orientation,
+          entity.orientation, deltaSeconds
+        )
+      }
     }
 
     const rotationBlend = 1 - Math.exp(-deltaSeconds / 0.075)
@@ -727,7 +741,9 @@ class SpaceClient {
     this.text("#hud-throttle", `${Math.round((ownShip.throttle || 0) * 100)}%`)
     const v = ownShip.velocity || {x: 0, y: 0, z: 0}
     this.text("#hud-actual-speed", `${Math.round(Math.hypot(v.x, v.y, v.z))} u/s`)
-    const a = ownShip.attitude || {yaw: 0, pitch: 0, roll: 0}
+    const a = orientationTelemetry(
+      ownShip.orientation, ownShip.attitude || {yaw: 0, pitch: 0, roll: 0}
+    )
     const deg = radians => Math.round(radians * 180 / Math.PI)
     this.text("#hud-heading", `${(deg(a.yaw) + 360) % 360}°`)
     this.text("#hud-pitch", `${deg(a.pitch)}°`)

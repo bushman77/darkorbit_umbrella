@@ -347,3 +347,25 @@ Space is captured before the browser can turn a focused HUD button into
 a native click, even when the key repeats. Editable text fields and the
 open navigation atlas retain normal keyboard behavior. Existing player
 layouts with target_info entries are sanitized to omit this window.
+
+## Body-relative six-degree-of-freedom attitude (2026-11-01)
+
+Previously the game accumulated independent yaw/pitch/roll Euler angles
+anchored to the world axes. This caused pitch after rolling to ignore
+the ship's local 'up': turning W/S could feel bound to the orientation
+from login. The authoritative Elixir simulation now stores a normalized
+quaternion `orientation` alongside the legacy `attitude` counters.
+Each server tick integrates the existing capped angular rate then
+right-multiplies the new body-local yaw/pitch/roll quaternion.
+
+The server projects cruise thrust and manual red-laser aim through the
+same quaternion's local nose, so camera, thrust and hit testing all
+refer to the current ship heading. The 3D/SBS renderer uses the received
+quaternion directly and performs shortest-arc, frame-rate independent
+slerp to avoid visual snapping. Heading/pitch/bank readouts now derive
+from the orientation rather than the old summed control counters.
+
+Roll 90°, then hold W: the nose should move horizontally relative to
+the world because the ship's own 'up' axis is now sideways. No pitch
+limit or fixed world-axis pitch is imposed. Autopilot's destination
+camera remains separate.

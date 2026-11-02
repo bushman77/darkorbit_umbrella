@@ -2,6 +2,7 @@ import * as THREE from "three"
 import {pointerNdc, toScene, toWorld} from "./stereo_math.mjs"
 import {cockpitHudFit, HUD_GEOMETRY} from "./stereo_layout.mjs"
 import {flightBasis, degrees} from "./flight_basis.mjs"
+import {orientationTelemetry} from "./orientation_interpolation.mjs"
 
 // Rendering only: no Phoenix socket, no movement authority, no combat calculations.
 const clamp = (value, min, max) => Math.max(min, Math.min(value, max))
@@ -183,6 +184,13 @@ export class StereoSpaceView {
     const attitude = ownShip.renderAttitude || ownShip.attitude ||
       {yaw: 0, pitch: 0, roll: 0}
     if (!ownShip.destination) {
+      if (ownShip.renderOrientation || ownShip.orientation) {
+        const q = ownShip.renderOrientation || ownShip.orientation
+        this.camera.up.set(0, 1, 0)
+        this.camera.quaternion.set(q.x, q.y, q.z, q.w).normalize()
+        this.camera.updateMatrixWorld(true)
+        return
+      }
       const {forward, up} = flightBasis(attitude)
       this.camera.up.set(up.x, up.y, up.z)
       this.camera.lookAt(
@@ -227,7 +235,10 @@ export class StereoSpaceView {
       }
       const pos = toScene(entity.render)
       node.position.set(pos.x, pos.y + (entity.kind === "npc" ? 1.8 : 1.2), pos.z)
-      if (entity.kind === "player" && !entity.destination && entity.attitude) {
+      if (entity.kind === "player" && !entity.destination && entity.orientation) {
+        const q = entity.renderOrientation || entity.orientation
+        node.quaternion.set(q.x, q.y, q.z, q.w).normalize()
+      } else if (entity.kind === "player" && !entity.destination && entity.attitude) {
         const a = entity.renderAttitude || entity.attitude
         node.rotation.set(a.pitch, -a.yaw, a.roll, "YXZ")
       } else {
@@ -303,7 +314,9 @@ export class StereoSpaceView {
     ctx.font = "30px monospace"
     const hp = own ? Math.round(100 * (own.hull || 0) / Math.max(own.maxHull || 1, 1)) : 0
     const shield = own ? Math.round(100 * (own.shields || 0) / Math.max(own.maxShields || 1, 1)) : 0
-    const attitude = own?.attitude || {yaw:0, pitch:0, roll:0}
+    const attitude = orientationTelemetry(
+      own?.orientation, own?.attitude || {yaw:0, pitch:0, roll:0}
+    )
     const rates = own?.angularVelocity || {yaw:0, pitch:0, roll:0}
     const hdg = ((degrees(attitude.yaw) % 360) + 360) % 360
     ctx.fillText("HDG " + hdg + "  PITCH " + degrees(attitude.pitch) +
