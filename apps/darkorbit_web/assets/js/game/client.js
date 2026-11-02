@@ -7,6 +7,7 @@ import {
 } from "./combat_client.mjs"
 import {
   combatKeyIntent,
+  gameplayTypingTarget,
   desiredEntityAngle,
   hotbarActionActive,
   smoothAngle,
@@ -31,10 +32,6 @@ const validDestination = (destination, boundaries) =>
   destination.y >= 0 &&
   destination.y <= boundaries.height
 const number = value => new Intl.NumberFormat("en-US", {maximumFractionDigits: 0}).format(value || 0)
-const titleize = value => String(value || "hostile npc")
-  .split(/[_-]+/)
-  .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-  .join(" ")
 
 class SpaceClient {
   constructor(root) {
@@ -128,9 +125,6 @@ class SpaceClient {
       },
     }).attach()
     this.canvas.addEventListener("contextmenu", event => this.handleTargetPointer(event))
-    this.root.querySelector("#combat-target-nearest")?.addEventListener("click", () => this.selectNearestTarget())
-    this.root.querySelector("#combat-clear-target")?.addEventListener("click", () => this.disengageCombat())
-    this.root.querySelector("#combat-fire")?.addEventListener("click", () => this.toggleLaserFire())
     this.spaceLaser = new SpaceLaserTrigger({
       active: () => !this.navComputer?.isOpen &&
         this.channel?.state === "joined" &&
@@ -140,12 +134,19 @@ class SpaceClient {
       fire: done => this.fireReadyWeapon(done),
     })
     window.addEventListener("keyup", event => {
-      if (event.code === "Space") this.spaceLaser.release()
-    })
+      if (event.code !== "Space") return
+      this.spaceLaser.release()
+      // Prevent HTML buttons from receiving a synthetic click on Space keyup.
+      if (!this.navComputer?.isOpen && !gameplayTypingTarget(event.target) &&
+          !event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey) {
+        event.preventDefault()
+      }
+    }, true)
     for (const slot of this.root.querySelectorAll("[data-hotbar-slot]")) {
       slot.addEventListener("click", () => this.activateHotbarSlot(Number(slot.dataset.hotbarSlot)))
     }
-    window.addEventListener("keydown", event => this.handleCombatKey(event))
+    // Capture Space before a focused HTML control can activate itself.
+    window.addEventListener("keydown", event => this.handleCombatKey(event), true)
     this.connect()
     requestAnimationFrame(time => this.frame(time))
   }
@@ -404,7 +405,14 @@ class SpaceClient {
   }
 
   handleCombatKey(event) {
-    if (event.defaultPrevented || this.navComputer?.isOpen) return
+    if (this.navComputer?.isOpen) return
+    if (event.code === "Space" && !gameplayTypingTarget(event.target) &&
+        !event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey) {
+      event.preventDefault()
+      if (!event.repeat) this.spaceLaser?.press()
+      return
+    }
+    if (event.defaultPrevented) return
     const intent = combatKeyIntent(event)
     if (!intent) return
 
@@ -412,7 +420,6 @@ class SpaceClient {
     if (intent.type === "toggle_laser") this.toggleLaserFire()
     if (intent.type === "disengage") this.disengageCombat()
     if (intent.type === "activate_slot") this.activateHotbarSlot(intent.slot)
-    if (intent.type === "manual_laser") this.spaceLaser.press()
     if (intent.type === "target_nearest") this.selectNearestTarget()
   }
 
@@ -759,32 +766,6 @@ class SpaceClient {
     }
 
     this.updateHotbar()
-
-    const target = this.entities.get(this.selectedTargetId)
-    const panel = this.root.querySelector("#combat-target-panel")
-    const empty = this.root.querySelector("#combat-target-empty")
-    if (!panel) return
-
-    if (target?.kind === "npc") {
-      panel.classList.remove("hidden")
-      empty?.classList.add("hidden")
-      this.text("#combat-target-name", target.displayName || "Hostile")
-      const engagement = ownShip?.engagedTargetId === target.id ? "ENGAGED" : "SELECTED"
-      this.text("#combat-target-summary", `${target.displayName || "Hostile"} · ${engagement}`)
-      this.text("#combat-target-type", `Hostile NPC · ${titleize(target.npcTypeId)}`)
-      this.text(
-        "#combat-target-state",
-        `${engagement} · ${(target.state || "idle").toUpperCase()} · ${number(target.attackRange)}u weapons`
-      )
-      this.text("#combat-target-hull", `${number(target.hull)} / ${number(target.maxHull)}`)
-      this.text("#combat-target-shields", `${number(target.shields)} / ${number(target.maxShields)}`)
-      this.setWidth("#combat-target-hull-bar", healthPercent(target.hull, target.maxHull))
-      this.setWidth("#combat-target-shield-bar", healthPercent(target.shields, target.maxShields))
-    } else {
-      panel.classList.add("hidden")
-      empty?.classList.remove("hidden")
-      this.text("#combat-target-summary", "No target")
-    }
   }
 
   updateHotbar() {

@@ -334,3 +334,16 @@ Space Rogue had T targeting, R ready-weapon switching and L manual/
 automatic laser mode. R is deferred until additional weapons exist.
 Automatic lock-on currently uses the existing selected-target system,
 while manual fire uses the new actual forward ray.
+
+## Unobstructed cockpit and Space focus handling (2026-11-01)
+
+The right-hand Combat Relay / Target Information panel was removed from
+the cockpit and saved-layout schema. A minimal pointer-transparent combat
+message remains at the lower left; target name and aiming remain in the
+3D/SBS instrument HUD. T targets the nearest hostile, L/Ctrl/1 toggles
+automatic fire, and Space is nose-aimed manual firing.
+
+Space is captured before the browser can turn a focused HUD button into
+a native click, even when the key repeats. Editable text fields and the
+open navigation atlas retain normal keyboard behavior. Existing player
+layouts with target_info entries are sanitized to omit this window.

@@ -16,13 +16,6 @@ export const DEFAULT_COCKPIT_WINDOWS = Object.freeze({
     visible: true,
     collapsed: false,
   }),
-  target_info: Object.freeze({
-    anchor: "top-right",
-    offsetX: 24,
-    offsetY: 96,
-    visible: true,
-    collapsed: false,
-  }),
   minimap: Object.freeze({
     anchor: "bottom-right",
     offsetX: 24,

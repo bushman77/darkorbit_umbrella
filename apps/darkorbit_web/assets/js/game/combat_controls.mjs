@@ -20,7 +20,20 @@ export const inputControl = target => Boolean(
   target?.isContentEditable
 )
 
+export const gameplayTypingTarget = target => Boolean(
+  target?.isContentEditable ||
+  ["INPUT", "TEXTAREA", "SELECT"].includes(target?.tagName?.toUpperCase?.()) ||
+  target?.matches?.("input, textarea, select, [contenteditable='true']")
+)
+
 export const combatKeyIntent = event => {
+  // Space must fire even when a cockpit button or drag handle has focus.
+  if (event.code === "Space") {
+    if (event.repeat || gameplayTypingTarget(event.target) ||
+        event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return null
+    return {type: "manual_laser"}
+  }
+
   if (event.repeat || inputControl(event.target)) {
     return null
   }
@@ -32,7 +45,6 @@ export const combatKeyIntent = event => {
   if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return null
 
   if (event.code === "Escape") return {type: "disengage"}
-  if (event.code === "Space") return {type: "manual_laser"}
   if (event.code === "KeyL") return {type: "toggle_laser"}
   if (event.code === "KeyT") return {type: "target_nearest"}
 

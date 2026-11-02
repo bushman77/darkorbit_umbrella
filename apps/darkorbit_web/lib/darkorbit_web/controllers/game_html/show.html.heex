@@ -244,143 +244,6 @@
       </section>
 
       <section
-        id="cockpit-window-target-info"
-        data-cockpit-window="target_info"
-        class="cockpit-window cockpit-window-target"
-        aria-labelledby="target-info-title"
-      >
-        <header
-          id="target-info-drag-handle"
-          data-cockpit-drag-handle
-          class="cockpit-window-header cockpit-window-header-hostile"
-          tabindex="0"
-          aria-label="Target information window drag handle. Use arrow keys while the HUD is unlocked to move this window."
-        >
-          <div class="flex min-w-0 items-center gap-2.5">
-            <span class="cockpit-window-mark cockpit-window-mark-hostile">
-              <.icon name="hero-viewfinder-circle" class="size-3.5" />
-            </span>
-            <div class="min-w-0">
-              <p class="cockpit-window-kicker text-orange-300/65">Combat relay</p>
-              <h2 id="target-info-title" class="cockpit-window-title">Target information</h2>
-            </div>
-          </div>
-          <div data-cockpit-collapsed-summary class="cockpit-collapsed-summary text-orange-200">
-            <span id="combat-target-summary">No target</span>
-          </div>
-          <div class="cockpit-window-actions">
-            <button
-              id="target-info-hide"
-              data-cockpit-hide
-              type="button"
-              class="cockpit-window-button cockpit-edit-control"
-              aria-label="Hide target information"
-            >
-              <.icon name="hero-eye-slash" class="size-3.5" />
-            </button>
-            <button
-              id="target-info-collapse"
-              data-cockpit-collapse
-              type="button"
-              class="cockpit-window-button"
-              aria-label="Collapse target information"
-              aria-expanded="true"
-            >
-              <.icon name="hero-chevron-up" class="cockpit-collapse-open size-3.5" />
-              <.icon name="hero-chevron-down" class="cockpit-collapse-closed size-3.5" />
-            </button>
-          </div>
-        </header>
-
-        <div data-cockpit-content class="cockpit-window-content">
-          <p
-            id="combat-status"
-            role="status"
-            class="min-h-8 text-xs leading-relaxed text-slate-400"
-          >
-            Space fires a red laser along your nose (manual aim). T finds the nearest hostile.
-            L (or Ctrl/1) toggles automatic X1 laser fire. A target lock is optional for manual shots.
-          </p>
-
-          <div id="combat-target-empty" class="cockpit-empty-state">
-            <.icon name="hero-signal" class="size-5 text-slate-600" />
-            <p>No hostile target selected</p>
-          </div>
-
-          <div id="combat-target-panel" class="mt-3 hidden border-t border-slate-800/90 pt-3">
-            <div class="flex items-start justify-between gap-3">
-              <div class="min-w-0">
-                <p class="text-[0.52rem] uppercase tracking-[0.2em] text-slate-500">
-                  Locked target
-                </p>
-                <h3
-                  id="combat-target-name"
-                  class="mt-1 truncate text-base font-semibold text-orange-100"
-                >
-                  —
-                </h3>
-                <p id="combat-target-type" class="mt-0.5 text-[0.6rem] text-slate-500">—</p>
-                <p
-                  id="combat-target-state"
-                  class="mt-1 text-[0.62rem] font-semibold tracking-wide text-orange-300/70"
-                >
-                  —
-                </p>
-              </div>
-              <span class="rounded-md border border-orange-300/20 bg-orange-300/5 px-2 py-1 text-[0.52rem] font-bold uppercase tracking-[0.16em] text-orange-300/70">
-                Hostile
-              </span>
-            </div>
-
-            <div class="mt-3 space-y-2.5">
-              <div>
-                <div class="mb-1 flex items-center justify-between text-[0.58rem] font-semibold uppercase tracking-[0.13em]">
-                  <span class="text-emerald-300">Hull</span>
-                  <span id="combat-target-hull" class="font-mono text-slate-300">—</span>
-                </div>
-                <div class="h-1.5 overflow-hidden rounded-full bg-slate-800">
-                  <div
-                    id="combat-target-hull-bar"
-                    class="cockpit-health-bar cockpit-health-bar-hull"
-                  >
-                  </div>
-                </div>
-              </div>
-              <div>
-                <div class="mb-1 flex items-center justify-between text-[0.58rem] font-semibold uppercase tracking-[0.13em]">
-                  <span class="text-sky-300">Shield</span>
-                  <span id="combat-target-shields" class="font-mono text-slate-300">—</span>
-                </div>
-                <div class="h-1.5 overflow-hidden rounded-full bg-slate-800">
-                  <div
-                    id="combat-target-shield-bar"
-                    class="cockpit-health-bar cockpit-health-bar-shield"
-                  >
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="mt-4 grid grid-cols-3 gap-2 border-t border-slate-800/90 pt-4">
-            <button id="combat-target-nearest" type="button" class="cockpit-action-button">
-              <.icon name="hero-viewfinder-circle" class="size-4" /> Nearest
-            </button>
-            <button id="combat-clear-target" type="button" class="cockpit-action-button">
-              <.icon name="hero-x-mark" class="size-4" /> Clear
-            </button>
-            <button
-              id="combat-fire"
-              type="button"
-              class="cockpit-action-button cockpit-action-button-primary"
-            >
-              <.icon name="hero-bolt" class="size-4" /> Toggle laser
-            </button>
-          </div>
-        </div>
-      </section>
-
-      <section
         id="cockpit-window-minimap"
         data-cockpit-window="minimap"
         class="cockpit-window cockpit-window-minimap"
@@ -512,17 +375,6 @@
             <small data-cockpit-visibility-status>Visible</small>
           </button>
           <button
-            id="cockpit-visibility-target"
-            data-cockpit-visibility="target_info"
-            type="button"
-            class="cockpit-visibility-button"
-          >
-            <span>
-              <.icon name="hero-viewfinder-circle" class="size-3.5" /> Target information
-            </span>
-            <small data-cockpit-visibility-status>Visible</small>
-          </button>
-          <button
             id="cockpit-visibility-minimap"
             data-cockpit-visibility="minimap"
             type="button"
@@ -604,6 +456,11 @@
       <% end %>
     </div>
   </nav>
+
+  <p id="combat-status" role="status" aria-live="polite"
+     class="pointer-events-none absolute bottom-24 left-4 z-30 max-w-[min(22rem,40vw)] font-mono text-xs text-rose-200 drop-shadow-md">
+    SPACE red laser · T nearest target · L autofire
+  </p>
 
   <div id="flight-indicators" class="pointer-events-none absolute bottom-32 right-3 z-30 hidden rounded-lg border border-cyan-400/20 bg-slate-950/80 px-3 py-2 font-mono text-xs text-cyan-100 backdrop-blur sm:block">
     FLIGHT <span id="hud-flight-mode" class="text-cyan-300">CRUISE</span>

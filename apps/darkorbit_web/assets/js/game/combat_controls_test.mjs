@@ -3,6 +3,7 @@ import test from "node:test"
 
 import {
   combatKeyIntent,
+  gameplayTypingTarget,
   desiredEntityAngle,
   hotbarActionActive,
   hotbarSlotForCode,
@@ -58,8 +59,10 @@ test("Space fires ready laser and ignores modifiers and editable controls", () =
   assert.equal(combatKeyIntent({code: "Digit1", repeat: true}), null)
   assert.equal(combatKeyIntent({code: "Digit1", ctrlKey: true}), null)
   assert.equal(combatKeyIntent({code: "Digit1", target: target("input")}), null)
+  assert.deepEqual(combatKeyIntent({code: "Space", target: target("button")}), {type: "manual_laser"})
+  assert.deepEqual(combatKeyIntent({code: "Space", target: target("data-cockpit-drag-handle")}), {type: "manual_laser"})
   assert.equal(combatKeyIntent({code: "Space", target: {isContentEditable: true}}), null)
-  assert.equal(combatKeyIntent({code: "Space", target: target("data-cockpit-drag-handle")}), null)
+  assert.equal(gameplayTypingTarget({tagName: "INPUT"}), true)
 })
 
 test("toggle action metadata drives the active hotbar state without a slot special case", () => {

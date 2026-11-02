@@ -306,3 +306,12 @@
   style shortcut for automatic X1 fire and T for nearest-hostile targeting.
 - Added ray collision, no-lock fire, session anti-spoofing, cooldown and
   keyboard regressions. R weapon cycling remains deferred.
+
+### SBS branch — simplify combat interface and protect Space input (2026-11-01)
+
+- Removed large right-hand target information panel and its toggle button,
+  while preserving 3D/SBS target display and minimal hit/miss messages.
+- Removed panel from saved-layout definitions and visibility menu.
+- Captures Space keydown/keyup to stop button focus from consuming the
+  laser trigger or inadvertently toggling autofire.
+- Added layout persistence and keyboard-focus regression tests.

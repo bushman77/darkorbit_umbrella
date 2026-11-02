@@ -174,7 +174,6 @@ const setup = ({storage = new FakeStorage(), width = 1366, height = 768} = {}) =
 
   const dimensions = {
     ship_status: {width: 368, height: 340},
-    target_info: {width: 336, height: 330},
     minimap: {width: 272, height: 210},
   }
   const windows = {}
@@ -280,26 +279,26 @@ test("dragging is restricted to an unlocked title bar and clamped to the viewpor
 
 test("collapse, expansion, hide, restore, and reset update accessible controls", () => {
   const context = setup()
-  const window = context.windows.target_info
-  const collapse = context.collapseButtons.target_info
+  const window = context.windows.ship_status
+  const collapse = context.collapseButtons.ship_status
 
   collapse.dispatch("click")
-  assert.equal(context.manager.layout.windows.target_info.collapsed, true)
+  assert.equal(context.manager.layout.windows.ship_status.collapsed, true)
   assert.equal(window.classList.contains("is-collapsed"), true)
   assert.equal(collapse.getAttribute("aria-expanded"), "false")
 
   collapse.dispatch("click")
-  assert.equal(context.manager.layout.windows.target_info.collapsed, false)
+  assert.equal(context.manager.layout.windows.ship_status.collapsed, false)
   assert.equal(collapse.getAttribute("aria-expanded"), "true")
 
-  context.hideButtons.target_info.dispatch("click")
+  context.hideButtons.ship_status.dispatch("click")
   assert.equal(window.hidden, true)
-  const visibility = context.visibilityControls.find(control => control.dataset.cockpitVisibility === "target_info")
+  const visibility = context.visibilityControls.find(control => control.dataset.cockpitVisibility === "ship_status")
   visibility.dispatch("click")
   assert.equal(window.hidden, false)
 
   context.manager.setLocked(false)
-  context.manager.layout.windows.target_info.x = 400
+  context.manager.layout.windows.ship_status.x = 400
   context.manager.setVisible("minimap", false)
   context.manager.resizeMinimap(1)
   context.reset.dispatch("click")
@@ -314,7 +313,7 @@ test("collapse, expansion, hide, restore, and reset update accessible controls",
     JSON.parse(context.storage.getItem(context.manager.storageKey)).windows.minimap.width,
     MINIMAP_DEFAULT_WIDTH
   )
-  assert.notEqual(context.manager.layout.windows.target_info.x, 400)
+  assert.notEqual(context.manager.layout.windows.ship_status.x, 400)
 })
 
 test("locked minimap controls resize by forty pixels and update the rendered width", () => {
@@ -356,6 +355,17 @@ test("versioned per-player layouts persist and restore without sensitive identif
     `${MINIMAP_DEFAULT_WIDTH + 80}px`
   )
   assert.equal(cockpitStorageKey(42), "darkorbit:cockpit-layout:v1:player:42")
+})
+
+test("old target info layout is ignored and is never restored", () => {
+  const storage = new FakeStorage()
+  const original = setup({storage})
+  const saved = structuredClone(original.manager.layout)
+  saved.windows.target_info = {x: 750, y: 100, visible: true, collapsed: false}
+  storage.setItem(original.manager.storageKey, JSON.stringify(saved))
+  const restored = setup({storage})
+  assert.deepEqual(Object.keys(restored.manager.layout.windows).sort(), ["minimap", "ship_status"])
+  assert.equal(restored.manager.windows.has("target_info"), false)
 })
 
 test("layouts saved before minimap sizing retain their existing window state", () => {
