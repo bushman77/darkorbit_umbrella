@@ -38,8 +38,16 @@ defmodule Core.World do
 
   @spec solar_set_course(pos_integer(), term(), keyword()) :: {:ok, map()} | {:error, term()}
   def solar_set_course(session_id, destination_id, opts \\ []) do
-    with {:ok, session} <- fetch_session(Keyword.get(opts, :sessions, SessionManager), session_id) do
-      SolarNavigation.set_course(solar_navigation_server(opts), session.player_id, destination_id)
+    with {:ok, session} <- fetch_session(Keyword.get(opts, :sessions, SessionManager), session_id),
+         {:ok, navigation} <-
+           SolarNavigation.set_course(solar_navigation_server(opts), session.player_id, destination_id) do
+      # Solar cruise is a separate propulsion regime. Clear any local course
+      # and weapon lock once the server accepts the interplanetary course;
+      # the pilot cannot fly or fight simultaneously in both regimes.
+      registry = Keyword.get(opts, :registry, Core.World.Registry)
+      _ = MapServer.stop_navigation(registry, session.map_id, session.id, session.entity_id)
+      _ = MapServer.disengage_combat(registry, session.map_id, session.id, session.entity_id)
+      {:ok, navigation}
     end
   end
 
@@ -88,7 +96,8 @@ defmodule Core.World do
     registry = Keyword.get(opts, :registry, Core.World.Registry)
     sessions = Keyword.get(opts, :sessions, SessionManager)
 
-    with {:ok, session} <- fetch_session(sessions, session_id) do
+    with {:ok, session} <- fetch_session(sessions, session_id),
+         :ok <- require_conventional(session, opts) do
       MapServer.move(registry, session.map_id, session.id, session.entity_id, destination)
     end
   end
@@ -99,7 +108,8 @@ defmodule Core.World do
     registry = Keyword.get(opts, :registry, Core.World.Registry)
     sessions = Keyword.get(opts, :sessions, SessionManager)
 
-    with {:ok, session} <- fetch_session(sessions, session_id) do
+    with {:ok, session} <- fetch_session(sessions, session_id),
+         :ok <- require_conventional(session, opts) do
       MapServer.plot_course(registry, session.map_id, session.id, session.entity_id, waypoints)
     end
   end
@@ -110,7 +120,8 @@ defmodule Core.World do
     registry = Keyword.get(opts, :registry, Core.World.Registry)
     sessions = Keyword.get(opts, :sessions, SessionManager)
 
-    with {:ok, session} <- fetch_session(sessions, session_id) do
+    with {:ok, session} <- fetch_session(sessions, session_id),
+         :ok <- require_conventional(session, opts) do
       MapServer.stop_navigation(registry, session.map_id, session.id, session.entity_id)
     end
   end
@@ -121,7 +132,8 @@ defmodule Core.World do
     registry = Keyword.get(opts, :registry, Core.World.Registry)
     sessions = Keyword.get(opts, :sessions, SessionManager)
 
-    with {:ok, session} <- fetch_session(sessions, session_id) do
+    with {:ok, session} <- fetch_session(sessions, session_id),
+         :ok <- require_conventional(session, opts) do
       MapServer.flight_controls(registry, session.map_id, session.id, session.entity_id, input)
     end
   end
@@ -131,7 +143,8 @@ defmodule Core.World do
     registry = Keyword.get(opts, :registry, Core.World.Registry)
     sessions = Keyword.get(opts, :sessions, SessionManager)
 
-    with {:ok, session} <- fetch_session(sessions, session_id) do
+    with {:ok, session} <- fetch_session(sessions, session_id),
+         :ok <- require_conventional(session, opts) do
       MapServer.select_target(
         registry,
         session.map_id,
@@ -147,7 +160,8 @@ defmodule Core.World do
     registry = Keyword.get(opts, :registry, Core.World.Registry)
     sessions = Keyword.get(opts, :sessions, SessionManager)
 
-    with {:ok, session} <- fetch_session(sessions, session_id) do
+    with {:ok, session} <- fetch_session(sessions, session_id),
+         :ok <- require_conventional(session, opts) do
       MapServer.clear_target(registry, session.map_id, session.id, session.entity_id)
     end
   end
@@ -157,7 +171,8 @@ defmodule Core.World do
     registry = Keyword.get(opts, :registry, Core.World.Registry)
     sessions = Keyword.get(opts, :sessions, SessionManager)
 
-    with {:ok, session} <- fetch_session(sessions, session_id) do
+    with {:ok, session} <- fetch_session(sessions, session_id),
+         :ok <- require_conventional(session, opts) do
       MapServer.engage_combat(registry, session.map_id, session.id, session.entity_id)
     end
   end
@@ -167,7 +182,8 @@ defmodule Core.World do
     registry = Keyword.get(opts, :registry, Core.World.Registry)
     sessions = Keyword.get(opts, :sessions, SessionManager)
 
-    with {:ok, session} <- fetch_session(sessions, session_id) do
+    with {:ok, session} <- fetch_session(sessions, session_id),
+         :ok <- require_conventional(session, opts) do
       MapServer.disengage_combat(registry, session.map_id, session.id, session.entity_id)
     end
   end
@@ -177,7 +193,8 @@ defmodule Core.World do
     registry = Keyword.get(opts, :registry, Core.World.Registry)
     sessions = Keyword.get(opts, :sessions, SessionManager)
 
-    with {:ok, session} <- fetch_session(sessions, session_id) do
+    with {:ok, session} <- fetch_session(sessions, session_id),
+         :ok <- require_conventional(session, opts) do
       MapServer.toggle_laser_fire(registry, session.map_id, session.id, session.entity_id)
     end
   end
@@ -187,7 +204,8 @@ defmodule Core.World do
     registry = Keyword.get(opts, :registry, Core.World.Registry)
     sessions = Keyword.get(opts, :sessions, SessionManager)
 
-    with {:ok, session} <- fetch_session(sessions, session_id) do
+    with {:ok, session} <- fetch_session(sessions, session_id),
+         :ok <- require_conventional(session, opts) do
       MapServer.activate_action(registry, session.map_id, session.id, session.entity_id, slot)
     end
   end
@@ -198,7 +216,8 @@ defmodule Core.World do
     registry = Keyword.get(opts, :registry, Core.World.Registry)
     sessions = Keyword.get(opts, :sessions, SessionManager)
 
-    with {:ok, session} <- fetch_session(sessions, session_id) do
+    with {:ok, session} <- fetch_session(sessions, session_id),
+         :ok <- require_conventional(session, opts) do
       MapServer.fire_ready_weapon(registry, session.map_id, session.id, session.entity_id)
     end
   end
@@ -208,7 +227,8 @@ defmodule Core.World do
     registry = Keyword.get(opts, :registry, Core.World.Registry)
     sessions = Keyword.get(opts, :sessions, SessionManager)
 
-    with {:ok, session} <- fetch_session(sessions, session_id) do
+    with {:ok, session} <- fetch_session(sessions, session_id),
+         :ok <- require_conventional(session, opts) do
       MapServer.attack(registry, session.map_id, session.id, session.entity_id)
     end
   end
@@ -224,6 +244,20 @@ defmodule Core.World do
     registry = Keyword.get(opts, :registry, Core.World.Registry)
     MapServer.tick(registry, map_id)
   end
+
+  # Enforce the propulsion boundary at the authoritative game API, not
+  # solely in browser controls or Phoenix. Test worlds also support
+  # symbolic player IDs for deterministic combat fixtures.
+  defp require_conventional(%Session{player_id: player_id}, opts)
+       when is_integer(player_id) and player_id > 0 do
+    case SolarNavigation.snapshot(solar_navigation_server(opts), player_id) do
+      {:ok, %{status: :traveling}} -> {:error, :interplanetary_cruise_active}
+      {:ok, _navigation} -> :ok
+      error -> error
+    end
+  end
+
+  defp require_conventional(_session, _opts), do: :ok
 
   defp join_or_close(registry, sessions, session, stats) do
     case MapServer.join(registry, session.map_id, session, stats) do
