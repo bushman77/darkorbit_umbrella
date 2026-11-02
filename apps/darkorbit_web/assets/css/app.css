@@ -703,3 +703,6 @@ body {
 #game-client[data-display-mode="sbs"] > header,
 #game-client[data-display-mode="sbs"] .cockpit-interface,
 #game-client[data-display-mode="sbs"] #action-hotbar { display: none; }
+
+/* Prevent monoscopic help text from appearing across the two headset images. */
+#game-client[data-display-mode="sbs"] #game-controls-hint { display: none; }

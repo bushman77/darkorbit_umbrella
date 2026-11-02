@@ -38,3 +38,15 @@ unchanged; XY positions render on a 3D ground plane.
   `mix assets.build` and `mix precommit` from the umbrella root.
 - Perform manual checks of switching, targeting, movement, multiplayer state
   and binocular comfort on supported headsets.
+
+## Cockpit framing revision (SBS acceptance screenshot)
+
+- Repositioned the instrument surface to fit within the eye frustum and keep
+  telemetry legible rather than being cropped below the viewport.
+- Peripheral canopy braces are thinner and moved toward the sides.
+- Dashboard size adapts to the per-eye perspective aspect ratio; this is
+  checked by `stereo_layout_test.mjs`.
+- Removed the monoscopic desktop instruction hint during SBS mode.
+- The first SBS screenshot was provided from Firefox on Pop!_OS and establishes
+  that the mode renders. It does **not** yet establish headset comfort, accurate
+  stereopsis, or complete gameplay control verification.

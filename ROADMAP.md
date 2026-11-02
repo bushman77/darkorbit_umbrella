@@ -251,3 +251,7 @@ validation remain deferred.
 - [ ] Run complete build, precommit, and manual stereo browser verification.
 - [ ] Introduce server-authoritative 3D motion and 6DOF flight as a separate milestone.
 - [ ] Add optional WebXR and true headset-tracked cockpit controls.
+
+- [x] Revise SBS viewport fit after first Firefox screenshot (instrument sizing
+  and peripheral framing, plus pure per-eye fit regression tests).
+- [ ] Visually recheck the revised cockpit layout in Firefox and headset.

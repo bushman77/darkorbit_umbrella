@@ -188,3 +188,11 @@
 - Added render-only world coordinate and per-eye pointer projection utilities/tests.
 - Added a display selector, keyboard fallback, setup dependency and design notes.
 - Build and real browser/headset verification pending; server is still XY only.
+
+
+### SBS cockpit visibility follow-up
+- Shrunk/repositioned 3D cockpit readouts and made eye-aspect fitting adaptive.
+- Thinned and repositioned canopy beams toward peripheral eye views.
+- Hid the desktop controls hint in stereo mode; added viewport-fit tests.
+- First in-browser SBS rendering observed in user screenshot, but revised
+  geometry and headset compatibility still require manual verification.

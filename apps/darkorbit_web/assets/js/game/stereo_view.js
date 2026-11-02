@@ -1,5 +1,6 @@
 import * as THREE from "three"
 import {pointerNdc, toScene, toWorld} from "./stereo_math.mjs"
+import {cockpitHudFit, HUD_GEOMETRY} from "./stereo_layout.mjs"
 
 // Rendering only: no Phoenix socket, no movement authority, no combat calculations.
 const clamp = (value, min, max) => Math.max(min, Math.min(value, max))
@@ -99,12 +100,15 @@ export class StereoSpaceView {
   addCockpit() {
     const framing = new THREE.Group()
     const steel = material(0x183d5b)
-    framing.add(beam([-1.65, -1, -2.1], [-1.0, 1.05, -2.9], 0.04, steel))
-    framing.add(beam([1.65, -1, -2.1], [1.0, 1.05, -2.9], 0.04, steel))
-    framing.add(beam([-1.65, -1, -2.1], [1.65, -1, -2.1], 0.04, steel))
-    const dash = new THREE.Mesh(new THREE.BoxGeometry(2.65, 0.62, 0.3), material(0x0d2238))
-    dash.position.set(0, -1.02, -1.9)
+    // Keep canopy struts near the outside of each eye's view; the previous
+    // inward-leaning supports cut across the center and distracted from space.
+    framing.add(beam([-2.0, -0.96, -2.75], [-1.75, 1.0, -3.25], 0.023, steel))
+    framing.add(beam([2.0, -0.96, -2.75], [1.75, 1.0, -3.25], 0.023, steel))
+    framing.add(beam([-2.0, -0.96, -2.75], [2.0, -0.96, -2.75], 0.028, steel))
+    const dash = new THREE.Mesh(new THREE.BoxGeometry(2.38, 0.72, 0.25), material(0x0d2238))
+    dash.position.set(0, -0.72, -2.65)
     framing.add(dash)
+    this.dash = dash
 
     // Draw cockpit telemetry once and present it as a stereo-correct 3D surface.
     this.hudCanvas = document.createElement("canvas")
@@ -113,11 +117,12 @@ export class StereoSpaceView {
     this.hudTexture = new THREE.CanvasTexture(this.hudCanvas)
     this.hudTexture.colorSpace = THREE.SRGBColorSpace
     const panel = new THREE.Mesh(
-      new THREE.PlaneGeometry(2.45, 0.55),
+      new THREE.PlaneGeometry(HUD_GEOMETRY.width, HUD_GEOMETRY.height),
       new THREE.MeshBasicMaterial({map: this.hudTexture}),
     )
-    panel.position.set(0, -1.02, -1.7)
+    panel.position.set(0, HUD_GEOMETRY.centerY, -HUD_GEOMETRY.depth)
     framing.add(panel)
+    this.hudPanel = panel
 
     const sight = new THREE.Mesh(
       new THREE.RingGeometry(0.025, 0.035, 40),
@@ -140,6 +145,11 @@ export class StereoSpaceView {
     this.renderer.setSize(this.size.width, this.size.height, false)
     this.camera.aspect = (this.mode === "sbs" ? this.size.width / 2 : this.size.width) / this.size.height
     this.camera.updateProjectionMatrix()
+    const fit = cockpitHudFit(this.camera.aspect, this.camera.fov)
+    if (fit && this.hudPanel && this.dash) {
+      this.hudPanel.scale.setScalar(fit.scale)
+      this.dash.scale.setScalar(fit.scale)
+    }
   }
 
   setCamera(ownShip) {
