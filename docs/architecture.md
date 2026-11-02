@@ -76,8 +76,12 @@ the endpoint.
    and `destroyed` transitions use deterministic patrol points and tick-based
    attack readiness, with no pathfinding or wall-clock dependency.
 6. `Core.Combat.ActionCatalog` defines the ten-slot action surface as data.
-   Slot 1 is the built-in pulse emitter and the remaining slots are empty;
-   activating an empty slot has no inventory or ammunition side effect.
+   Assigned actions expose a stable ID, action type, and activation mode. Slot
+   1 is the toggle-mode X1 ammunition action and the remaining slots are
+   empty; activating an empty slot has no inventory or ammunition side effect.
+   X1 references, but is not, the server-defined Phoenix pulse-emitter weapon.
+   The emitter continues to own its 700 ms cooldown, while player damage still
+   comes from the connected ship's server-derived combat statistics.
 
 ## Authoritative world invariants
 
@@ -102,10 +106,16 @@ the endpoint.
    updates the cooldown before another command can run. Destroyed targets are
    removed or marked dead before subsequent commands are evaluated.
 8. Player `target_id` is selection only; `engaged_target_id` is the explicit
-   combat lifecycle. Engaging never creates a timer or process. Each bounded
-   map tick attempts at most one eligible attack per engaged player, preserves
-   engagement through cooldown or temporary range failure, and clears it when
-   either participant or the target identity becomes invalid.
+   combat lifecycle. The map process owns one atomic laser toggle used by both
+   the direct control command and X1 action activation. Starting validates the
+   selected live NPC and weapon; stopping clears only `engaged_target_id`, so
+   the selected target remains available for a later resume. The legacy
+   explicit engage and clear/disengage operations remain available, with the
+   latter continuing to clear both states for Escape and explicit cancellation.
+   Engaging never creates a timer or process. Each bounded map tick attempts at
+   most one eligible attack per engaged player, preserves engagement through
+   cooldown or temporary range failure, and clears it when either participant
+   or the target identity becomes invalid.
 9. Combat does not replace movement state. Players retain destinations and
    continue moving at normal server-owned speed while engaged; firing never
    teleports or steers a ship into range.
@@ -125,28 +135,35 @@ the endpoint.
    one Core session, binds movement and combat to that session, and disconnects
    it when the channel terminates.
 3. Movement payloads contain destination coordinates; targeting contains only
-   an NPC ID; engagement/disengagement contains no combat values; action
-   activation contains a bounded slot number. Client-provided entity, session,
-   damage, range, position, and cooldown values are ignored.
+   an NPC ID; engagement, laser toggle, and disengagement contain no combat
+   values; action activation contains a bounded slot number. Client-provided
+   entity, session, target, damage, range, position, and cooldown values are
+   ignored by these commands.
 4. Channel join returns a full authoritative snapshot and persisted HUD data.
    Core PubSub events are forwarded to all joined clients; multiple clients
    therefore render the same tick-owned player positions.
 5. The Canvas renderer interpolates displayed positions toward the latest
    server snapshots. Mouse input never changes an entity position locally, and
    visual damage updates consume authoritative laser/world events.
-6. Primary pointer-down first hit-tests live NPCs with the same world-to-screen
-   transform and catalog dimensions used by rendering. An NPC hit submits only
-   target selection; empty-space clicks enter the existing pointer-capture
-   navigation path, including click-and-hold retargeting.
+6. Primary pointer-down first restores gameplay focus and then hit-tests live
+   NPCs with the same world-to-screen transform and catalog dimensions used by
+   rendering. An NPC hit submits only target selection; empty-space clicks
+   enter the existing pointer-capture navigation path, including click-and-hold
+   retargeting. Buttons, drag handles, and editable fields retain their native
+   keyboard behavior and are excluded from combat shortcuts.
 7. The renderer reads replicated `engaged_target_id` for every player. Combat
    facing is recalculated from interpolated player/target positions each frame
    and smoothed across angle wrap; navigation facing remains independently
    tracked and becomes authoritative visually as soon as engagement clears.
 8. The hotbar is rendered from structured server definitions. Number-row keys
-   and clicks submit the same slot activation, Space explicitly engages slot
-   1's primary weapon, and Esc disengages/clears. Repeats and editable controls
-   are ignored. Cooldown shading derives from replicated simulation ticks and
-   server-owned next-attack values.
+   and clicks submit the same slot activation without client-side slot behavior
+   branches. `ControlLeft` and `ControlRight` submit the same authoritative
+   laser toggle as X1; repeat keydowns and unintended Ctrl chords are ignored.
+   Space is reserved for a future single-shot rocket and reports that the action
+   is unavailable without submitting an attack. Esc explicitly disengages and
+   clears selection. `AUTOFIRE`, `STANDBY`, toggle-action active styling, and
+   cooldown shading derive from authoritative engagement and simulation-tick
+   state rather than optimistic client flips.
 9. Right-click selection and the target-nearest button remain available as
    alternatives to left-click selection.
 10. The minimap uses the same pointer-navigation lifecycle as the main canvas,
@@ -218,14 +235,19 @@ range and cooldown enforcement, damage/destruction/respawn, repeated and
 concurrent attacks, persistent engagement, automatic cooldown cadence,
 out-of-range pause/resume, movement during combat, destruction/respawn lock
 clearing, dead-player rejection, action validation, cancellation, and
-disconnect cleanup. Channel integration tests additionally cover signed socket
-authentication, map authorization, spoofed combat values, structured hotbar
-commands, multiplayer engagement replication, combat broadcasts, and
-simultaneous players. JavaScript tests cover pointer-navigation preservation,
-left-click selection without movement, render-dimension hit testing, all ten
-number keys, safe empty actions and input guards, combat-facing precedence,
-moving-target rotation, navigation-facing restoration, and authoritative
-health updates. Cockpit tests additionally cover drag lock state, collapse,
+disconnect cleanup. Laser-control regressions additionally cover direct and
+X1 alternating toggles, selection-preserving stop/resume, clear semantics,
+cooldown preservation across toggles, sequential NPC engagements, invalid or
+empty actions, missing targets, unauthorized sessions, and destroyed players.
+Channel integration tests additionally cover signed socket authentication, map
+authorization, spoofed combat values, structured hotbar commands, multiplayer
+engagement replication, combat broadcasts, and simultaneous players.
+JavaScript tests cover pointer-navigation preservation, left-click selection
+without movement, render-dimension hit testing, all ten number keys, both Ctrl
+keys, held-key and modifier guards, reserved Space behavior, metadata-driven
+active state, combat-facing precedence, moving-target rotation,
+navigation-facing restoration, and authoritative health updates. Cockpit tests
+additionally cover drag lock state, collapse,
 visibility, reset, versioned persistence, corrupt storage fallback, clamping,
 responsive docking, pointer cleanup, canvas isolation, keyboard access,
 reduced motion, and minimap projection, throttling, and lifecycle cleanup.
@@ -243,17 +265,21 @@ cockpit windows, exactly one minimap canvas, and both sizing controls.
 - The E.2.1/E.2.2 cockpit, minimap navigation, and minimap sizing have not been
   manually verified in a browser at the target desktop and mobile viewport
   sizes.
-- Destroyed player respawning, ammunition, loot, rewards, PvP, portals,
-  spatial partitioning, persistence/recovery for live map state, and multi-node
-  world ownership are not implemented.
+- The revised Ctrl/X1 toggle, Space reservation, focus restoration, and
+  stop/resume flow have not been manually verified in a browser.
+- Destroyed player respawning, configurable or consumable ammunition beyond
+  the non-inventory X1 identity, rockets, loot, rewards, PvP, portals, spatial
+  partitioning, persistence/recovery for live map state, and multi-node world
+  ownership are not implemented.
 - Catalog values and the starting map are provisional placeholder game data.
 - The existing dependency lock must be reviewed regularly with `mix hex.audit`.
   Dependency advisories are release blockers for an internet-facing server.
 
 ## Next vertical slice
 
-Manual E.2.1/E.2.2 browser acceptance should verify layout persistence,
-minimap sizing, responsive dock transitions, and continuous minimap steering
-while retaining map-process movement authority. Multiplayer expansion, broader
-two-browser validation, player recovery, and server-owned rewards or
-ammunition remain deferred.
+Manual browser acceptance should verify layout persistence, minimap sizing,
+responsive dock transitions, continuous minimap steering, Ctrl/X1 alternating
+toggle behavior, target-preserving stop/resume, Space messaging, and canvas
+focus restoration while retaining map-process authority. Multiplayer
+expansion, broader two-browser validation, player recovery, and server-owned
+rewards or consumable ammunition remain deferred.

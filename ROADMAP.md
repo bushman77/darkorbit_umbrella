@@ -107,7 +107,7 @@ Inspired by:
 - Map-owned NPC movement, hull, shields, targeting, bounded AI, destruction, and tick-based respawning
 - Pure range, cooldown, shield-absorption, hull-damage, and destruction rules
 - Authenticated target/select/fire channel intentions with authoritative multiplayer combat events
-- Right-click and accessible nearest-target selection, target HUD, Space/click firing, laser and hit effects, and explosions
+- Right-click and accessible nearest-target selection, target HUD, authoritative toggle firing, laser and hit effects, and explosions
 - Catalog-defined Phoenix pulse emitter so existing development pilots can fight without inventory grants or duplication
 
 ### Milestone E.1 — Classic combat controls and action hotbar
@@ -116,8 +116,8 @@ Inspired by:
 - Selected and engaged targets are separate authoritative states, with explicit engage/disengage commands and idempotent repeated activation
 - The map tick automatically fires the server-defined pulse emitter when range and cooldown rules permit, pauses while out of range, and clears combat across destruction, removal, disconnect, and respawn lifecycles
 - Engaged player ships visually face their replicated target independently of movement, then smoothly return to navigation facing when combat ends
-- Responsive bottom-center slots `1` through `0` use server-defined action data, with the pulse emitter in slot 1 and safe empty placeholders in slots 2 through 0
-- Space, number-row keys, click activation, Esc cancellation, active/selected/empty/cooldown states, and input-control/key-repeat guards are implemented
+- Responsive bottom-center slots `1` through `0` use server-defined action data, with X1 ammunition in slot 1 backed by the ship's server-defined pulse emitter and safe empty placeholders in slots 2 through 0
+- Ctrl, number-row keys, click activation, Esc cancellation, active/selected/empty/cooldown states, reserved Space behavior, and input-control/key-repeat guards are implemented
 
 Manual browser verification confirmed navigation, NPC targeting, persistent laser engagement, combat facing, and circular combat maneuvering for Milestone E.1. Broader multiplayer browser validation remains deferred.
 
@@ -126,7 +126,7 @@ Manual browser verification confirmed navigation, NPC targeting, persistent lase
 - Ship status, target information, and the minimap now use one reusable cockpit-window system with unique identifiers, dedicated drag handles, focus ordering, collapse controls, and a window visibility menu
 - Unlock/lock editing, Pointer Events with capture cleanup, keyboard positioning, viewport clamping, reset-to-default behavior, and versioned per-player browser persistence are implemented without changing authoritative simulation behavior
 - The previous main-canvas minimap was replaced by one dedicated, resize-aware minimap canvas driven by the existing interpolated world entities and authoritative map boundaries
-- The ten-slot action hotbar remains anchored at bottom center, outside the movable window layer, with its existing click, number-row, Space, Esc, and cooldown behavior preserved
+- The ten-slot action hotbar remains anchored at bottom center, outside the movable window layer, with click, number-row, Ctrl, Esc, reserved Space, and cooldown behavior preserved
 - Narrow viewports use a horizontally scrollable cockpit dock instead of free-floating windows, keeping panels recoverable after resize
 - Automated coverage exercises drag lock state, collapse, visibility, reset, persistence, malformed storage, clamping, resize mode, pointer cleanup/input isolation, keyboard behavior, reduced motion, and minimap projection/lifecycle
 
@@ -142,6 +142,18 @@ The E.2.1 code and automated verification are complete. Manual browser verificat
 - `mix precommit` passes 84 Elixir tests, `npm test` passes 46 JavaScript tests across 37 top-level cases, the 3-test authenticated page file passes, and `mix assets.build` passes
 
 The E.2.2 implementation and automated verification are complete. Manual browser verification was not performed; the full sizing, reload, responsive-dock, minimap-steering, and combat-preservation flow remains required at the supported viewport sizes.
+
+### Milestone E.2.3 — Server-authoritative laser toggle controls
+
+- `Core.Combat.ActionCatalog` now exposes action ID, type, and activation mode; slot 1 is the toggle-mode X1 ammunition action while the Phoenix pulse emitter remains the separate server-owned weapon and cooldown source
+- One serialized world toggle powers both Ctrl and slot-1 activation. Toggle-off preserves `target_id`, clears only `engaged_target_id`, and leaves `next_attack_tick` unchanged; Escape still clears selection and engagement
+- `ControlLeft` and `ControlRight` are accepted once per physical key press, held repeats and Ctrl chords are ignored, and Space now reports the reserved rocket action as unavailable without firing
+- NPC selection remains independent from firing, destroyed targets clear both states, and a newly selected live NPC can start a fresh engagement
+- Hotbar active state and `AUTOFIRE`/`STANDBY` presentation consume authoritative engagement state and action metadata, while canvas pointer-down restores gameplay focus without taking keyboard behavior from cockpit controls or editable fields
+- Automated regressions cover direct/slot/alternating toggles, stop/resume, clear and destruction lifecycles, sequential NPCs, cooldown preservation, invalid/empty/unauthorized/destroyed/missing-target safety, both Ctrl keys, held-key suppression, Space reservation, action metadata, and all existing cockpit/minimap/navigation behavior
+- `mix precommit` passes 87 Elixir tests, `npm test` passes 48 JavaScript tests across 39 top-level cases, `mix assets.build` passes, and `git diff --check` passes
+
+The E.2.3 implementation and automated verification are complete. Manual browser verification was not performed; Ctrl/X1 alternation, stop/resume with the retained target, Space messaging, focus restoration, and two-browser observation remain required.
 
 ---
 
@@ -171,13 +183,14 @@ The E.2.2 implementation and automated verification are complete. Manual browser
 - Persistent tick-owned player combat engagement and independent combat facing ✅
 - Modular local cockpit layout and standalone minimap rendering ✅
 - Server-authoritative minimap steering and persistent bounded minimap sizing ✅
+- Atomic server-authoritative Ctrl/X1 laser toggling with retained selection ✅
 
 ### 5. Real-Time Layer (movement and PvE slices complete)
 - Authenticated Channels and sockets ✅
 - Connected-player presence and disconnect cleanup ✅
 - Movement synchronization ✅
 - Targeting, laser, damage, destruction, and respawn events ✅
-- Engagement, disengagement, hotbar activation, and replicated combat-facing state ✅
+- Engagement, disengagement, atomic laser toggling, hotbar activation, and replicated combat-facing state ✅
 
 ### 6. Economy System
 - Shop / purchases
@@ -212,8 +225,9 @@ Principles:
 ## ⚠️ Known Gaps
 
 - The E.2.1/E.2.2 cockpit and minimap still require manual browser verification at 1366×768, 1920×1080, 2560×1440, and mobile-sized viewports
+- The E.2.3 Ctrl/X1 toggle, retained-target resume, Space messaging, and canvas-focus flow require manual browser verification
 - Two-player synchronization and broader multiplayer browser validation remain deferred
-- Destroyed player recovery, ammunition, loot, rewards, and PvP are not implemented
+- Destroyed player recovery, configurable or consumable ammunition beyond the X1 action identity, rockets, loot, rewards, and PvP are not implemented
 - Live map state is ephemeral, single-node, and has no crash recovery or spatial partitioning
 - Initial map, NPC, and combat balance values remain provisional
 - No anti-cheat layer
@@ -222,7 +236,9 @@ Principles:
 
 ## ✅ Immediate Next Task
 
-Manually verify the complete E.2.1/E.2.2 cockpit acceptance flow at the
-supported viewport sizes, including minimap sizing and reload persistence,
-responsive docking, and click-and-hold steering. Multiplayer expansion and
-broader two-browser validation remain deferred.
+Manually verify the complete E.2.1/E.2.2 cockpit acceptance flow and the E.2.3
+combat-control contract at the supported viewport sizes, including minimap
+sizing and reload persistence, responsive docking, click-and-hold steering,
+Ctrl/X1 alternating toggles, retained-target resume, Space messaging, and
+canvas focus restoration. Multiplayer expansion and broader two-browser
+validation remain deferred.

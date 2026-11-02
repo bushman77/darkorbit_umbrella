@@ -29,6 +29,7 @@ defmodule Darkorbit.World do
   defdelegate clear_target(session_id), to: Simulation
   defdelegate engage_combat(session_id), to: Simulation
   defdelegate disengage_combat(session_id), to: Simulation
+  defdelegate toggle_laser_fire(session_id), to: Simulation
   defdelegate activate_action(session_id, slot), to: Simulation
   defdelegate attack(session_id), to: Simulation
 

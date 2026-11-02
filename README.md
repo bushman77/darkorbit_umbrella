@@ -40,11 +40,13 @@ wing_pilot / launch-sector-11
 ```
 
 Open a normal and private browser window with one account in each to see both
-ships and the same NPC encounter. Left-click or hold in the viewport to fly,
-right-click an NPC (or use **Target nearest**) to lock it, and press Space or
-use **Fire** to shoot. The server validates each intention and broadcasts
-tick-owned positions, health, damage, destruction, and respawning back to all
-clients.
+ships and the same NPC encounter. Left-click or hold empty space in the
+viewport to fly, select an NPC without firing, then press Ctrl, press 1, or use
+**Toggle laser** to start and stop X1 automatic fire. Escape clears the target.
+Space is reserved for a future single-shot rocket and currently reports that
+the action is unavailable. The server validates each intention and broadcasts
+tick-owned positions, engagement, health, damage, destruction, and respawning
+back to all clients.
 
 Useful commands:
 

@@ -152,3 +152,31 @@
 
 - Layout size remains local to one browser profile and is not synchronized through the account database.
 - On compact viewports the horizontal dock intentionally overrides the floating minimap width; the persisted width is used again when the cockpit returns to floating mode.
+
+### Milestone E.2.3 — Server-authoritative laser toggle controls
+
+#### Added
+
+- Replaced ambiguous engagement shortcuts with one atomic `Core.World`/map/channel laser toggle shared by Ctrl and the slot-1 action. Toggle-off preserves the selected target and clears only active engagement; Escape retains explicit clear-and-disengage behavior.
+- Reworked the server action catalog around explicit action ID, type, and activation mode. Slot 1 now contains toggle-mode X1 ammunition linked to, but distinct from, the existing Phoenix pulse-emitter weapon; no inventory item, rocket, or consumable was added.
+- Preserved the pulse emitter's server-owned damage, range, and cooldown state across toggles, preventing stop/resume from accelerating its firing cadence.
+- Added correct `ControlLeft`/`ControlRight` handling, repeat and Ctrl-chord rejection, reserved-Space unavailable messaging, metadata-driven hotbar active state, and authoritative `AUTOFIRE`/`STANDBY` presentation.
+- Kept NPC selection independent from activation, retained destruction and clear lifecycles, and restored gameplay focus when the main canvas is clicked without consuming native cockpit-button or editable-field keyboard behavior.
+
+#### Tests
+
+- Added Core regressions for direct, slot, and alternating toggles; selection-preserving stop/resume; explicit clear; sequential NPC destruction/selection; cooldown preservation; and invalid, empty, unauthorized, destroyed-player, and missing-target handling.
+- Extended channel coverage for X1 action metadata, shared toggle state, ignored spoofed toggle fields, multiplayer engagement/disengagement broadcasts, retained selection, and fresh activation.
+- Added JavaScript coverage for both physical Ctrl keys, `event.ctrlKey`, held-key suppression, modifier chords, reserved Space behavior, and metadata-driven active indicators while retaining every existing cockpit, minimap, navigation, targeting, and rotation regression.
+
+#### Verification
+
+- `mix precommit` passes 87 Elixir tests: 40 Core, 30 persistence, and 17 web/channel tests.
+- `npm test` passes 48 JavaScript tests across 39 top-level cases.
+- `mix assets.build` and `git diff --check` pass.
+- Manual browser verification was not performed. Ctrl/X1 alternation, retained-target stop/resume, Space messaging, canvas focus restoration, minimap preservation, and two-browser synchronization remain pending.
+
+#### Limitations
+
+- Slots 2 through 0 remain empty. Space reserves a future single-shot rocket but does not create a rocket attack.
+- X1 is currently a non-inventory action identity; configurable ammunition selection, quantities, consumption, X2/X3/X4, rockets, and other hotbar assignments remain future work.

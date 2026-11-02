@@ -21,16 +21,28 @@ export const inputControl = target => Boolean(
 )
 
 export const combatKeyIntent = event => {
-  if (event.repeat || event.altKey || event.ctrlKey || event.metaKey || inputControl(event.target)) {
+  if (event.repeat || inputControl(event.target)) {
     return null
   }
 
+  if (["ControlLeft", "ControlRight"].includes(event.code)) {
+    return event.altKey || event.metaKey || event.shiftKey ? null : {type: "toggle_laser"}
+  }
+
+  if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return null
+
   if (event.code === "Escape") return {type: "disengage"}
-  if (event.code === "Space") return {type: "engage"}
+  if (event.code === "Space") return {type: "rocket_unavailable"}
 
   const slot = hotbarSlotForCode(event.code)
   return slot ? {type: "activate_slot", slot} : null
 }
+
+export const hotbarActionActive = (action, laserEngaged) => Boolean(
+  laserEngaged &&
+  action?.type === "ammunition" &&
+  action?.activationMode === "toggle"
+)
 
 export const angleToTarget = (source, target) => {
   if (!source || !target) return null

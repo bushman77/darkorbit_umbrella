@@ -36,11 +36,15 @@ defmodule DarkorbitWeb.SessionControllerTest do
              )
            ) == 1
 
-    assert Enum.count(LazyHTML.query(document, "#space-viewport")) == 1
+    assert Enum.count(LazyHTML.query(document, "#space-viewport[tabindex='0']")) == 1
     assert Enum.count(LazyHTML.query(document, "#action-hotbar")) == 1
 
-    assert Enum.count(LazyHTML.query(document, "#hotbar-slot-1[data-action-id='pulse_emitter']")) ==
-             1
+    assert Enum.count(
+             LazyHTML.query(
+               document,
+               "#hotbar-slot-1[data-action-id='x1_laser'][data-action-type='ammunition'][data-activation-mode='toggle']"
+             )
+           ) == 1
 
     assert Enum.count(LazyHTML.query(document, "#hotbar-slot-10")) == 1
     assert Enum.count(LazyHTML.query(document, "[data-cockpit-window]")) == 3

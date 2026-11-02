@@ -50,7 +50,14 @@ defmodule DarkorbitWeb.WorldChannelTest do
     assert Enum.any?(response.map.entities, &(&1.id == account.id))
     assert Enum.count(response.map.entities, &(&1.kind == :npc)) == 3
     assert Enum.map(response.hotbar, & &1.key) == ~w(1 2 3 4 5 6 7 8 9 0)
-    assert Enum.at(response.hotbar, 0).action.id == "pulse_emitter"
+
+    assert %{
+             id: "x1_laser",
+             type: :ammunition,
+             activation_mode: :toggle,
+             weapon_id: "pulse_emitter"
+           } = Enum.at(response.hotbar, 0).action
+
     assert Enum.all?(Enum.drop(response.hotbar, 1), &is_nil(&1.action))
 
     leave_and_wait(joined_socket)
@@ -248,14 +255,56 @@ defmodule DarkorbitWeb.WorldChannelTest do
     assert_reply action_ref, :ok, %{
       slot: 1,
       status: :activated,
-      engagement: %{player_id: ^first_id, target_id: ^target_id, changed: true}
+      engagement: %{
+        player_id: ^first_id,
+        target_id: ^target_id,
+        active: true,
+        changed: true
+      }
+    }
+
+    assert_push "combat_engaged", %{player_id: ^first_id, target_id: ^target_id}
+    assert_push "combat_engaged", %{player_id: ^first_id, target_id: ^target_id}
+
+    toggle_ref = push(first_socket, "toggle_laser_fire", %{"target_id" => "spoof"})
+
+    assert_reply toggle_ref, :ok, %{
+      player_id: ^first_id,
+      target_id: ^target_id,
+      engaged_target_id: nil,
+      active: false,
+      reason: :laser_toggled_off
+    }
+
+    assert_push "combat_disengaged", %{
+      player_id: ^first_id,
+      previous_target_id: ^target_id,
+      reason: :laser_toggled_off
+    }
+
+    assert_push "combat_disengaged", %{
+      player_id: ^first_id,
+      previous_target_id: ^target_id,
+      reason: :laser_toggled_off
+    }
+
+    assert {:ok, stopped_snapshot} = World.snapshot()
+    stopped = Enum.find(stopped_snapshot.entities, &(&1.id == first.id))
+    assert stopped.target_id == target_id
+    assert stopped.engaged_target_id == nil
+
+    resume_ref = push(first_socket, "activate_action", %{"slot" => 1})
+
+    assert_reply resume_ref, :ok, %{
+      slot: 1,
+      engagement: %{player_id: ^first_id, target_id: ^target_id, active: true}
     }
 
     assert_push "combat_engaged", %{player_id: ^first_id, target_id: ^target_id}
     assert_push "combat_engaged", %{player_id: ^first_id, target_id: ^target_id}
 
     repeated_ref = push(first_socket, "engage_combat", %{})
-    assert_reply repeated_ref, :ok, %{target_id: ^target_id, changed: false}
+    assert_reply repeated_ref, :ok, %{target_id: ^target_id, active: true, changed: false}
 
     assert {:ok, %{entities: synchronized_entities}} = World.tick()
     synchronized = Enum.find(synchronized_entities, &(&1.id == first.id))

@@ -4,6 +4,7 @@ import test from "node:test"
 import {
   combatKeyIntent,
   desiredEntityAngle,
+  hotbarActionActive,
   hotbarSlotForCode,
   smoothAngle,
 } from "./combat_controls.mjs"
@@ -26,10 +27,25 @@ test("number-row keys map slots 1 through 0 without per-slot command logic", () 
   assert.equal(hotbarSlotForCode("Numpad1"), null)
 })
 
-test("combat keys ignore repeat, modifiers, and editable controls", () => {
+test("Ctrl toggles once from either physical key and ignores held repeats or chords", () => {
+  assert.deepEqual(
+    combatKeyIntent({code: "ControlLeft", ctrlKey: true}),
+    {type: "toggle_laser"}
+  )
+  assert.deepEqual(
+    combatKeyIntent({code: "ControlRight", ctrlKey: true}),
+    {type: "toggle_laser"}
+  )
+  assert.equal(combatKeyIntent({code: "ControlLeft", ctrlKey: true, repeat: true}), null)
+  assert.equal(combatKeyIntent({code: "Digit1", ctrlKey: true}), null)
+  assert.equal(combatKeyIntent({code: "KeyA", ctrlKey: true}), null)
+  assert.equal(combatKeyIntent({code: "ControlRight", ctrlKey: true, shiftKey: true}), null)
+})
+
+test("combat keys reserve Space and ignore modifiers and editable controls", () => {
   const target = selector => ({matches: query => query.includes(selector)})
 
-  assert.deepEqual(combatKeyIntent({code: "Space"}), {type: "engage"})
+  assert.deepEqual(combatKeyIntent({code: "Space"}), {type: "rocket_unavailable"})
   assert.deepEqual(combatKeyIntent({code: "Escape"}), {type: "disengage"})
   assert.deepEqual(combatKeyIntent({code: "Digit0"}), {type: "activate_slot", slot: 10})
   assert.equal(combatKeyIntent({code: "Digit1", repeat: true}), null)
@@ -37,6 +53,22 @@ test("combat keys ignore repeat, modifiers, and editable controls", () => {
   assert.equal(combatKeyIntent({code: "Digit1", target: target("input")}), null)
   assert.equal(combatKeyIntent({code: "Space", target: {isContentEditable: true}}), null)
   assert.equal(combatKeyIntent({code: "Space", target: target("data-cockpit-drag-handle")}), null)
+})
+
+test("toggle action metadata drives the active hotbar state without a slot special case", () => {
+  assert.equal(
+    hotbarActionActive({type: "ammunition", activationMode: "toggle"}, true),
+    true
+  )
+  assert.equal(
+    hotbarActionActive({type: "ammunition", activationMode: "toggle"}, false),
+    false
+  )
+  assert.equal(
+    hotbarActionActive({type: "rocket", activationMode: "single_use"}, true),
+    false
+  )
+  assert.equal(hotbarActionActive(null, true), false)
 })
 
 test("engaged target facing overrides movement and follows target movement", () => {

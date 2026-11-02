@@ -2,25 +2,46 @@ defmodule Core.Combat.ActionCatalog do
   @moduledoc """
   Server-defined combat actions exposed through the player's action hotbar.
 
-  Slots are data rather than transport-specific key handlers so later
-  milestones can replace empty entries with ammunition, rockets, abilities,
-  consumables, or equipment-owned actions.
+  Slots are data rather than transport-specific key handlers. Every assigned
+  action declares what it is and how activation behaves so later milestones
+  can add ammunition, rockets, abilities, consumables, or equipment-owned
+  actions without teaching clients about individual slot numbers.
   """
 
   @slot_count 10
   @pulse_emitter %{
     id: "pulse_emitter",
-    kind: :weapon,
-    label: "Pulse emitter",
-    icon: "pulse",
+    type: :weapon,
+    label: "Phoenix pulse emitter",
     cooldown_ms: 700
   }
 
+  @x1_laser %{
+    id: "x1_laser",
+    type: :ammunition,
+    activation_mode: :toggle,
+    label: "X1 laser",
+    icon: "laser",
+    weapon_id: "pulse_emitter"
+  }
+
+  @type activation_mode :: :toggle | :single_use | :selection
+
+  @type action_type :: :ammunition | :rocket | :ability | :consumable | :equipment
+
   @type action :: %{
+          required(:id) => String.t(),
+          required(:type) => action_type(),
+          required(:activation_mode) => activation_mode(),
+          required(:label) => String.t(),
+          required(:icon) => String.t(),
+          optional(:weapon_id) => String.t()
+        }
+
+  @type weapon :: %{
           id: String.t(),
-          kind: atom(),
+          type: :weapon,
           label: String.t(),
-          icon: String.t(),
           cooldown_ms: pos_integer()
         }
 
@@ -40,10 +61,13 @@ defmodule Core.Combat.ActionCatalog do
 
   def fetch_slot(_slot), do: {:error, :invalid_action_slot}
 
-  @spec pulse_emitter() :: action()
+  @spec pulse_emitter() :: weapon()
   def pulse_emitter, do: @pulse_emitter
 
-  defp action_for_slot(1), do: @pulse_emitter
+  @spec x1_laser() :: action()
+  def x1_laser, do: @x1_laser
+
+  defp action_for_slot(1), do: @x1_laser
   defp action_for_slot(_slot), do: nil
 
   defp slot_key(10), do: "0"

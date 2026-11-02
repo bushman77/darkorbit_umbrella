@@ -245,6 +245,116 @@ defmodule Core.WorldTest do
     assert resumed.hull < resumed.max_hull
   end
 
+  test "Ctrl and slot-one semantics share one laser toggle while preserving selection",
+       context do
+    assert {:ok, session} = World.connect(:toggle_pilot, context.stats, context.world_options)
+    npc_id = "npc:1-1:rift_skirmisher:1"
+
+    assert {:error, :session_not_found} =
+             World.toggle_laser_fire(-1, context.world_options)
+
+    assert {:error, :no_target} =
+             World.toggle_laser_fire(session.id, context.world_options)
+
+    assert {:ok, _selection} = World.select_target(session.id, npc_id, context.world_options)
+
+    assert {:ok,
+            %{
+              active: true,
+              action_id: "x1_laser",
+              target_id: ^npc_id,
+              engaged_target_id: ^npc_id
+            }} = World.toggle_laser_fire(session.id, context.world_options)
+
+    assert {:ok,
+            %{
+              slot: 1,
+              status: :deactivated,
+              action: %{type: :ammunition, activation_mode: :toggle},
+              engagement: %{active: false, target_id: ^npc_id, engaged_target_id: nil}
+            }} = World.activate_action(session.id, 1, context.world_options)
+
+    assert {:ok, stopped} = World.snapshot("1-1", context.world_options)
+    stopped_player = Enum.find(stopped.entities, &(&1.id == :toggle_pilot))
+    assert stopped_player.target_id == npc_id
+    assert stopped_player.engaged_target_id == nil
+
+    assert {:ok, %{active: true}} =
+             World.toggle_laser_fire(session.id, context.world_options)
+
+    assert {:ok, %{engagement: %{active: false}}} =
+             World.activate_action(session.id, 1, context.world_options)
+
+    assert {:ok, %{engagement: %{active: true}}} =
+             World.activate_action(session.id, 1, context.world_options)
+
+    assert {:ok, %{target_id: nil}} = World.clear_target(session.id, context.world_options)
+    assert {:ok, cleared} = World.snapshot("1-1", context.world_options)
+    cleared_player = Enum.find(cleared.entities, &(&1.id == :toggle_pilot))
+    assert cleared_player.target_id == nil
+    assert cleared_player.engaged_target_id == nil
+  end
+
+  test "laser toggles cannot bypass the pulse emitter cooldown", context do
+    assert {:ok, session} =
+             World.connect(:cooldown_toggle_pilot, context.stats, context.world_options)
+
+    npc_id = "npc:1-1:rift_skirmisher:1"
+
+    assert {:ok, _selection} = World.select_target(session.id, npc_id, context.world_options)
+    assert {:ok, %{active: true}} = World.toggle_laser_fire(session.id, context.world_options)
+    assert {:ok, first_tick} = World.tick("1-1", context.world_options)
+    first_target = Enum.find(first_tick.entities, &(&1.id == npc_id))
+    first_player = Enum.find(first_tick.entities, &(&1.id == :cooldown_toggle_pilot))
+    assert first_player.next_attack_tick == 8
+
+    assert {:ok, %{active: false}} = World.toggle_laser_fire(session.id, context.world_options)
+    assert {:ok, %{active: true}} = World.toggle_laser_fire(session.id, context.world_options)
+
+    for expected_tick <- 2..7 do
+      assert {:ok, snapshot} = World.tick("1-1", context.world_options)
+      assert snapshot.tick == expected_tick
+      target = Enum.find(snapshot.entities, &(&1.id == npc_id))
+      player = Enum.find(snapshot.entities, &(&1.id == :cooldown_toggle_pilot))
+      assert target.shields == first_target.shields
+      assert target.hull == first_target.hull
+      assert player.next_attack_tick == 8
+    end
+
+    assert {:ok, eighth_tick} = World.tick("1-1", context.world_options)
+    eighth_target = Enum.find(eighth_tick.entities, &(&1.id == npc_id))
+    assert eighth_target.shields < first_target.shields
+    assert eighth_target.hull < first_target.hull
+  end
+
+  test "destroying one NPC permits a fresh toggle engagement with the next NPC", context do
+    lethal_stats = %{context.stats | damage: 1_200}
+    assert {:ok, session} = World.connect(:sequential_hunter, lethal_stats, context.world_options)
+    first_npc_id = "npc:1-1:rift_skirmisher:1"
+    second_npc_id = "npc:1-1:rift_skirmisher:2"
+
+    assert {:ok, _selection} =
+             World.select_target(session.id, first_npc_id, context.world_options)
+
+    assert {:ok, %{active: true}} = World.toggle_laser_fire(session.id, context.world_options)
+    assert {:ok, destroyed_tick} = World.tick("1-1", context.world_options)
+    destroyed_player = Enum.find(destroyed_tick.entities, &(&1.id == :sequential_hunter))
+    assert destroyed_player.target_id == nil
+    assert destroyed_player.engaged_target_id == nil
+    refute Enum.any?(destroyed_tick.entities, &(&1.id == first_npc_id))
+
+    assert {:ok, _selection} =
+             World.select_target(session.id, second_npc_id, context.world_options)
+
+    assert {:ok, %{active: true, target_id: ^second_npc_id}} =
+             World.toggle_laser_fire(session.id, context.world_options)
+
+    assert {:ok, next_engagement} = World.snapshot("1-1", context.world_options)
+    next_player = Enum.find(next_engagement.entities, &(&1.id == :sequential_hunter))
+    assert next_player.target_id == second_npc_id
+    assert next_player.engaged_target_id == second_npc_id
+  end
+
   test "repeated engagement, empty actions, invalid actions, and cancellation are safe",
        context do
     assert {:ok, session} = World.connect(:action_pilot, context.stats, context.world_options)
@@ -417,6 +527,12 @@ defmodule Core.WorldTest do
            )
 
     assert {:error, :attacker_destroyed} = World.attack(session.id, context.world_options)
+
+    assert {:error, :attacker_destroyed} =
+             World.toggle_laser_fire(session.id, context.world_options)
+
+    assert {:error, :attacker_destroyed} =
+             World.activate_action(session.id, 1, context.world_options)
 
     assert {:error, :attacker_destroyed} =
              World.move(session.id, %{x: 1_100, y: 1_000}, context.world_options)

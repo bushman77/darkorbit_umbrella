@@ -77,6 +77,12 @@ defmodule Core.World.MapServer do
     call_map(registry, map_id, {:disengage_combat, session_id, entity_id})
   end
 
+  @spec toggle_laser_fire(atom(), String.t(), pos_integer(), term()) ::
+          {:ok, map()} | {:error, term()}
+  def toggle_laser_fire(registry, map_id, session_id, entity_id) do
+    call_map(registry, map_id, {:toggle_laser_fire, session_id, entity_id})
+  end
+
   @spec activate_action(atom(), String.t(), pos_integer(), term(), term()) ::
           {:ok, map()} | {:error, term()}
   def activate_action(registry, map_id, session_id, entity_id, slot) do
@@ -267,7 +273,7 @@ defmodule Core.World.MapServer do
          {:ok, target} <- fetch_npc(state, target_id),
          true <- Combat.valid_target?(entity, target),
          :ok <- armed_weapon(entity) do
-      {new_state, payload} = engage_entity(state, entity, target, ActionCatalog.pulse_emitter())
+      {new_state, payload} = engage_entity(state, entity, target, ActionCatalog.x1_laser())
       {:reply, {:ok, payload}, new_state}
     else
       false -> {:reply, {:error, :invalid_target}, state}
@@ -279,6 +285,18 @@ defmodule Core.World.MapServer do
     with {:ok, entity} <- authorized_entity(state, session_id, entity_id) do
       {new_state, payload} = clear_player_combat(state, entity, :cancelled)
       {:reply, {:ok, payload}, new_state}
+    else
+      error -> {:reply, error, state}
+    end
+  end
+
+  def handle_call({:toggle_laser_fire, session_id, entity_id}, _from, state) do
+    with {:ok, entity} <- authorized_entity(state, session_id, entity_id),
+         :ok <- living_attacker(entity) do
+      case toggle_laser_fire(state, entity, ActionCatalog.x1_laser()) do
+        {new_state, {:error, reason}} -> {:reply, {:error, reason}, new_state}
+        {new_state, payload} -> {:reply, {:ok, payload}, new_state}
+      end
     else
       error -> {:reply, error, state}
     end
@@ -541,26 +559,67 @@ defmodule Core.World.MapServer do
     {:reply, {:ok, payload}, state}
   end
 
-  defp activate_action(state, entity, slot, %{kind: :weapon} = action) do
+  defp activate_action(
+         state,
+         entity,
+         slot,
+         %{type: :ammunition, activation_mode: :toggle} = action
+       ) do
+    case toggle_laser_fire(state, entity, action) do
+      {new_state, {:error, reason}} ->
+        {:reply, {:error, reason}, new_state}
+
+      {new_state, engagement} ->
+        {:reply,
+         {:ok,
+          %{
+            slot: slot,
+            status: if(engagement.active, do: :activated, else: :deactivated),
+            action: action,
+            engagement: engagement,
+            tick: state.tick
+          }}, new_state}
+    end
+  end
+
+  defp activate_action(state, _entity, _slot, _action) do
+    {:reply, {:error, :unsupported_action}, state}
+  end
+
+  defp toggle_laser_fire(state, %{engaged_target_id: nil} = entity, action) do
     with {:ok, target_id} <- selected_target(entity),
          {:ok, target} <- fetch_npc(state, target_id),
          true <- Combat.valid_target?(entity, target),
          :ok <- armed_weapon(entity) do
-      {new_state, engagement} = engage_entity(state, entity, target, action)
-
-      {:reply,
-       {:ok,
-        %{
-          slot: slot,
-          status: :activated,
-          action: action,
-          engagement: engagement,
-          tick: state.tick
-        }}, new_state}
+      engage_entity(state, entity, target, action)
     else
-      false -> {:reply, {:error, :invalid_target}, state}
-      error -> {:reply, error, state}
+      false -> {state, {:error, :invalid_target}}
+      {:error, reason} -> {state, {:error, reason}}
     end
+  end
+
+  defp toggle_laser_fire(state, entity, action) do
+    updated_entity = %{entity | engaged_target_id: nil}
+    new_state = %{state | entities: Map.put(state.entities, entity.id, updated_entity)}
+
+    broadcast(
+      new_state,
+      :combat_disengaged,
+      disengagement_payload(entity, :laser_toggled_off, state.tick)
+    )
+
+    {new_state,
+     %{
+       player_id: entity.id,
+       target_id: entity.target_id,
+       previous_target_id: entity.engaged_target_id,
+       engaged_target_id: nil,
+       action_id: action.id,
+       active: false,
+       changed: true,
+       reason: :laser_toggled_off,
+       tick: state.tick
+     }}
   end
 
   defp engage_entity(state, entity, target, action) do
@@ -571,7 +630,9 @@ defmodule Core.World.MapServer do
     payload = %{
       player_id: entity.id,
       target_id: target.id,
+      engaged_target_id: target.id,
       action_id: action.id,
+      active: true,
       changed: changed?,
       tick: state.tick
     }

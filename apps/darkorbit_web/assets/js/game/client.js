@@ -10,6 +10,7 @@ import {
 import {
   combatKeyIntent,
   desiredEntityAngle,
+  hotbarActionActive,
   smoothAngle,
 } from "./combat_controls.mjs"
 import {CockpitWindowManager} from "./cockpit_window_manager.mjs"
@@ -105,6 +106,7 @@ class SpaceClient {
     }).attach()
     this.assets.preload()
     this.resize()
+    this.canvas.addEventListener("pointerdown", () => this.canvas.focus({preventScroll: true}))
     window.addEventListener("resize", () => this.resize())
     this.navigation = new PointerNavigation({
       canvas: this.canvas,
@@ -116,7 +118,7 @@ class SpaceClient {
     this.canvas.addEventListener("contextmenu", event => this.handleTargetPointer(event))
     this.root.querySelector("#combat-target-nearest")?.addEventListener("click", () => this.selectNearestTarget())
     this.root.querySelector("#combat-clear-target")?.addEventListener("click", () => this.disengageCombat())
-    this.root.querySelector("#combat-fire")?.addEventListener("click", () => this.engageCombat())
+    this.root.querySelector("#combat-fire")?.addEventListener("click", () => this.toggleLaserFire())
     for (const slot of this.root.querySelectorAll("[data-hotbar-slot]")) {
       slot.addEventListener("click", () => this.activateHotbarSlot(Number(slot.dataset.hotbarSlot)))
     }
@@ -344,9 +346,12 @@ class SpaceClient {
     if (!intent) return
 
     event.preventDefault()
-    if (intent.type === "engage") this.engageCombat()
+    if (intent.type === "toggle_laser") this.toggleLaserFire()
     if (intent.type === "disengage") this.disengageCombat()
     if (intent.type === "activate_slot") this.activateHotbarSlot(intent.slot)
+    if (intent.type === "rocket_unavailable") {
+      this.setCombatMessage("Rocket action unavailable. Space is reserved for future single-shot rockets.")
+    }
   }
 
   selectNearestTarget() {
@@ -392,6 +397,16 @@ class SpaceClient {
       .receive("timeout", () => this.setCombatMessage("Engagement command timed out."))
   }
 
+  toggleLaserFire() {
+    if (!this.channel || !this.selfId) return
+
+    this.channel
+      .push("toggle_laser_fire", {}, 5000)
+      .receive("ok", engagement => this.applyLaserToggle(engagement))
+      .receive("error", response => this.setCombatMessage(this.attackError(response.reason)))
+      .receive("timeout", () => this.setCombatMessage("Laser toggle timed out."))
+  }
+
   activateHotbarSlot(slot) {
     if (!this.channel || !this.selfId || !Number.isInteger(slot)) return
 
@@ -402,9 +417,7 @@ class SpaceClient {
       .receive("ok", activation => {
         if (activation.status === "empty") {
           this.setCombatMessage(`Action slot ${slot === 10 ? 0 : slot} is empty.`)
-        } else if (activation.engagement) {
-          this.combatEngaged(activation.engagement)
-        }
+        } else if (activation.engagement) this.applyLaserToggle(activation.engagement)
       })
       .receive("error", response => this.setCombatMessage(this.attackError(response.reason)))
       .receive("timeout", () => this.setCombatMessage("Action activation timed out."))
@@ -437,8 +450,8 @@ class SpaceClient {
     if (entityKey(engagement.player_id) !== this.selfId) return
 
     this.selectedTargetId = entityKey(engagement.target_id)
-    this.selectedHotbarSlot = 1
-    this.setCombatMessage("Pulse emitter engaged. Automatic fire authorized.")
+    this.selectHotbarAction(engagement.action_id)
+    this.setCombatMessage("X1 laser automatic fire engaged.")
     this.updateCombatHud()
   }
 
@@ -447,8 +460,26 @@ class SpaceClient {
     if (player) player.engagedTargetId = null
     if (entityKey(engagement.player_id) !== this.selfId) return
 
-    this.setCombatMessage("Combat disengaged.")
+    this.setCombatMessage(
+      engagement.reason === "laser_toggled_off"
+        ? "Laser fire stopped. Target lock retained."
+        : "Combat disengaged."
+    )
     this.updateCombatHud()
+  }
+
+  applyLaserToggle(engagement) {
+    if (engagement.active) this.combatEngaged(engagement)
+    else this.combatDisengaged(engagement)
+  }
+
+  selectHotbarAction(actionId) {
+    if (!actionId) return
+
+    const slot = [...this.root.querySelectorAll("[data-hotbar-slot]")]
+      .find(element => element.dataset.actionId === String(actionId))
+
+    if (slot) this.selectedHotbarSlot = Number(slot.dataset.hotbarSlot)
   }
 
   syncOwnCombatState() {
@@ -993,8 +1024,12 @@ class SpaceClient {
     for (const slot of this.root.querySelectorAll("[data-hotbar-slot]")) {
       const slotNumber = Number(slot.dataset.hotbarSlot)
       const hasAction = slot.dataset.actionId != null
-      const active = hasAction && engaged && slotNumber === 1
-      const coolingDown = hasAction && remainingTicks > 0
+      const action = {
+        type: slot.dataset.actionType,
+        activationMode: slot.dataset.activationMode,
+      }
+      const active = hasAction && hotbarActionActive(action, engaged)
+      const coolingDown = hasAction && action.type === "ammunition" && remainingTicks > 0
       slot.classList.toggle("is-selected", slotNumber === this.selectedHotbarSlot)
       slot.classList.toggle("is-active", active)
       slot.classList.toggle("is-cooling-down", coolingDown)

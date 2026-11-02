@@ -68,6 +68,13 @@ defmodule DarkorbitWeb.WorldChannel do
     end
   end
 
+  def handle_in("toggle_laser_fire", _payload, socket) do
+    case World.toggle_laser_fire(socket.assigns.world_session_id) do
+      {:ok, engagement} -> {:reply, {:ok, engagement}, socket}
+      {:error, reason} -> {:reply, {:error, %{reason: error_reason(reason)}}, socket}
+    end
+  end
+
   def handle_in("activate_action", %{"slot" => slot}, socket) when is_integer(slot) do
     case World.activate_action(socket.assigns.world_session_id, slot) do
       {:ok, activation} -> {:reply, {:ok, activation}, socket}

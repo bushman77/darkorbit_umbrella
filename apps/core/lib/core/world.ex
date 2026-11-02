@@ -95,6 +95,16 @@ defmodule Core.World do
     end
   end
 
+  @spec toggle_laser_fire(pos_integer(), keyword()) :: {:ok, map()} | {:error, term()}
+  def toggle_laser_fire(session_id, opts \\ []) do
+    registry = Keyword.get(opts, :registry, Core.World.Registry)
+    sessions = Keyword.get(opts, :sessions, SessionManager)
+
+    with {:ok, session} <- fetch_session(sessions, session_id) do
+      MapServer.toggle_laser_fire(registry, session.map_id, session.id, session.entity_id)
+    end
+  end
+
   @spec activate_action(pos_integer(), term(), keyword()) :: {:ok, map()} | {:error, term()}
   def activate_action(session_id, slot, opts \\ []) do
     registry = Keyword.get(opts, :registry, Core.World.Registry)

@@ -7,7 +7,8 @@
 >
   <canvas
     id="space-viewport"
-    class="absolute inset-0 size-full cursor-crosshair touch-none"
+    class="absolute inset-0 size-full cursor-crosshair touch-none focus:outline-none"
+    tabindex="0"
     aria-label="Interactive sector 1-1 space viewport. Left-click an NPC to target it, or left-click and hold empty space to navigate."
   >
     Your browser needs Canvas 2D support to run the space client.
@@ -227,7 +228,7 @@
             role="status"
             class="min-h-8 text-xs leading-relaxed text-slate-400"
           >
-            Left-click a hostile, then press Space to engage.
+            Select a hostile, then press Ctrl or 1 to toggle X1 laser fire.
           </p>
 
           <div id="combat-target-empty" class="cockpit-empty-state">
@@ -302,7 +303,7 @@
               type="button"
               class="cockpit-action-button cockpit-action-button-primary"
             >
-              <.icon name="hero-bolt" class="size-4" /> Engage
+              <.icon name="hero-bolt" class="size-4" /> Toggle laser
             </button>
           </div>
         </div>
@@ -491,6 +492,8 @@
           type="button"
           data-hotbar-slot={slot.slot}
           data-action-id={slot.action && slot.action.id}
+          data-action-type={slot.action && slot.action.type}
+          data-activation-mode={slot.action && slot.action.activation_mode}
           aria-label={
             if slot.action,
               do: "Slot #{slot.key}: #{slot.action.label}",
@@ -532,7 +535,7 @@
   </nav>
 
   <div class="pointer-events-none absolute bottom-28 left-1/2 z-10 hidden -translate-x-1/2 rounded-xl border border-slate-700/70 bg-slate-950/70 px-3 py-2 text-[0.65rem] text-slate-400 backdrop-blur xl:block">
-    Left-click hostile to target · Hold empty space to steer · Space to engage · Esc to clear
+    Left-click hostile to target · Hold empty space to steer · Ctrl or 1 toggles laser · Esc clears
   </div>
 
   <div
