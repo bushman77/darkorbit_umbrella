@@ -36,6 +36,83 @@ defmodule Core.World.FlightDynamicsTest do
     assert final.velocity.y > 0
   end
 
+  test "accelerating after turning follows the current heading, never the spawn heading" do
+    map = MapDefinition.starting_map()
+    {:ok, launched} = FlightDynamics.controls(ship(), %{throttle: 1.0}, 0)
+    moving_north = FlightDynamics.step(launched, map, 0.1, 1)
+
+    assert moving_north.velocity.y < 0.0
+    assert_in_delta moving_north.velocity.x, 0.0, 1.0e-8
+
+    # Pilot turns to face east before accelerating further. The last
+    # northward velocity must not dictate the new cruise travel direction.
+    facing_east = %{moving_north |
+      attitude: %{yaw: :math.pi() / 2, pitch: 0.0, roll: 0.0},
+      angular_velocity: %{yaw: 0.0, pitch: 0.0, roll: 0.0}}
+    {:ok, thrusting_east} = FlightDynamics.controls(facing_east, %{throttle: 1.0}, 1)
+    after_turn = FlightDynamics.step(thrusting_east, map, 0.1, 2)
+
+    assert after_turn.velocity.x > 0
+    assert_in_delta after_turn.velocity.y, 0.0, 1.0e-8
+    assert after_turn.position.x > facing_east.position.x
+    assert_in_delta after_turn.position.y, facing_east.position.y, 1.0e-8
+    assert after_turn.cruise_speed > moving_north.cruise_speed
+  end
+
+  test "cruise movement remains aligned with live nose during a sustained turn" do
+    map = MapDefinition.starting_map()
+    {:ok, pilot} = FlightDynamics.controls(ship(), %{throttle: 0.8, yaw: 1.0}, 0)
+
+    moving =
+      Enum.reduce(1..8, pilot, fn tick, current ->
+        FlightDynamics.step(current, map, 0.1, tick)
+      end)
+
+    nose = FlightDynamics.forward(moving.attitude)
+    assert moving.velocity.x > 0.0
+    assert moving.velocity.y < 0.0
+    assert_in_delta moving.velocity.x, nose.x * moving.cruise_speed, 1.0e-8
+    assert_in_delta moving.velocity.y, nose.y * moving.cruise_speed, 1.0e-8
+    assert_in_delta moving.velocity.z, nose.z * moving.cruise_speed, 1.0e-8
+  end
+
+  test "pitch redirects cruise thrust into altitude, and roll alone does not" do
+    map = MapDefinition.starting_map()
+    attitude = %{yaw: :math.pi() / 3, pitch: :math.pi() / 4, roll: 1.2}
+    ship = %{ship() | attitude: attitude}
+    {:ok, engaged} = FlightDynamics.controls(ship, %{throttle: 1.0}, 0)
+    moved = FlightDynamics.step(engaged, map, 0.1, 1)
+
+    heading = FlightDynamics.forward(attitude)
+    assert moved.position.x > ship.position.x
+    assert moved.position.y < ship.position.y
+    assert moved.position.z > ship.position.z
+    assert_in_delta moved.velocity.x, moved.cruise_speed * heading.x, 1.0e-8
+    assert_in_delta moved.velocity.z, moved.cruise_speed * heading.z, 1.0e-8
+
+    rolled = %{ship | attitude: %{attitude | roll: -1.2}}
+    {:ok, rolled_engaged} = FlightDynamics.controls(rolled, %{throttle: 1.0}, 0)
+    rolled_moved = FlightDynamics.step(rolled_engaged, map, 0.1, 1)
+    assert_in_delta rolled_moved.velocity.x, moved.velocity.x, 1.0e-8
+    assert_in_delta rolled_moved.velocity.y, moved.velocity.y, 1.0e-8
+    assert_in_delta rolled_moved.velocity.z, moved.velocity.z, 1.0e-8
+  end
+
+  test "Newtonian-to-Cruise transition aligns retained forward momentum with nose" do
+    map = MapDefinition.starting_map()
+    drifting = %{ship() | flight_mode: :newtonian,
+      attitude: %{yaw: :math.pi() / 2, pitch: 0.0, roll: 0.0},
+      velocity: %{x: 40.0, y: -60.0, z: 0.0}}
+    {:ok, cruise} =
+      FlightDynamics.controls(drifting, %{mode: "cruise", throttle: 0.0}, 2)
+
+    assert_in_delta cruise.cruise_speed, 40.0, 1.0e-8
+    moved = FlightDynamics.step(cruise, map, 0.1, 3)
+    assert moved.velocity.x > 0
+    assert_in_delta moved.velocity.y, 0.0, 1.0e-8
+    assert moved.cruise_speed < 40
+  end
+
   test "Newtonian motion persists at zero throttle while rotation changes heading" do
     map = MapDefinition.starting_map()
     {:ok, started} = FlightDynamics.controls(ship(), %{throttle: 1.0, mode: "newtonian"}, 0)
@@ -59,7 +136,8 @@ defmodule Core.World.FlightDynamicsTest do
     assert oriented.attitude.pitch > 0.0
     assert oriented.position.z > 0.0
 
-    at_edge = %{oriented | position: %Position{x: 1000.0, y: 1000.0, z: 2999.0},
+    at_edge = %{oriented | flight_mode: :newtonian,
+                              position: %Position{x: 1000.0, y: 1000.0, z: 2999.0},
                               velocity: %{x: 0.0, y: 0.0, z: 500.0}}
     clamped = FlightDynamics.step(at_edge, map, 0.1, 2)
     assert clamped.position.z <= 3000.0

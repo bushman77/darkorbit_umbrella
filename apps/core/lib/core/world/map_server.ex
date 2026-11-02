@@ -225,7 +225,7 @@ defmodule Core.World.MapServer do
          {:ok, destination} <- Movement.destination(state.definition, destination) do
       updated_entity = %{
         entity | destination: destination, route_waypoints: [], navigation_mode: :manual,
-                 throttle: 0.0, velocity: %{x: 0.0, y: 0.0, z: 0.0},
+                 throttle: 0.0, cruise_speed: 0.0, velocity: %{x: 0.0, y: 0.0, z: 0.0},
                  rotation_input: %{yaw: 0.0, pitch: 0.0, roll: 0.0}, angular_velocity: %{yaw: 0.0, pitch: 0.0, roll: 0.0}
       }
       new_state = %{state | entities: Map.put(state.entities, entity.id, updated_entity)}
@@ -243,7 +243,7 @@ defmodule Core.World.MapServer do
          {:ok, [first | remaining]} <- Course.plan(state.definition, waypoints) do
       updated = %{
         entity | destination: first, route_waypoints: remaining, navigation_mode: :autopilot,
-                 throttle: 0.0, velocity: %{x: 0.0, y: 0.0, z: 0.0},
+                 throttle: 0.0, cruise_speed: 0.0, velocity: %{x: 0.0, y: 0.0, z: 0.0},
                  rotation_input: %{yaw: 0.0, pitch: 0.0, roll: 0.0}, angular_velocity: %{yaw: 0.0, pitch: 0.0, roll: 0.0}
       }
       new_state = %{state | entities: Map.put(state.entities, entity.id, updated)}
@@ -259,7 +259,7 @@ defmodule Core.World.MapServer do
     with {:ok, entity} <- authorized_entity(state, session_id, entity_id) do
       updated = %{
         entity | destination: nil, route_waypoints: [], navigation_mode: :manual,
-                 throttle: 0.0, velocity: %{x: 0.0, y: 0.0, z: 0.0},
+                 throttle: 0.0, cruise_speed: 0.0, velocity: %{x: 0.0, y: 0.0, z: 0.0},
                  rotation_input: %{yaw: 0.0, pitch: 0.0, roll: 0.0}, angular_velocity: %{yaw: 0.0, pitch: 0.0, roll: 0.0}
       }
       new_state = %{state | entities: Map.put(state.entities, entity.id, updated)}
@@ -911,6 +911,7 @@ defmodule Core.World.MapServer do
       navigation_mode: entity.navigation_mode,
       flight_mode: entity.flight_mode,
       throttle: entity.throttle,
+      forward_speed: entity.cruise_speed,
       attitude: entity.attitude,
       angular_velocity: entity.angular_velocity,
       velocity: entity.velocity,
