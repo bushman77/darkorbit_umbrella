@@ -75,11 +75,67 @@
       <div class="nav-heading">
         <div>
           <p class="nav-eyebrow">FLIGHT SYSTEMS // NAVIGATION DECK</p>
-          <h2 id="nav-title">Sector Atlas</h2>
-          <p class="nav-subtitle">Sector 1-1 · Top-down XY chart with independently selectable Z altitude.</p>
+          <h2 id="nav-title">Solar System Atlas</h2>
+          <p id="nav-subtitle" class="nav-subtitle">One star system · Sun, eight planets and Pluto · select a world to inspect.</p>
         </div>
         <button id="nav-close" class="nav-button nav-close" type="button" aria-label="Close navigation computer">Return to cockpit <span class="text-cyan-300">[M / Esc]</span></button>
       </div>
+      <div class="atlas-view-tabs" role="tablist" aria-label="Atlas navigation level">
+        <button id="nav-view-system" class="atlas-view-tab is-active" type="button"
+          role="tab" aria-selected="true" aria-controls="nav-solar-view">
+          <.icon name="hero-globe-alt" class="inline size-4" /> Solar System
+        </button>
+        <button id="nav-view-sector" class="atlas-view-tab" type="button"
+          role="tab" aria-selected="false" aria-controls="nav-sector-view">
+          <.icon name="hero-map" class="inline size-4" /> Sector 1-1
+        </button>
+        <span class="atlas-level-hint">SOL / ONE STAR SYSTEM</span>
+      </div>
+
+      <section id="nav-solar-view" class="solar-atlas-layout" role="tabpanel"
+        aria-labelledby="nav-view-system">
+        <div class="solar-atlas-frame">
+          <div class="nav-map-caption">
+            <span>SOLAR SYSTEM // ORBITAL OVERVIEW</span>
+            <span>SCHEMATIC · NOT TO SCALE</span>
+          </div>
+          <svg id="nav-solar-chart" viewBox="0 0 1000 600"
+            aria-label="Schematic solar system orbital chart. Select the Sun, a planet, or Pluto."
+            role="group">
+            <g id="nav-solar-content"></g>
+          </svg>
+          <div class="solar-chart-controls">
+            <div class="solar-zoom-group" aria-label="Solar map view">
+              <button class="solar-zoom-button is-active" data-solar-focus="system"
+                aria-pressed="true" type="button">Full system</button>
+              <button class="solar-zoom-button" data-solar-focus="inner"
+                aria-pressed="false" type="button">Inner planets</button>
+            </div>
+            <p>Orbital distances are compressed for readability. Positions are illustrative, not live.</p>
+          </div>
+        </div>
+
+        <aside class="solar-atlas-panel" aria-label="Solar system body details">
+          <p class="nav-eyebrow">SOL / CELESTIAL CATALOG</p>
+          <div class="solar-system-count">1 STAR · 8 PLANETS · PLUTO</div>
+          <div id="nav-system-bodies" class="solar-body-list"
+            aria-label="Select a celestial body"></div>
+          <div class="solar-selected-body">
+            <p class="nav-eyebrow">SELECTED BODY</p>
+            <h3 id="nav-solar-name">Earth</h3>
+            <p id="nav-solar-type">Planet</p>
+            <dl class="solar-body-metrics">
+              <div><dt>MEAN SOLAR DISTANCE</dt><dd id="nav-solar-distance">1 AU</dd></div>
+              <div><dt>ORBITAL PERIOD</dt><dd id="nav-solar-period">1 Earth year</dd></div>
+            </dl>
+          </div>
+          <p class="solar-system-note">SYSTEM CHART ONLY · Interplanetary routes
+            and planetary sector locations are not yet connected to the helm.
+            Open Sector 1-1 to plot working flight waypoints.</p>
+        </aside>
+      </section>
+
+      <section id="nav-sector-view" role="tabpanel" aria-labelledby="nav-view-sector" hidden>
       <div class="nav-layout">
         <div class="nav-map-frame">
           <div class="nav-map-caption"><span>SECTOR ATLAS // XY PROJECTION</span><span>CLICK TO ADD WAYPOINT</span></div>
@@ -122,6 +178,7 @@
           <p class="nav-subtitle">Atlas projects XY overhead; Z sets the waypoint altitude. M returns to your single 3D or SBS cockpit.</p>
         </aside>
       </div>
+      </section>
     </div>
   </section>
 

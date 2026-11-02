@@ -2,6 +2,8 @@ import {
   MAX_WAYPOINTS, chartProjection, chartWorldPoint,
   appendWaypoint, routeDistance, parseCoordinates,
 } from "./navigation_math.mjs"
+import {findSolarBody, SOLAR_FOCUSES} from "./solar_system.mjs"
+import {drawSolarAtlas, renderSolarDetails} from "./solar_atlas.mjs"
 
 const NS = "http://www.w3.org/2000/svg"
 const number = value => Math.round(value).toLocaleString("en-US")
@@ -40,10 +42,39 @@ export class NavigationComputer {
     this.draft = []
     this.isOpen = false
     this.pending = false
+    // The first Atlas screen is SOL. Local tactical route planning stays
+    // completely separate from AU coordinates and cannot receive a planet
+    // marker as a server waypoint.
+    this.view = "system"
+    this.solarFocus = "system"
+    this.solarSelection = "earth"
     this.lastDrawAt = -Infinity
   }
 
   start() {
+    this.solarSvg = this.root.querySelector("#nav-solar-chart")
+    this.root.querySelector("#nav-view-system")?.addEventListener("click",
+      () => this.setView("system"))
+    this.root.querySelector("#nav-view-sector")?.addEventListener("click",
+      () => this.setView("sector"))
+    this.root.querySelector("#nav-solar-chart")?.addEventListener("click", event => {
+      const id = event.target?.closest?.("[data-body-id]")?.getAttribute("data-body-id")
+      if(id)this.selectSolarBody(id)
+    })
+    this.solarSvg?.addEventListener("keydown", event => {
+      if(!["Enter"," "].includes(event.key))return
+      const id=event.target?.closest?.("[data-body-id]")?.getAttribute("data-body-id")
+      if(!id)return
+      event.preventDefault()
+      this.selectSolarBody(id)
+    })
+    this.root.querySelector("#nav-system-bodies")?.addEventListener("click",event=>{
+      const id=event.target?.closest?.("[data-body-id]")?.dataset.bodyId
+      if(id)this.selectSolarBody(id)
+    })
+    for(const button of this.root.querySelectorAll("[data-solar-focus]")){
+      button.addEventListener("click",()=>this.setSolarFocus(button.dataset.solarFocus))
+    }
     this.svg = this.root.querySelector("#nav-chart")
     this.chartLayer = this.root.querySelector("#nav-chart-content")
     this.root.querySelector("#nav-close")?.addEventListener("click", () => this.close())
@@ -90,6 +121,56 @@ export class NavigationComputer {
     return this.getEntities().get(this.getSelfId())
   }
 
+  setView(view) {
+    if(view!=="system"&&view!=="sector")return
+    this.view=view
+    const system=view==="system"
+    this.root.querySelector("#nav-solar-view").hidden=!system
+    this.root.querySelector("#nav-sector-view").hidden=system
+    this.root.querySelector("#nav-view-system").setAttribute("aria-selected",String(system))
+    this.root.querySelector("#nav-view-sector").setAttribute("aria-selected",String(!system))
+    this.root.querySelector("#nav-view-system").classList.toggle("is-active",system)
+    this.root.querySelector("#nav-view-sector").classList.toggle("is-active",!system)
+    this.root.querySelector("#nav-title").textContent=system?
+      "Solar System Atlas":"Sector 1-1 Navigation"
+    this.root.querySelector("#nav-subtitle").textContent=system?
+      "One star system · Sun, eight planets and Pluto · select a world to inspect" :
+      "Local XY tactical chart · plot waypoints with independent Z altitude"
+    if(this.isOpen)this.draw(0,true)
+  }
+
+  setSolarFocus(focus) {
+    if(!SOLAR_FOCUSES.includes(focus))return
+    this.solarFocus=focus
+    // A selected outer planet is still in the data panel, but not on the
+    // magnified inner display. Keep focus consistent with visible markers.
+    if(focus==="inner"&&findSolarBody(this.solarSelection)?.au>1.524){
+      this.solarSelection="earth"
+    }
+    for(const button of this.root.querySelectorAll("[data-solar-focus]")){
+      const current=button.dataset.solarFocus===focus
+      button.classList.toggle("is-active",current)
+      button.setAttribute("aria-pressed",String(current))
+    }
+    if(this.isOpen&&this.view==="system")this.draw(0,true)
+  }
+
+  selectSolarBody(id) {
+    if(!findSolarBody(id))return
+    this.solarSelection=id
+    if(this.solarFocus==="inner"&&findSolarBody(id).au>1.524){
+      this.setSolarFocus("system")
+    }
+    if(this.isOpen&&this.view==="system")this.draw(0,true)
+  }
+
+  renderSolarView() {
+    drawSolarAtlas(this.solarSvg,{
+      focus:this.solarFocus,selectedId:this.solarSelection,
+    })
+    renderSolarDetails(this.root,this.solarSelection)
+  }
+
   open() {
     if (this.isOpen) return
     this.isOpen = true
@@ -101,8 +182,10 @@ export class NavigationComputer {
     // Default to current altitude for a new chart session, but permit changes.
     if (!this.draft.length) altitude.value = String(this.ownShip()?.target?.z ?? 0)
     this.onOpen?.()
-    this.note("Click the chart to plot waypoints. Engage to hand the course to the helm.")
-    this.draw(0, true)
+    this.setView(this.view)
+    if(this.view==="sector"){
+      this.note("Click the sector chart to plot waypoints. Engage to hand the course to the helm.")
+    }
     this.root.querySelector("#nav-close")?.focus()
   }
 
@@ -219,6 +302,12 @@ export class NavigationComputer {
   draw(time, force = false) {
     if (!this.isOpen || (!force && time - this.lastDrawAt < 100)) return
     this.lastDrawAt = time
+    if(this.view==="system"){
+      // No fake realtime planet positions; render only on explicit selection,
+      // zoom or view changes. The live sector chart keeps refreshing normally.
+      if(force)this.renderSolarView()
+      return
+    }
     this.refreshStatus()
     const projection = chartProjection(this.getBoundaries())
     if (!projection) return
