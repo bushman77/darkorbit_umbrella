@@ -10,6 +10,7 @@ defmodule Core.WorldTest do
 
   @registry Core.WorldTest.Registry
   @sessions Core.WorldTest.Sessions
+  @solar_navigation_server Core.WorldTest.SolarNavigation
   @supervisor Core.WorldTest.Supervisor
 
   setup tags do
@@ -21,6 +22,7 @@ defmodule Core.WorldTest do
        name: @supervisor,
        registry: @registry,
        sessions: @sessions,
+       solar_navigation_server: @solar_navigation_server,
        maps: [MapDefinition.starting_map()],
        tick_ms: 100,
        auto_tick: false,
@@ -30,7 +32,9 @@ defmodule Core.WorldTest do
     )
 
     {:ok, stats} = Stats.calculate(1, %{lasers: [], generators: []})
-    %{stats: stats, world_options: [registry: @registry, sessions: @sessions]}
+    %{stats: stats,
+      world_options: [registry: @registry, sessions: @sessions,
+        solar_navigation_server: @solar_navigation_server]}
   end
 
   @tag no_initial_encounter: true
@@ -106,7 +110,7 @@ defmodule Core.WorldTest do
       World.solar_set_course(session.id, "mars", opts)
     assert {:error, :already_traveling} =
       World.solar_set_course(session.id, "pluto", opts)
-    assert :ok = SolarNavigation.tick(Core.WorldTest.Sessions.SolarNavigation)
+    assert :ok = SolarNavigation.tick(@solar_navigation_server)
     assert {:ok, %{progress: progress}} = World.solar_snapshot(session.id, opts)
     assert progress > 0
     assert {:ok, sector} = World.snapshot("1-1", opts)
