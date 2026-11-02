@@ -138,3 +138,12 @@ build failed. Do not diagnose pitch controls in Firefox until the bundle
 contains the current mapping. Restart Phoenix and hard-refresh the tab.
 The current flight input source uses W/S for pitch, A/D for yaw, Q/E for
 roll and =/- for signed throttle; X is intentionally unassigned.
+
+### Smooth turning and rolling (SBS)
+
+Holding W/S, A/D, or Q/E ramps the ship's angular velocity gradually
+toward a capped pitch/yaw/roll rate. Releasing a key smoothly brakes the
+turn; pressing the opposite key brakes then reverses rotation. Actual
+angular motion is integrated by the Elixir world server. The cockpit
+renders interpolated attitude between updates for fluid 3D/SBS motion.
+See the tuning table in [SBS flight notes](docs/sbs-3d.md).

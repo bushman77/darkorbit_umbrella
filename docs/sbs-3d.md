@@ -255,3 +255,27 @@ angle, so input handling can be differentiated from camera or server issues.
 
 Yaw and roll remain independent. The engine still uses Euler angles and
 is not yet a fully body-relative quaternion six-degree-of-freedom model.
+
+## Angular rate limiting — smooth flight controls
+
+Manual yaw, pitch, and roll now have **server-authoritative angular
+velocity**, rather than jumping immediately to full rotation on each key
+press. The controls request target rates; server ticks integrate
+acceleration and use trapezoidal angular displacement to avoid a first-
+tick jolt. Releasing the key brakes angular velocity smoothly to zero.
+Reversing a key first brakes the old direction, then builds speed in
+the new direction. The existing 10-tick input expiry brings a missing
+or interrupted input to a stop.
+
+| Axis | Maximum rate | Rate acceleration | Braking |
+| --- | ---: | ---: | ---: |
+| Yaw (A/D) | 44°/s | 95°/s² | 145°/s² |
+| Pitch (W/S) | 38°/s | 80°/s² | 135°/s² |
+| Roll (Q/E) | 56°/s | 110°/s² | 165°/s² |
+
+These defaults are intended for playable feel and can be tuned. Each
+client smooths authoritative orientation with shortest-path wrapped-angle
+interpolation between 100 ms ticks; the renderer never writes back to
+server positions or attitude. The rate overlay reports authoritative
+pitch/yaw/roll magnitudes in degrees/sec. Cruise and Newtonian thrust
+remain unchanged.

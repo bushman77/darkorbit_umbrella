@@ -180,7 +180,8 @@ export class StereoSpaceView {
     this.camera.position.set(pos.x, pos.y + 2.75, pos.z)
     // Ship attitude is authoritative. The atlas autopilot retains its
     // independent destination-heading view.
-    const attitude = ownShip.attitude || {yaw: 0, pitch: 0, roll: 0}
+    const attitude = ownShip.renderAttitude || ownShip.attitude ||
+      {yaw: 0, pitch: 0, roll: 0}
     if (!ownShip.destination) {
       const {forward, up} = flightBasis(attitude)
       this.camera.up.set(up.x, up.y, up.z)
@@ -227,8 +228,8 @@ export class StereoSpaceView {
       const pos = toScene(entity.render)
       node.position.set(pos.x, pos.y + (entity.kind === "npc" ? 1.8 : 1.2), pos.z)
       if (entity.kind === "player" && !entity.destination && entity.attitude) {
-        node.rotation.set(entity.attitude.pitch, -entity.attitude.yaw,
-          entity.attitude.roll, "YXZ")
+        const a = entity.renderAttitude || entity.attitude
+        node.rotation.set(a.pitch, -a.yaw, a.roll, "YXZ")
       } else {
         node.rotation.y = -entity.angle
       }
@@ -290,12 +291,15 @@ export class StereoSpaceView {
     const hp = own ? Math.round(100 * (own.hull || 0) / Math.max(own.maxHull || 1, 1)) : 0
     const shield = own ? Math.round(100 * (own.shields || 0) / Math.max(own.maxShields || 1, 1)) : 0
     const attitude = own?.attitude || {yaw:0, pitch:0, roll:0}
+    const rates = own?.angularVelocity || {yaw:0, pitch:0, roll:0}
     const hdg = ((degrees(attitude.yaw) % 360) + 360) % 360
     ctx.fillText("HDG " + hdg + "  PITCH " + degrees(attitude.pitch) +
       "  ROLL " + degrees(attitude.roll) + "  V " + speed, 30, 135)
     ctx.fillStyle = selected ? "#ffbe89" : "#7aa9cb"
     ctx.fillText(selected ? "TARGET " + (selected.displayName || "HOSTILE").slice(0, 23) :
-      "HULL " + hp + "% / SHLD " + shield + "%     W/S THRUST  A/D YAW", 30, 199)
+      "P/Y/R  " + Math.abs(degrees(rates.pitch)) + " / " +
+      Math.abs(degrees(rates.yaw)) + " / " + Math.abs(degrees(rates.roll)) +
+      " deg/s   W/S PITCH", 30, 199)
     this.hudTexture.needsUpdate = true
   }
 

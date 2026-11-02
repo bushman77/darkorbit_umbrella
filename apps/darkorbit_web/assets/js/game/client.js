@@ -17,6 +17,7 @@ import {PointerNavigation} from "./pointer_navigation.mjs"
 import {StereoSpaceView} from "./stereo_view.js"
 import {NavigationComputer} from "./navigation_computer.mjs"
 import {FlightControls} from "./flight_controls.mjs"
+import {smoothAttitude} from "./attitude_interpolation.mjs"
 import {nextFlightMode, validFlightMode} from "./display_modes.mjs"
 
 const clamp = (value, minimum, maximum) => Math.min(Math.max(value, minimum), maximum)
@@ -230,6 +231,11 @@ class SpaceClient {
       existing.navigationMode = entity.navigation_mode || "manual"
       existing.routeWaypoints = route3d
       existing.attitude = attitude
+      // Render orientation is independent from server state; never feed the
+      // interpolated angles back into the authoritative simulation.
+      if (!existing.renderAttitude || snap) existing.renderAttitude = {...attitude}
+      existing.angularVelocity = entity.angular_velocity || existing.angularVelocity ||
+        {yaw: 0, pitch: 0, roll: 0}
       existing.velocity = velocity
       existing.throttle = entity.throttle ?? 0
       existing.flightMode = entity.flight_mode || "cruise"
@@ -273,6 +279,8 @@ class SpaceClient {
         navigationMode: entity.navigation_mode || "manual",
         routeWaypoints: route3d,
         attitude,
+        renderAttitude: {...attitude},
+        angularVelocity: entity.angular_velocity || {yaw: 0, pitch: 0, roll: 0},
         velocity,
         throttle: entity.throttle ?? 0,
         flightMode: entity.flight_mode || "cruise",
@@ -606,6 +614,13 @@ class SpaceClient {
       entity.render.y += (entity.target.y - entity.render.y) * positionBlend
       entity.render.z = (entity.render.z ?? 0) +
         ((entity.target.z ?? 0) - (entity.render.z ?? 0)) * positionBlend
+      if (entity.attitude) {
+        entity.renderAttitude = smoothAttitude(
+          entity.renderAttitude || entity.attitude,
+          entity.attitude,
+          deltaSeconds
+        )
+      }
     }
 
     const rotationBlend = 1 - Math.exp(-deltaSeconds / 0.075)
@@ -660,6 +675,9 @@ class SpaceClient {
     this.text("#hud-heading", `${(deg(a.yaw) + 360) % 360}°`)
     this.text("#hud-pitch", `${deg(a.pitch)}°`)
     this.text("#hud-roll", `${deg(a.roll)}°`)
+    const r = ownShip.angularVelocity || {yaw: 0, pitch: 0, roll: 0}
+    this.text("#hud-turn-rates",
+      `${Math.round(Math.abs(deg(r.pitch)))} / ${Math.round(Math.abs(deg(r.yaw)))} / ${Math.round(Math.abs(deg(r.roll)))} °/s`)
     const input = this.flightControls?.axes().pitch || 0
     this.text("#hud-pitch-input", input < 0 ? "DOWN" : input > 0 ? "UP" : "—")
   }

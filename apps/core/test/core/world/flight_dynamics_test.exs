@@ -197,9 +197,15 @@ defmodule Core.World.FlightDynamicsTest do
 
     {:ok, down} = FlightDynamics.controls(rising, %{pitch: -1.0}, 1)
     descending = FlightDynamics.step(down, map, 0.2, 2)
-    assert descending.attitude.pitch > 0.0
-    assert descending.attitude.pitch < rising.attitude.pitch
+    # With rotational inertia, the first reverse tick can still rotate up
+    # while the server brakes. The *rate* must immediately decrease.
     assert descending.angular_velocity.pitch < rising.angular_velocity.pitch
+    {:ok, sustained} = FlightDynamics.controls(descending, %{pitch: -1.0}, 2)
+    reversed = Enum.reduce(3..8, sustained, fn tick, current ->
+      FlightDynamics.step(current, map, 0.2, tick)
+    end)
+    assert reversed.attitude.pitch < rising.attitude.pitch
+    assert reversed.angular_velocity.pitch < 0.0
   end
 
   test "rotation input expires without renewed commands" do

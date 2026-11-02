@@ -273,3 +273,13 @@
 - Prevents repeated testing of outdated cockpit JavaScript after source pulls.
 - Documented checking the built `app.js` for the latest `lastPitchKey` code
   before diagnosing the W/S and obsolete X key mapping.
+
+### SBS branch — smooth, capped pitch/yaw/roll (2026-11-01)
+
+- Added server-owned angular velocity, per-axis turn acceleration/braking
+  and capped angular rates, with smooth opposite-key reversals.
+- Changed pitch/yaw/roll integration to trapezoidal angular displacement.
+- Added shortest-path wrapped-angle rendering interpolation for 3D and SBS.
+- Added turn-rate telemetry on cockpit and stereoscopic HUD.
+- Added browser interpolation tests, server angular-dynamics tests and
+  socket telemetry assertion; full Mix suite must run on the laptop.
