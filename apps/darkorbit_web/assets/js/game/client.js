@@ -17,6 +17,7 @@ import {CockpitWindowManager} from "./cockpit_window_manager.mjs"
 import {MinimapRenderer, minimapWorldPoint} from "./minimap_renderer.mjs"
 import {PointerNavigation} from "./pointer_navigation.mjs"
 import {StereoSpaceView} from "./stereo_view.js"
+import {NavigationComputer} from "./navigation_computer.mjs"
 
 const clamp = (value, minimum, maximum) => Math.min(Math.max(value, minimum), maximum)
 const validDestination = (destination, boundaries) =>
@@ -107,6 +108,19 @@ class SpaceClient {
         !canNavigateMinimap() ||
         !minimapWorldPoint(pointer, minimapCanvas, this.boundaries),
     }).attach()
+    this.navComputer = new NavigationComputer({
+      root: this.root.querySelector("#navigation-computer"),
+      getEntities: () => this.entities,
+      getSelfId: () => this.selfId,
+      getBoundaries: () => this.boundaries,
+      isConnected: () => this.channel?.state === "joined" && Boolean(this.selfId),
+      engage: (waypoints, done) => this.plotCourse(waypoints, done),
+      halt: done => this.stopNavigation(done),
+      onOpen: () => this.navigation?.cancel(),
+      onClose: () => this.canvas.focus({preventScroll: true}),
+    }).start()
+    this.root.querySelector("#nav-open")?.addEventListener("click", () => this.navComputer.open())
+    window.addEventListener("keydown", event => this.navComputer.handleKey(event))
     this.assets.preload()
     this.root.querySelector("#display-mode")?.addEventListener("change", event => this.setDisplayMode(event.target.value))
     window.addEventListener("keydown", event => this.handleDisplayModeKey(event))
@@ -223,6 +237,8 @@ class SpaceClient {
     if (existing) {
       existing.target = target
       existing.destination = destination
+      existing.navigationMode = entity.navigation_mode || "manual"
+      existing.routeWaypoints = entity.route_waypoints || []
       existing.speed = entity.speed
       existing.kind = entity.kind || existing.kind
       existing.playerId = entity.player_id == null ? existing.playerId : entityKey(entity.player_id)
@@ -260,6 +276,8 @@ class SpaceClient {
         render: {...target},
         target,
         destination,
+        navigationMode: entity.navigation_mode || "manual",
+        routeWaypoints: entity.route_waypoints || [],
         speed: entity.speed,
         hull: entity.hull,
         maxHull: entity.max_hull,
@@ -302,6 +320,28 @@ class SpaceClient {
       x: clamp(pointer.clientX - rect.left + this.camera.x - this.viewport.width / 2, 0, this.boundaries.width),
       y: clamp(pointer.clientY - rect.top + this.camera.y - this.viewport.height / 2, 0, this.boundaries.height),
     }
+  }
+
+  plotCourse(waypoints, done) {
+    if (this.channel?.state !== "joined") return done(false, "relay offline")
+    this.channel.push("plot_course", {waypoints}, 5000)
+      .receive("ok", response => {
+        if (response.entity) this.upsertEntity(response.entity)
+        done(true)
+      })
+      .receive("error", response => done(false, response.reason))
+      .receive("timeout", () => done(false, "timeout"))
+  }
+
+  stopNavigation(done) {
+    if (this.channel?.state !== "joined") return done(false, "relay offline")
+    this.channel.push("stop_navigation", {}, 5000)
+      .receive("ok", response => {
+        if (response.entity) this.upsertEntity(response.entity)
+        done(true)
+      })
+      .receive("error", response => done(false, response.reason))
+      .receive("timeout", () => done(false, "timeout"))
   }
 
   sendDestination(destination) {
@@ -356,6 +396,7 @@ class SpaceClient {
   }
 
   handleCombatKey(event) {
+    if (event.defaultPrevented || this.navComputer?.isOpen) return
     const intent = combatKeyIntent(event)
     if (!intent) return
 
@@ -582,6 +623,7 @@ class SpaceClient {
     this.interpolate(deltaSeconds)
     this.draw(time)
     this.minimap?.draw(time)
+    this.navComputer?.draw(time)
     this.updateCoordinates()
     this.updateCombatHud()
     requestAnimationFrame(nextTime => this.frame(nextTime))
@@ -1082,6 +1124,7 @@ class SpaceClient {
   }
 
   handleDisplayModeKey(event) {
+    if (event.defaultPrevented || this.navComputer?.isOpen) return
     if (event.repeat || event.ctrlKey || event.altKey || event.metaKey || event.key.toLowerCase() !== "v") return
     const element = event.target
     if (element?.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(element?.tagName)) return

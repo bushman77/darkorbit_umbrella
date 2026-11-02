@@ -48,6 +48,10 @@
       </select>
     </div>
 
+    <button id="nav-open" type="button" class="pointer-events-auto rounded-xl border border-cyan-300/30 bg-slate-950/85 px-4 py-3 text-xs font-bold tracking-widest text-cyan-100 hover:border-cyan-300" aria-keyshortcuts="M">
+      <.icon name="hero-map" class="mr-1 inline size-4" /> NAV CHART <span class="text-cyan-300/60">[M]</span>
+    </button>
+
     <.form
       for={@logout_form}
       id="pilot-logout-form"
@@ -65,6 +69,60 @@
       </button>
     </.form>
   </header>
+
+  <section id="navigation-computer" class="navigation-computer" role="dialog" aria-modal="true" aria-labelledby="nav-title" hidden>
+    <div class="nav-shell">
+      <div class="nav-heading">
+        <div>
+          <p class="nav-eyebrow">ORIGIN SYSTEMS // FLIGHT DECK</p>
+          <h2 id="nav-title">Navigation Computer</h2>
+          <p class="nav-subtitle">Sector 1-1 · Plot a route and engage the server-authoritative helm.</p>
+        </div>
+        <button id="nav-close" class="nav-button nav-close" type="button" aria-label="Close navigation computer">Return to cockpit <span class="text-cyan-300">[M / Esc]</span></button>
+      </div>
+      <div class="nav-layout">
+        <div class="nav-map-frame">
+          <div class="nav-map-caption"><span>SECTOR OVERVIEW // LIVE TELEMETRY</span><span>CLICK TO ADD WAYPOINT</span></div>
+          <svg id="nav-chart" viewBox="0 0 1000 600" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Sector overview map. Click to add a waypoint to a draft flight route.">
+            <defs>
+              <pattern id="nav-grid-pattern" x="0" y="0" width="50" height="50" patternUnits="userSpaceOnUse">
+                <path d="M 50 0 L 0 0 0 50" fill="none" stroke="#16384f" stroke-width="1"/>
+              </pattern>
+            </defs>
+            <rect x="0" y="0" width="1000" height="600" fill="#061321"/>
+            <rect x="0" y="0" width="1000" height="600" fill="url(#nav-grid-pattern)"/>
+            <g id="nav-chart-content"></g>
+          </svg>
+          <div class="nav-legend"><span><i class="nav-key-self"></i>YOUR SHIP</span><span><i class="nav-key-ally"></i>PILOTS</span><span><i class="nav-key-npc"></i>HOSTILES</span><span><i class="nav-key-route"></i>ROUTE</span></div>
+        </div>
+        <aside class="nav-console">
+          <p class="nav-eyebrow">FLIGHT COMPUTER / NAV-01</p>
+          <div id="nav-state" class="nav-state">HELM IDLE</div>
+          <dl class="nav-metrics">
+            <div><dt>SHIP POSITION</dt><dd id="nav-position">— / —</dd></div>
+            <div><dt>ROUTE LENGTH</dt><dd id="nav-distance">0 units</dd></div>
+          </dl>
+          <div class="nav-console-heading"><h3>COURSE WAYPOINTS</h3><span id="nav-waypoint-count">0 / 8</span></div>
+          <ol id="nav-waypoints" class="nav-waypoints" aria-label="Plotted waypoint coordinates"></ol>
+          <form id="nav-coordinate-form" class="nav-coordinate-form">
+            <label>X <input id="nav-x" type="number" min="0" max="20000" step="any" placeholder="X" required /></label>
+            <label>Y <input id="nav-y" type="number" min="0" max="12000" step="any" placeholder="Y" required /></label>
+            <button class="nav-button" type="submit">Add coordinates</button>
+          </form>
+          <div class="nav-console-actions">
+            <button id="nav-engage" class="nav-button nav-primary" type="button">Engage autopilot</button>
+            <button id="nav-stop" class="nav-button nav-danger" type="button">Stop / cancel course</button>
+            <div class="nav-secondary-actions">
+              <button id="nav-undo" class="nav-button" type="button">Undo point</button>
+              <button id="nav-clear" class="nav-button" type="button">Clear draft</button>
+            </div>
+          </div>
+          <p id="nav-message" class="nav-message" role="status" aria-live="polite">Awaiting navigation data.</p>
+          <p class="nav-subtitle">This chart is a flat navigation console, independent of the single 3D and SBS flight views.</p>
+        </aside>
+      </div>
+    </div>
+  </section>
 
   <div id="cockpit-interface" class="cockpit-interface" aria-label="Customizable cockpit HUD">
     <div id="cockpit-window-stage" class="cockpit-window-stage">
