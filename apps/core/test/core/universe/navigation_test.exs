@@ -19,6 +19,8 @@ defmodule Core.Universe.NavigationTest do
     assert state.status == :idle
     assert state.destination_id == nil
     assert state.progress == 0.0
+    assert "earth" in state.territory.faction_ids
+    assert state.territory.status in [:controlled, :contested]
     assert :ok = Navigation.tick(server)
     assert {:ok, ^state} = Navigation.snapshot(server, 11)
   end
@@ -89,5 +91,26 @@ defmodule Core.Universe.NavigationTest do
     assert canceled.destination_id == nil
     assert {:error, :no_active_course} = Navigation.cancel_course(server, 11)
   end
-end
 
+  test "jurisdiction follows server-owned SOL cruise positions", %{server: server} do
+    assert {:ok, start} = Navigation.snapshot(server, 503)
+    assert {:ok, initial} = Core.Universe.Territory.classify(start.position_km)
+    assert start.territory.status == initial.status
+    assert start.territory.faction_ids ==
+             Enum.map(initial.claims, & &1.faction_id)
+
+    assert {:ok, _route} = Navigation.set_course(server, 503, "mars")
+
+    for _ <- 1..5 do
+      assert :ok = Navigation.tick(server)
+      assert {:ok, underway} = Navigation.snapshot(server, 503)
+      assert underway.status == :traveling
+      assert {:ok, expected} = Core.Universe.Territory.classify(underway.position_km)
+      assert underway.territory.status == expected.status
+      assert underway.territory.faction_ids ==
+               Enum.map(expected.claims, & &1.faction_id)
+      refute Map.has_key?(underway, :reputations)
+      refute Map.has_key?(underway, :patrols)
+    end
+  end
+end
