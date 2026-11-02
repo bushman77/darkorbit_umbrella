@@ -255,3 +255,17 @@ validation remain deferred.
 - [x] Revise SBS viewport fit after first Firefox screenshot (instrument sizing
   and peripheral framing, plus pure per-eye fit regression tests).
 - [ ] Visually recheck the revised cockpit layout in Firefox and headset.
+
+
+## Navigation Computer V1 — experimental `sbs` branch
+
+- [x] Full-screen SVG map independent of Classic 2D / 3D / SBS view selection.
+- [x] Pointer and coordinate waypoint selection (up to eight legs), undo and clear.
+- [x] Authenticated `plot_course` and `stop_navigation` commands.
+- [x] Server-side atomic route validation, ordered waypoint progression and manual override.
+- [x] Screen accessibility and keyboard controls (M, Escape, focus cycle).
+- [x] Regression tests for validation, movement, spoofing and map projection.
+- [ ] Run `npm test`, `mix assets.build` and `mix precommit` locally.
+- [ ] Manually verify course interaction, browser layout, headsets and two-player sync.
+- [ ] Introduce genuine 3D sectors, 6DOF flight and Newtonian/cruise modes.
+- [ ] Add real hazard-aware navigation, station docking and a stereo in-world chart.

@@ -491,6 +491,13 @@ defmodule Core.World.MapServer do
          :ok <- Combat.validate_attack(attacker, target, state.tick) do
       {damaged_target, damage} = Combat.apply_damage(target, attacker.damage)
 
+      damaged_target =
+        if damage.destroyed do
+          %{damaged_target | destination: nil, route_waypoints: [], navigation_mode: :manual}
+        else
+          damaged_target
+        end
+
       updated_attacker = %{
         attacker
         | next_attack_tick: Combat.next_attack_tick(attacker, state.tick)

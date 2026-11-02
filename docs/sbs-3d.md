@@ -50,3 +50,54 @@ unchanged; XY positions render on a 3D ground plane.
 - The first SBS screenshot was provided from Firefox on Pop!_OS and establishes
   that the mode renders. It does **not** yet establish headset comfort, accurate
   stereopsis, or complete gameplay control verification.
+
+
+## Navigation Computer V1 — authoritative waypoints
+
+The navigation overlay is a **flat SVG chart**, not another flight camera.
+Press **M** from Classic 2D, 3D Cockpit, or Stereo SBS to open it; press
+**M** or **Escape** to return to the prior flight view. The original view
+mode is preserved. The chart is intentionally monoscopic; users viewing
+SBS through a headset must use the computer's display for chart interactions
+until an in-world stereoscopic console is implemented.
+
+- Click on the chart to add a waypoint, or type X and Y and select
+  **Add coordinates**. Up to **8 waypoints** are supported.
+- **Undo point** and **Clear draft** edit *local draft data only*, never the
+  server's active course.
+- **Engage autopilot** submits the complete route through the authenticated
+  `plot_course` Phoenix Channel command. Only a successful server reply
+  activates the course. The server validates all points and rejects the entire
+  route if any point is outside the sector, malformed, or excessive.
+- Every simulation tick advances the ship toward its current server-owned
+  waypoint, then changes to the next one. The server sends
+  `navigation_mode`, `destination`, and `route_waypoints` in the same
+  authoritative entity snapshots used by the cockpit and minimap.
+- **Stop / cancel course** sends `stop_navigation` (no coordinate payload).
+  This clears destination and route under the player's session authority.
+- Manual click navigation or minimap navigation calls the existing `move`
+  command, which immediately replaces and cancels any autopilot route.
+- On ship destruction, the server clears the active route.
+
+**Still a 2D simulation:** these are XY sector destinations, not Z-axis
+navigation, Newtonian physics, or 6DOF movement. Route planning is straight
+line per leg, with no hazard avoidance or docking logic. Courses are
+ephemeral map state, not persisted between sessions. The screen is not an
+immersive WebXR navigation interface.
+
+### Verification
+
+Pure JavaScript navigation math and route safety checks were run during the
+implementation. Node, Elixir, asset-build, and browser tests have **not**
+yet been run in the developer's local environment. Run:
+
+```bash
+cd apps/darkorbit_web/assets && npm test
+cd ../../..
+mix assets.build
+mix precommit
+```
+
+Then manually verify chart opening/closing from all display modes, route
+engagement and multi-waypoint progression, stopping, manual overrides,
+invalid coordinates, disconnects, and multiplayer visibility.

@@ -196,3 +196,15 @@
 - Hid the desktop controls hint in stereo mode; added viewport-fit tests.
 - First in-browser SBS rendering observed in user screenshot, but revised
   geometry and headset compatibility still require manual verification.
+
+
+### 2026-11-01 — Navigation Computer V1 (`sbs`)
+- Added an SVG sector overview with coordinate input, eight-point course drafts,
+  route preview, and server-reported helm/position telemetry.
+- Implemented `plot_course` with full server-side validation and deterministic
+  ordered waypoint progression, plus session-bound `stop_navigation`.
+- Manual `move` cancels autopilot; destruction also clears a course.
+- Preserved Classic 2D, single-view Three.js, and dual-eye SBS render modes.
+- Added Core, channel, and pure JavaScript tests. Static JS checks and partial
+  geometry checks passed; full automated suites and manual browser verification
+  remain outstanding.

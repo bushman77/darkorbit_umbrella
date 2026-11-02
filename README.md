@@ -82,3 +82,11 @@ The `sbs` branch adds optional Three.js 3D cockpit and side-by-side stereo
 rendering without changing the authoritative 2D world simulation. Press **V**
 to cycle Classic 2D → 3D Cockpit → Stereo SBS. See
 [docs/sbs-3d.md](docs/sbs-3d.md) for setup and caveats.
+
+
+### Navigation Computer V1 (experimental SBS branch)
+Press **M** to open the full-sector SVG overview from any flight view.
+Click up to eight waypoints, select **Engage autopilot**, then return to
+the cockpit with **M** or **Esc**. A server-owned route advances across
+simulation ticks; **Stop / cancel course** halts it, and manual steering
+overrides the route. See [SBS navigation notes](docs/sbs-3d.md).

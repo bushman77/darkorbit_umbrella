@@ -715,7 +715,7 @@ body {
   z-index: 90;
   display: flex;
   overflow: auto;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   padding: clamp(0.5rem, 2vw, 2rem);
   background: #020a14;

@@ -105,6 +105,18 @@ export class NavigationComputer {
       this.close()
       return true
     }
+    // Tab and Shift+Tab remain inside the modal navigation computer.
+    if (this.isOpen && event.code === "Tab" && !event.altKey && !event.ctrlKey && !event.metaKey) {
+      const focusable = [...this.root.querySelectorAll("button:not(:disabled), input:not(:disabled)")].filter(node => !node.hidden)
+      const first = focusable[0]
+      const last = focusable.at(-1)
+      if ((event.shiftKey && document.activeElement === first) ||
+          (!event.shiftKey && document.activeElement === last)) {
+        event.preventDefault()
+        ;(event.shiftKey ? last : first)?.focus()
+        return true
+      }
+    }
     if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return false
     const tag = event.target?.tagName
     const editing = event.target?.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(tag)
@@ -112,22 +124,6 @@ export class NavigationComputer {
       event.preventDefault()
       this.isOpen ? this.close() : this.open()
       return true
-    }
-    // Keep keyboard focus inside the active navigation dialog.
-    if (this.isOpen && event.code === "Tab") {
-      const focusable = [...this.root.querySelectorAll("button:not(:disabled), input:not(:disabled)")].filter(node => !node.hidden)
-      const first = focusable[0]
-      const last = focusable.at(-1)
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault()
-        last?.focus()
-        return true
-      }
-      if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault()
-        first?.focus()
-        return true
-      }
     }
     return false
   }

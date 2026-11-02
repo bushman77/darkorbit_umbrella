@@ -10,7 +10,10 @@ const bounds = {width: 20_000, height: 12_000}
 test("full navigation chart projects all map corners and roundtrips a point", () => {
   const projection = chartProjection(bounds)
   assert.deepEqual(chartWorldPoint(projection.point({x: 0, y: 0}), bounds), {x: 0, y: 0})
-  assert.deepEqual(chartWorldPoint(projection.point(bounds), bounds), bounds)
+  const end = chartWorldPoint(projection.point({x: bounds.width, y: bounds.height}), bounds)
+  assert.ok(end)
+  assert.ok(Math.abs(end.x - bounds.width) < 1e-6)
+  assert.ok(Math.abs(end.y - bounds.height) < 1e-6)
   const sample = {x: 3250, y: 8500}
   const result = chartWorldPoint(projection.point(sample), bounds)
   assert.ok(Math.abs(result.x - sample.x) < 1e-6)
