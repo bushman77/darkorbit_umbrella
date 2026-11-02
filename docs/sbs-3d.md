@@ -214,3 +214,19 @@ playable cockpit, but not yet full aerospace control or rotational inertia.
 isolated runtime check. The new Core and Channel tests need to be run
 with Elixir on the developer's Pop!_OS machine. Physics feel and 3D/SBS
 orientation require in-browser evaluation.
+
+## Ergonomic flight input correction
+
+The original first-pass mapping used W/X as pitch and S as a rotation
+stop key; this confused WASD piloting. The revised controls use **W/S**
+to ramp positive or negative throttle while held; **A/D** yaw;
+**Up/Down arrows** pitch; **Z/C** roll; **F** releases rotational inputs;
+and + / - still step the signed throttle. Press Ctrl+E to switch between
+Cruise Flight and Newtonian Flight. The default ship attitude is displayed
+in the mono overlay and stereoscopic HUD as degrees for heading/pitch/roll.
+
+The Three.js camera now uses the server's world-space forward direction
+and a separately rolled up vector. This explicitly separates yaw from
+roll and matches the server convention (+yaw right, +pitch up), with the
+autopilot camera reset to world-up. Automated basis tests cover orthogonality
+and each input axis. Remote browser verification remains necessary.

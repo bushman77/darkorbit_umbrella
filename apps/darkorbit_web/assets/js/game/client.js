@@ -96,7 +96,7 @@ class SpaceClient {
       halt: done => this.stopNavigation(done),
       onOpen: () => {
         this.navigation?.cancel()
-        this.flightControls.release()
+        this.flightControls.release({silent: true})
       },
       onClose: () => this.canvas.focus({preventScroll: true}),
     }).start()
@@ -655,6 +655,11 @@ class SpaceClient {
     this.text("#hud-throttle", `${Math.round((ownShip.throttle || 0) * 100)}%`)
     const v = ownShip.velocity || {x: 0, y: 0, z: 0}
     this.text("#hud-actual-speed", `${Math.round(Math.hypot(v.x, v.y, v.z))} u/s`)
+    const a = ownShip.attitude || {yaw: 0, pitch: 0, roll: 0}
+    const deg = radians => Math.round(radians * 180 / Math.PI)
+    this.text("#hud-heading", `${(deg(a.yaw) + 360) % 360}°`)
+    this.text("#hud-pitch", `${deg(a.pitch)}°`)
+    this.text("#hud-roll", `${deg(a.roll)}°`)
   }
 
   updateNavigationStatus() {

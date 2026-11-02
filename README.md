@@ -116,3 +116,10 @@ Use `Ctrl+E` to toggle Cruise (assisted velocity) and Newtonian
 (momentum-preserving thrust). Throttle can cross zero into reverse.
 This is server-owned XYZ motion; **M** opens atlas autopilot separately.
 See [SBS flight and navigation notes](docs/sbs-3d.md).
+
+### Updated WASD controls on SBS
+
+**W/S** ramp forward/reverse throttle, **A/D** yaw, **Up/Down arrows**
+pitch, **Z/C** roll, **F** releases rotational keys. Plus/minus adjust
+signed throttle in steps; **Ctrl+E** selects Cruise/Newtonian.
+The HUD shows heading, pitch and roll so steering can be diagnosed.

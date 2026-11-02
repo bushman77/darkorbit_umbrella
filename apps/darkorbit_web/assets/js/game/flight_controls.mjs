@@ -1,14 +1,14 @@
-const DIRECTIONS = Object.freeze({
-  KeyA: ["yaw", -1], KeyD: ["yaw", 1],
-  KeyW: ["pitch", -1], KeyX: ["pitch", 1],
-  KeyZ: ["roll", -1], KeyC: ["roll", 1],
-})
+// WASD space piloting; throttle is a signed setpoint in [-1, 1].
+// The server owns orientation, position, velocity and thrust physics.
+const ROTATION_KEYS = new Set([
+  "KeyA", "KeyD", "ArrowUp", "ArrowDown", "KeyZ", "KeyC", "KeyX",
+])
+const THROTTLE_KEYS = new Set(["KeyW", "KeyS"])
+const THROTTLE_INTERVAL_MS = 120
 
-const isTyping = target => Boolean(target?.isContentEditable ||
+const typing = target => Boolean(target?.isContentEditable ||
   ["INPUT", "TEXTAREA", "SELECT"].includes(target?.tagName))
 
-// Only user intent crosses the socket. Position, velocity, acceleration,
-// rotation angles and speed limits remain authoritative in Core.World.
 export class FlightControls {
   constructor({send, active = () => true, now = () => performance.now()}) {
     this.send = send
@@ -24,7 +24,12 @@ export class FlightControls {
   axes() {
     const axis = (positive, negative) =>
       Number(this.pressed.has(positive)) - Number(this.pressed.has(negative))
-    return {yaw: axis("KeyD", "KeyA"), pitch: axis("KeyX", "KeyW"), roll: axis("KeyC", "KeyZ")}
+    return {
+      yaw: axis("KeyD", "KeyA"),
+      pitch: Math.max(-1, Math.min(1,
+        axis("ArrowUp", "ArrowDown") + Number(this.pressed.has("KeyX")))),
+      roll: axis("KeyC", "KeyZ"),
+    }
   }
 
   payload() {
@@ -36,8 +41,23 @@ export class FlightControls {
     this.send(this.payload())
   }
 
+  throttleDirection() {
+    return Number(this.pressed.has("KeyW")) - Number(this.pressed.has("KeyS"))
+  }
+
+  stepThrottle(direction, time) {
+    if (!direction || time - this.lastThrottleChange < THROTTLE_INTERVAL_MS) return false
+    this.lastThrottleChange = time
+    const next = Math.max(-1, Math.min(1, Math.round(
+      (this.throttle + direction * 0.1) * 10) / 10))
+    if (next === this.throttle) return false
+    this.throttle = next
+    this.emit()
+    return true
+  }
+
   keyDown(event) {
-    if (event.defaultPrevented || isTyping(event.target) || !this.active()) return false
+    if (event.defaultPrevented || typing(event.target) || !this.active()) return false
 
     if (event.code === "KeyE" && event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey) {
       event.preventDefault()
@@ -55,17 +75,11 @@ export class FlightControls {
     const minus = ["Minus", "NumpadSubtract"].includes(event.code)
     if (plus || minus) {
       event.preventDefault()
-      const time = this.now()
-      if (time - this.lastThrottleChange >= 90) {
-        this.lastThrottleChange = time
-        this.throttle = Math.max(-1, Math.min(1, Math.round(
-          (this.throttle + (plus ? 0.1 : -0.1)) * 10) / 10))
-        this.emit()
-      }
+      this.stepThrottle(plus ? 1 : -1, this.now())
       return true
     }
 
-    if (event.code === "KeyS") {
+    if (event.code === "KeyF") {
       event.preventDefault()
       if (this.pressed.size) {
         this.pressed.clear()
@@ -74,11 +88,16 @@ export class FlightControls {
       return true
     }
 
-    if (!Object.hasOwn(DIRECTIONS, event.code)) return false
+    if (!THROTTLE_KEYS.has(event.code) && !ROTATION_KEYS.has(event.code)) return false
     event.preventDefault()
     if (!this.pressed.has(event.code)) {
       this.pressed.add(event.code)
-      this.emit()
+      if (THROTTLE_KEYS.has(event.code)) {
+        // Immediate response, then a time-based ramp while held.
+        if (!this.stepThrottle(this.throttleDirection(), this.now())) this.emit()
+      } else {
+        this.emit()
+      }
     }
     return true
   }
@@ -91,21 +110,22 @@ export class FlightControls {
     return true
   }
 
-  release() {
+  release({silent = false} = {}) {
     if (!this.pressed.size) return
     this.pressed.clear()
-    this.emit()
+    if (!silent) this.emit()
   }
 
   resetThrottle() {
-    // Autopilot owns movement now. Do not transmit while resetting local
-    // controls; a new flight_controls message would cancel the new route.
+    // Do not send controls after autopilot engages: that would cancel its route.
     this.throttle = 0
     this.pressed.clear()
   }
 
   heartbeat(time) {
     if (!this.active() || !this.pressed.size) return
+    // W/S ramp the signed throttle while held, independent of OS key repeats.
+    if (this.throttleDirection() !== 0) this.stepThrottle(this.throttleDirection(), time)
     if (time - this.lastEmit > 300) this.emit()
   }
 }

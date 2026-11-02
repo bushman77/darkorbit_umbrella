@@ -240,3 +240,12 @@
 - Added HUD readouts and Core/Channel/browser regressions.
 - Browser flight-control tests passed in isolation; run full local suites and
   evaluate flight handling in Firefox before treating it as production ready.
+
+### SBS branch — corrected flight axes and throttle (2026-11-01)
+
+- Reassigned W/S to forward/reverse throttle ramp while held.
+- Mapped arrows to pitch, A/D to yaw, Z/C to roll, and F to release steering.
+- Corrected 3D camera orientation using an explicit forward vector and
+  roll-adjusted camera up vector, matching server-positive yaw/pitch.
+- Added live heading, pitch, roll indicators and deterministic input/basis tests.
+- Atlas input release is now silent, avoiding cancellation of an active route.

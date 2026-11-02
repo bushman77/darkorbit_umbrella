@@ -1,6 +1,7 @@
 import * as THREE from "three"
 import {pointerNdc, toScene, toWorld} from "./stereo_math.mjs"
 import {cockpitHudFit, HUD_GEOMETRY} from "./stereo_layout.mjs"
+import {flightBasis, degrees} from "./flight_basis.mjs"
 
 // Rendering only: no Phoenix socket, no movement authority, no combat calculations.
 const clamp = (value, min, max) => Math.max(min, Math.min(value, max))
@@ -181,10 +182,18 @@ export class StereoSpaceView {
     // independent destination-heading view.
     const attitude = ownShip.attitude || {yaw: 0, pitch: 0, roll: 0}
     if (!ownShip.destination) {
-      this.camera.rotation.set(attitude.pitch, -attitude.yaw, attitude.roll, "YXZ")
+      const {forward, up} = flightBasis(attitude)
+      this.camera.up.set(up.x, up.y, up.z)
+      this.camera.lookAt(
+        pos.x + forward.x * 100,
+        pos.y + 2.75 + forward.y * 100,
+        pos.z + forward.z * 100,
+      )
       this.camera.updateMatrixWorld(true)
       return
     }
+    // Atlas autopilot should not inherit the pilot's previous roll.
+    this.camera.up.set(0, 1, 0)
     const destination = ownShip.destination ? toScene(ownShip.destination) : null
     const dx = destination ? destination.x - pos.x : 0
     const dy = destination ? destination.y - pos.y : 0
@@ -280,9 +289,13 @@ export class StereoSpaceView {
     ctx.font = "30px monospace"
     const hp = own ? Math.round(100 * (own.hull || 0) / Math.max(own.maxHull || 1, 1)) : 0
     const shield = own ? Math.round(100 * (own.shields || 0) / Math.max(own.maxShields || 1, 1)) : 0
-    ctx.fillText("HULL " + hp + "%   SHIELD " + shield + "%   V " + speed, 30, 135)
+    const attitude = own?.attitude || {yaw:0, pitch:0, roll:0}
+    const hdg = ((degrees(attitude.yaw) % 360) + 360) % 360
+    ctx.fillText("HDG " + hdg + "  PITCH " + degrees(attitude.pitch) +
+      "  ROLL " + degrees(attitude.roll) + "  V " + speed, 30, 135)
     ctx.fillStyle = selected ? "#ffbe89" : "#7aa9cb"
-    ctx.fillText(selected ? "TARGET " + (selected.displayName || "HOSTILE").slice(0, 23) : "NO TARGET / V: CHANGE VIEW", 30, 199)
+    ctx.fillText(selected ? "TARGET " + (selected.displayName || "HOSTILE").slice(0, 23) :
+      "HULL " + hp + "% / SHLD " + shield + "%     W/S THRUST  A/D YAW", 30, 199)
     this.hudTexture.needsUpdate = true
   }
 
