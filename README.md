@@ -120,3 +120,21 @@ controls. The flight HUD shows heading, pitch, roll and speed.
 **M** opens the navigation atlas for optional XYZ autopilot routes.
 
 See [SBS flight and navigation notes](docs/sbs-3d.md).
+
+### Rebuild the 3D cockpit JavaScript after changes
+
+The umbrella root forwards `mix assets.setup`, `mix assets.build`, and
+`mix assets.deploy` to `apps/darkorbit_web`, where the Phoenix
+esbuild/Tailwind aliases are defined. After updating `sbs`, stop the
+server and from the repository root run:
+
+```sh
+mix assets.build
+grep -n -m1 'lastPitchKey' apps/darkorbit_web/priv/static/assets/js/app.js
+```
+
+If that grep does not match, the compiled JS is still outdated or the
+build failed. Do not diagnose pitch controls in Firefox until the bundle
+contains the current mapping. Restart Phoenix and hard-refresh the tab.
+The current flight input source uses W/S for pitch, A/D for yaw, Q/E for
+roll and =/- for signed throttle; X is intentionally unassigned.

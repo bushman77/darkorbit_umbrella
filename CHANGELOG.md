@@ -265,3 +265,11 @@
 - Most recently pressed pitch key takes precedence during W/S overlap.
 - Flight HUD shows whether UP/DOWN pitch input is currently registered.
 - Regression tests cover key reversal, +/- pitch symmetry and inverted camera basis.
+
+### SBS branch — make web asset rebuild reliable from umbrella root (2026-11-01)
+
+- Added root-level Mix `assets.setup`, `assets.build`, and
+  `assets.deploy` aliases that explicitly execute the web child's aliases.
+- Prevents repeated testing of outdated cockpit JavaScript after source pulls.
+- Documented checking the built `app.js` for the latest `lastPitchKey` code
+  before diagnosing the W/S and obsolete X key mapping.
