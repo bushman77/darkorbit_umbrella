@@ -16,6 +16,7 @@ import {
 import {CockpitWindowManager} from "./cockpit_window_manager.mjs"
 import {MinimapRenderer, minimapWorldPoint} from "./minimap_renderer.mjs"
 import {PointerNavigation} from "./pointer_navigation.mjs"
+import {StereoSpaceView} from "./stereo_view.js"
 
 const clamp = (value, minimum, maximum) => Math.min(Math.max(value, minimum), maximum)
 const validDestination = (destination, boundaries) =>
@@ -48,6 +49,8 @@ class SpaceClient {
     this.root = root
     this.canvas = root.querySelector("#space-viewport")
     this.context = this.canvas.getContext("2d", {alpha: false})
+    this.stereoView = null
+    this.displayMode = "2d"
     this.mapId = root.dataset.mapId
     this.token = root.dataset.socketToken
     this.entities = new Map()
@@ -105,6 +108,8 @@ class SpaceClient {
         !minimapWorldPoint(pointer, minimapCanvas, this.boundaries),
     }).attach()
     this.assets.preload()
+    this.root.querySelector("#display-mode")?.addEventListener("change", event => this.setDisplayMode(event.target.value))
+    window.addEventListener("keydown", event => this.handleDisplayModeKey(event))
     this.resize()
     this.canvas.addEventListener("pointerdown", () => this.canvas.focus({preventScroll: true}))
     window.addEventListener("resize", () => this.resize())
@@ -290,6 +295,9 @@ class SpaceClient {
 
   destinationForPointer(pointer) {
     const rect = this.canvas.getBoundingClientRect()
+    if (this.displayMode !== "2d") {
+      return this.stereoView?.destination(pointer, rect, this.boundaries) || null
+    }
     return {
       x: clamp(pointer.clientX - rect.left + this.camera.x - this.viewport.width / 2, 0, this.boundaries.width),
       y: clamp(pointer.clientY - rect.top + this.camera.y - this.viewport.height / 2, 0, this.boundaries.height),
@@ -324,6 +332,12 @@ class SpaceClient {
 
   selectTargetAtPointer(pointer) {
     const rect = this.canvas.getBoundingClientRect()
+    if (this.displayMode !== "2d") {
+      const targetId = this.stereoView?.selectNpc(pointer, rect)
+      if (!targetId) return false
+      this.selectTarget(targetId)
+      return true
+    }
     const target = findNpcAtScreenPoint(
       this.entities.values(),
       {x: pointer.clientX - rect.left, y: pointer.clientY - rect.top},
@@ -612,6 +626,13 @@ class SpaceClient {
   }
 
   draw(time) {
+    if (this.displayMode !== "2d" && this.stereoView) {
+      this.stereoView.render(this, time)
+      this.beams = this.beams.filter(beam => beam.expiresAt > time)
+      this.impacts = this.impacts.filter(impact => impact.expiresAt > time)
+      this.explosions = this.explosions.filter(explosion => explosion.expiresAt > time)
+      return
+    }
     const context = this.context
     context.setTransform(this.viewport.dpr, 0, 0, this.viewport.dpr, 0, 0)
     const gradient = context.createRadialGradient(
@@ -1057,6 +1078,38 @@ class SpaceClient {
     this.viewport = {width: rect.width, height: rect.height, dpr}
     this.canvas.width = Math.max(1, Math.floor(rect.width * dpr))
     this.canvas.height = Math.max(1, Math.floor(rect.height * dpr))
+    this.stereoView?.resize(rect.width, rect.height, dpr)
+  }
+
+  handleDisplayModeKey(event) {
+    if (event.repeat || event.ctrlKey || event.altKey || event.metaKey || event.key.toLowerCase() !== "v") return
+    const element = event.target
+    if (element?.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(element?.tagName)) return
+    event.preventDefault()
+    this.setDisplayMode({"2d": "3d", "3d": "sbs", "sbs": "2d"}[this.displayMode])
+  }
+
+  setDisplayMode(mode) {
+    if (!["2d", "3d", "sbs"].includes(mode)) return
+    if (mode !== "2d" && !this.stereoView) {
+      try {
+        this.stereoView = new StereoSpaceView(this.root.querySelector("#space-viewport-3d"))
+      } catch (_error) {
+        this.showError("WebGL is unavailable; keeping the classic 2D renderer.")
+        const select = this.root.querySelector("#display-mode")
+        if (select) select.value = "2d"
+        return
+      }
+    }
+    this.navigation?.cancel()
+    this.displayMode = mode
+    this.root.dataset.displayMode = mode
+    const select = this.root.querySelector("#display-mode")
+    if (select) select.value = mode
+    if (mode !== "2d") {
+      this.stereoView.setMode(mode)
+      this.resize()
+    }
   }
 
   createStars() {

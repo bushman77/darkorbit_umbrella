@@ -691,3 +691,15 @@ body {
     animation-iteration-count: 1 !important;
   }
 }
+
+
+/* Experimental 3D/SBS stage: the original 2D canvas remains the input surface. */
+#space-viewport-3d { opacity: 0; }
+#game-client[data-display-mode="3d"] #space-viewport,
+#game-client[data-display-mode="sbs"] #space-viewport { opacity: 0; }
+#game-client[data-display-mode="3d"] #space-viewport-3d,
+#game-client[data-display-mode="sbs"] #space-viewport-3d { opacity: 1; }
+/* The standard HUD is monoscopic; stereo mode uses the cockpit texture instead. */
+#game-client[data-display-mode="sbs"] > header,
+#game-client[data-display-mode="sbs"] .cockpit-interface,
+#game-client[data-display-mode="sbs"] #action-hotbar { display: none; }

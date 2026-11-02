@@ -75,3 +75,10 @@ are defined in `assets/js/game/asset_catalog.js`.
 See [docs/architecture.md](docs/architecture.md) for application boundaries,
 transaction invariants, the audited baseline, and the next implementation
 milestone. The longer-term direction is tracked in [ROADMAP.md](ROADMAP.md).
+
+
+## Experimental stereo cockpit on `sbs`
+The `sbs` branch adds optional Three.js 3D cockpit and side-by-side stereo
+rendering without changing the authoritative 2D world simulation. Press **V**
+to cycle Classic 2D → 3D Cockpit → Stereo SBS. See
+[docs/sbs-3d.md](docs/sbs-3d.md) for setup and caveats.

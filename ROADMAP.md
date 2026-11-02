@@ -242,3 +242,12 @@ sizing and reload persistence, responsive docking, click-and-hold steering,
 Ctrl/X1 alternating toggles, retained-target resume, Space messaging, and
 canvas focus restoration. Multiplayer expansion and broader two-browser
 validation remain deferred.
+
+
+## Experimental SBS / 3D presentation (branch `sbs`)
+- [x] Introduce optional Three.js 3D cockpit and binocular side-by-side rendering.
+- [x] Preserve the existing 2D game and authoritative movement/combat protocol.
+- [x] Implement eye-aware pointer projection and a small unit test suite.
+- [ ] Run complete build, precommit, and manual stereo browser verification.
+- [ ] Introduce server-authoritative 3D motion and 6DOF flight as a separate milestone.
+- [ ] Add optional WebXR and true headset-tracked cockpit controls.

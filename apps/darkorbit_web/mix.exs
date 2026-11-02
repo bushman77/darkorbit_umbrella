@@ -70,7 +70,7 @@ defmodule DarkorbitWeb.MixProject do
     [
       setup: ["deps.get", "assets.setup", "assets.build"],
       test: ["ecto.create --quiet", "ecto.migrate --quiet", "test"],
-      "assets.setup": ["tailwind.install --if-missing", "esbuild.install --if-missing"],
+      "assets.setup": ["tailwind.install --if-missing", "esbuild.install --if-missing", "cmd npm install --prefix assets"],
       "assets.build": ["compile", "tailwind darkorbit_web", "esbuild darkorbit_web"],
       "assets.deploy": [
         "tailwind darkorbit_web --minify",

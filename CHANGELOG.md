@@ -180,3 +180,11 @@
 
 - Slots 2 through 0 remain empty. Space reserves a future single-shot rocket but does not create a rocket attack.
 - X1 is currently a non-inventory action identity; configurable ammunition selection, quantities, consumption, X2/X3/X4, rockets, and other hotbar assignments remain future work.
+
+
+## 2026-11-01 — Experimental SBS branch
+- Added optional 3D cockpit and stereoscopic dual-eye renderer with Three.js.
+- Kept the original Canvas 2D mode and existing Phoenix combat/navigation contracts.
+- Added render-only world coordinate and per-eye pointer projection utilities/tests.
+- Added a display selector, keyboard fallback, setup dependency and design notes.
+- Build and real browser/headset verification pending; server is still XY only.
