@@ -72,7 +72,9 @@ export const smoothAngle = (current, desired, blend) => {
 }
 
 export const desiredEntityAngle = (entity, entities) => {
-  const combatTarget = entity?.engagedTargetId && entities.get(entity.engagedTargetId)
+  const combatId = entity?.engagedTargetId ||
+    (entity?.kind === "npc" ? entity.targetId : null)
+  const combatTarget = combatId && entities.get(combatId)
   const combatAngle = angleToTarget(entity?.render, combatTarget?.render)
   return combatAngle ?? entity?.navigationAngle ?? entity?.angle ?? -Math.PI / 2
 }

@@ -4,6 +4,7 @@ import {cockpitHudFit, HUD_GEOMETRY} from "./stereo_layout.mjs"
 import {flightBasis, degrees} from "./flight_basis.mjs"
 import {orientationTelemetry} from "./orientation_interpolation.mjs"
 import {targetRange, LASER_FEEDBACK_MS} from "./laser_feedback.mjs"
+import {createDartModel, DART_MODEL_ID, dartHeadingRotation} from "./dart_model.mjs"
 
 // Rendering only: no Phoenix socket, no movement authority, no combat calculations.
 const clamp = (value, min, max) => Math.max(min, Math.min(value, max))
@@ -21,7 +22,8 @@ function beam(a, b, radius, mat) {
   return mesh
 }
 
-function shipModel(npc) {
+function shipModel(npc, npcTypeId = null) {
+  if (npc && npcTypeId === DART_MODEL_ID) return createDartModel(THREE)
   const root = new THREE.Group()
   const hull = new THREE.Mesh(
     npc ? new THREE.OctahedronGeometry(2, 0) : new THREE.ConeGeometry(1.65, 4.8, 4),
@@ -251,14 +253,16 @@ export class StereoSpaceView {
       if (entity.id === client.selfId || entity.status === "destroyed") continue
       active.add(entity.id)
       let node = this.nodes.get(entity.id)
-      if (!node || node.userData.kind !== entity.kind) {
+      if (!node || node.userData.kind !== entity.kind ||
+          node.userData.npcTypeId !== (entity.npcTypeId || null)) {
         if (node) {
           this.scene.remove(node)
           disposeMesh(node)
         }
-        node = shipModel(entity.kind === "npc")
+        node = shipModel(entity.kind === "npc", entity.npcTypeId)
         node.userData.entityId = entity.id
         node.userData.kind = entity.kind
+        node.userData.npcTypeId = entity.npcTypeId || null
         this.scene.add(node)
         this.nodes.set(entity.id, node)
       }
@@ -272,6 +276,8 @@ export class StereoSpaceView {
       } else if (entity.kind === "player" && !entity.destination && entity.attitude) {
         const a = entity.renderAttitude || entity.attitude
         node.rotation.set(a.pitch, -a.yaw, a.roll, "YXZ")
+      } else if (entity.kind === "npc" && entity.npcTypeId === DART_MODEL_ID) {
+        node.rotation.y = dartHeadingRotation(entity.angle)
       } else {
         node.rotation.y = -entity.angle
       }

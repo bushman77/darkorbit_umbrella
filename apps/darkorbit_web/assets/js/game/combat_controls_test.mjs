@@ -108,3 +108,12 @@ test("rotation interpolation takes the shortest path without angle wrap jitter",
   assert.ok(halfway > current)
   assert.ok(Math.abs(halfway - Math.PI) < 0.000_001)
 })
+
+test("NPC Dart turns toward its target during attack even when stationary", () => {
+  const npc = {
+    id: "npc:1-1:dart:1", kind: "npc", targetId: "pilot",
+    render: {x: 1500, y: 1000}, angle: 0,
+  }
+  const pilot = {id: "pilot", render: {x: 1200, y: 1000}}
+  assert.equal(desiredEntityAngle(npc, new Map([["pilot", pilot]])), Math.PI)
+})
