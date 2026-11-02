@@ -32,12 +32,39 @@ test("W/S pitch up/down, A/D yaw left/right, Q/E roll left/right independently",
   }
 })
 
-test("simultaneous pitch, yaw, and roll and opposing inputs cancel", () => {
+test("pressing S immediately reverses pitch even when W remains registered", () => {
+  const events = []
+  const flight = new FlightControls({send: p => events.push(p), now: () => 1000})
+  flight.keyDown(press("KeyW"))
+  assert.equal(flight.axes().pitch, 1)
+  flight.keyDown(press("KeyS"))
+  assert.equal(flight.axes().pitch, -1)
+  assert.equal(events.at(-1).pitch, -1)
+  // Releasing the last key returns control to the remaining held key.
+  flight.keyUp(press("KeyS"))
+  assert.equal(flight.axes().pitch, 1)
+  flight.keyUp(press("KeyW"))
+  assert.equal(flight.axes().pitch, 0)
+  assert.equal(flight.lastPitchKey, null)
+})
+
+test("S down can also be overridden by a fresh W up press", () => {
+  const flight = new FlightControls({send: () => {}, now: () => 1000})
+  flight.keyDown(press("KeyS"))
+  flight.keyDown(press("KeyW"))
+  assert.equal(flight.axes().pitch, 1)
+  flight.keyUp(press("KeyW"))
+  assert.equal(flight.axes().pitch, -1)
+  flight.release()
+  assert.equal(flight.axes().pitch, 0)
+})
+
+test("simultaneous pitch, yaw, and roll; last pitch press wins", () => {
   const flight = new FlightControls({send: () => {}, now: () => 1000})
   for (const code of ["KeyW", "KeyD", "KeyQ"]) flight.keyDown(press(code))
   assert.deepEqual(flight.axes(), {yaw: 1, pitch: 1, roll: -1})
   for (const code of ["KeyS", "KeyA", "KeyE"]) flight.keyDown(press(code))
-  assert.deepEqual(flight.axes(), {yaw: 0, pitch: 0, roll: 0})
+  assert.deepEqual(flight.axes(), {yaw: 0, pitch: -1, roll: 0})
   flight.keyUp(press("KeyS"))
   flight.keyUp(press("KeyA"))
   flight.keyUp(press("KeyE"))

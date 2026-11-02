@@ -13,7 +13,6 @@ defmodule Core.World.FlightDynamics do
   alias Core.World.Position
 
   @turn_rate :math.pi() / 2.5
-  @pitch_limit :math.pi() / 2 - 0.01
   @input_expiry_ticks 10
 
   @spec controls(Entity.t(), map(), non_neg_integer()) ::
@@ -57,8 +56,9 @@ defmodule Core.World.FlightDynamics do
 
     attitude = %{
       yaw: wrap_angle(entity.attitude.yaw + input.yaw * @turn_rate * dt),
-      pitch: clamp(entity.attitude.pitch + input.pitch * @turn_rate * dt,
-                   -@pitch_limit, @pitch_limit),
+      # Free-flight pitch must pass through vertical. Capping at +/-89°
+      # made W/S appear to stop working near straight up/down.
+      pitch: wrap_angle(entity.attitude.pitch + input.pitch * @turn_rate * dt),
       roll: wrap_angle(entity.attitude.roll + input.roll * @turn_rate * dt)
     }
 

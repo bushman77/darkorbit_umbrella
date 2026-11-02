@@ -44,3 +44,15 @@ test("basis keeps world-up perpendicular to heading for compound motion", () => 
   near(Math.hypot(forward.x, forward.y, forward.z),1)
   near(Math.hypot(up.x,up.y,up.z),1)
 })
+
+test("camera basis keeps descending pitch valid beyond straight down", () => {
+  const beforeVertical = flightBasis({pitch: -Math.PI / 3})
+  const afterVertical = flightBasis({pitch: -Math.PI * 2 / 3})
+  assert.ok(beforeVertical.forward.y < -0.8)
+  assert.ok(afterVertical.forward.y < -0.8)
+  assert.ok(beforeVertical.up.y > 0)
+  assert.ok(afterVertical.up.y < 0)
+  near(afterVertical.forward.x * afterVertical.up.x +
+       afterVertical.forward.y * afterVertical.up.y +
+       afterVertical.forward.z * afterVertical.up.z, 0)
+})

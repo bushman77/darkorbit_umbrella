@@ -238,3 +238,20 @@ and a separately rolled up vector. This explicitly separates yaw from
 roll and matches the server convention (+yaw right, +pitch up), with the
 autopilot camera reset to world-up. Automated basis tests cover orthogonality
 and each input axis. Remote browser verification remains necessary.
+
+## Pitch-down responsiveness correction
+
+Removed the artificial +/-89-degree pitch clamp. The authoritative pitch
+now wraps continuously through straight up, straight down, and inverted
+orientations, permitting genuine loops rather than stopping at vertical.
+Negative pitch is downward and is never silently clamped at the horizon.
+
+When switching directly from W to S with overlapping keydown state, the
+newest pitch key wins immediately. This prevents a still-registered W
+from cancelling S. Releasing the newer key resumes the older held key;
+releasing both sends neutral pitch. The mono 3D flight display additionally
+shows **PITCH (UP / DOWN / —)** next to the server-authoritative pitch
+angle, so input handling can be differentiated from camera or server issues.
+
+Yaw and roll remain independent. The engine still uses Euler angles and
+is not yet a fully body-relative quaternion six-degree-of-freedom model.

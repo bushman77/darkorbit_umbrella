@@ -13,6 +13,9 @@ export class FlightControls {
     this.active = active
     this.now = now
     this.pressed = new Set()
+    // If both pitch keys are registered (e.g., rapid direction reversal),
+    // the most recently pressed pitch key commands the nose.
+    this.lastPitchKey = null
     this.throttle = 0
     this.mode = "cruise"
     this.lastEmit = -Infinity
@@ -24,7 +27,9 @@ export class FlightControls {
       Number(this.pressed.has(positive)) - Number(this.pressed.has(negative))
     return {
       yaw: axis("KeyD", "KeyA"),
-      pitch: axis("KeyW", "KeyS"),
+      pitch: this.pressed.has("KeyW") && this.pressed.has("KeyS")
+        ? (this.lastPitchKey === "KeyS" ? -1 : 1)
+        : axis("KeyW", "KeyS"),
       roll: axis("KeyE", "KeyQ"),
     }
   }
@@ -73,7 +78,10 @@ export class FlightControls {
       event.preventDefault()
       let changed = false
       for (const code of ROTATION_KEYS) changed = this.pressed.delete(code) || changed
-      if (changed) this.emit()
+      if (changed) {
+        this.lastPitchKey = null
+        this.emit()
+      }
       return true
     }
 
@@ -81,6 +89,7 @@ export class FlightControls {
     event.preventDefault()
     if (!this.pressed.has(event.code)) {
       this.pressed.add(event.code)
+      if (event.code === "KeyW" || event.code === "KeyS") this.lastPitchKey = event.code
       if (THROTTLE_KEYS.has(event.code)) {
         // One immediate 10% step, then a time-based ramp while held.
         // Browser key-repeat does not change the ramp rate.
@@ -96,6 +105,10 @@ export class FlightControls {
     if (!this.pressed.has(event.code)) return false
     event.preventDefault()
     this.pressed.delete(event.code)
+    if (event.code === this.lastPitchKey) {
+      const other = event.code === "KeyW" ? "KeyS" : "KeyW"
+      this.lastPitchKey = this.pressed.has(other) ? other : null
+    }
     this.emit()
     return true
   }
@@ -103,6 +116,7 @@ export class FlightControls {
   release({silent = false} = {}) {
     if (!this.pressed.size) return
     this.pressed.clear()
+    this.lastPitchKey = null
     if (!silent) this.emit()
   }
 
@@ -110,6 +124,7 @@ export class FlightControls {
     // Do not send controls after autopilot engages: that would cancel its route.
     this.throttle = 0
     this.pressed.clear()
+    this.lastPitchKey = null
   }
 
   heartbeat(time) {

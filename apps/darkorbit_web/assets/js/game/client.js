@@ -660,6 +660,8 @@ class SpaceClient {
     this.text("#hud-heading", `${(deg(a.yaw) + 360) % 360}°`)
     this.text("#hud-pitch", `${deg(a.pitch)}°`)
     this.text("#hud-roll", `${deg(a.roll)}°`)
+    const input = this.flightControls?.axes().pitch || 0
+    this.text("#hud-pitch-input", input < 0 ? "DOWN" : input > 0 ? "UP" : "—")
   }
 
   updateNavigationStatus() {

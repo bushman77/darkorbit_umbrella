@@ -258,3 +258,10 @@
   independent of OS key repeat; numeric keypad +/- are supported.
 - Preserved Ctrl+E for Cruise/Newtonian switching and F to release steering.
 - Updated UI instructions and automated mapping/modifier tests.
+
+### SBS branch — pitch-down responsiveness fix (2026-11-01)
+
+- S can pitch continuously down through vertical, no +/-89-degree cutoff.
+- Most recently pressed pitch key takes precedence during W/S overlap.
+- Flight HUD shows whether UP/DOWN pitch input is currently registered.
+- Regression tests cover key reversal, +/- pitch symmetry and inverted camera basis.

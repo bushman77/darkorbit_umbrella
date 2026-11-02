@@ -103,6 +103,31 @@ defmodule Core.World.FlightDynamicsTest do
     assert FlightDynamics.forward(banked.attitude).x == 0.0
   end
 
+  test "S can pitch down through vertical without stopping at minus 89 degrees" do
+    map = MapDefinition.starting_map()
+    {:ok, descending} = FlightDynamics.controls(ship(), %{pitch: -1.0}, 0)
+
+    turned =
+      Enum.reduce(1..8, descending, fn tick, entity ->
+        FlightDynamics.step(entity, map, 0.2, tick)
+      end)
+
+    assert turned.attitude.pitch < -:math.pi() / 2
+    assert turned.attitude.pitch > -:math.pi()
+    assert FlightDynamics.forward(turned.attitude).z < 0.0
+  end
+
+  test "W and S are opposite server pitch commands" do
+    map = MapDefinition.starting_map()
+    {:ok, up} = FlightDynamics.controls(ship(), %{pitch: 1.0}, 0)
+    rising = FlightDynamics.step(up, map, 0.2, 1)
+    assert rising.attitude.pitch > 0.0
+
+    {:ok, down} = FlightDynamics.controls(rising, %{pitch: -1.0}, 1)
+    descending = FlightDynamics.step(down, map, 0.2, 2)
+    assert_in_delta descending.attitude.pitch, 0.0, 1.0e-8
+  end
+
   test "rotation input expires without renewed commands" do
     map = MapDefinition.starting_map()
     {:ok, turning} = FlightDynamics.controls(ship(), %{yaw: 1.0}, 0)
