@@ -19,6 +19,14 @@ const add=(parent,name,attrs={},text=null)=>{
 
 function renderOrbits(svg,layout,focus){
   add(svg,"rect",{x:0,y:0,width:1000,height:600,fill:"#04101f"})
+  // Stable, lightweight starfield. No textures, requests or per-frame
+  // animation; the system overview re-renders on explicit interaction.
+  for(let i=0;i<150;i++){
+    const x=(i*7919+47)%997
+    const y=(i*4651+71)%593
+    add(svg,"circle",{cx:x,cy:y,r:i%9===0?1.1:0.52,fill:"#b6d9f0",
+      opacity:i%7===0?0.65:0.29})
+  }
   // Subtle horizon crosshairs deliberately do not pretend to be a real chart
   // coordinate system. They're graphical orientation guides only.
   add(svg,"line",{x1:500,y1:16,x2:500,y2:584,stroke:"#163c54","stroke-dasharray":"5 10",opacity:0.6})
@@ -32,6 +40,13 @@ function renderOrbits(svg,layout,focus){
       "stroke-dasharray":body.id==="pluto"?"5 6":"none",
       opacity:body.id==="earth"?0.75:0.57,
     })
+  }
+  // This zone is a contextual reference, not an additional selectable
+  // destination. The asteroid belt lies between Mars and Jupiter.
+  if(focus==="system"){
+    const belt=120
+    add(svg,"circle",{cx:500,cy:300,r:belt,fill:"none",
+      stroke:"#ad956d","stroke-width":9,"stroke-dasharray":"1 6",opacity:0.20})
   }
   add(svg,"text",{x:24,y:32,fill:"#88c4d7","font-size":15,
     "font-family":"monospace","letter-spacing":"2"},focus==="inner"?
