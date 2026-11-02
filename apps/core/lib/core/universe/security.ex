@@ -69,7 +69,7 @@ defmodule Core.Universe.Security do
             pressure: clamp01(radial_factor * traffic_factor * strength)
           }
         end)
-        |> Enum.sort_by(&{-&1.pressure, &1.faction_id})
+        |> Enum.sort_by(fn patrol -> {-patrol.pressure, patrol.faction_id} end)
 
       independent_pressure = independent_pressure(territory)
 
