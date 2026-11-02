@@ -58,12 +58,44 @@ motion, supply authoritative time-dependent centres while retaining the same
 containment and crossing rules. Keep the radii under server control and
 test overlap behaviour as body separations change.
 
+## Faction standing and patrol policy (Phase 2)
+
+The next slice adds `Core.Factions` and `Core.Universe.Security`.
+
+* Each navigable SOL body, including Pluto, is one independent planetary
+  faction. The old MMO/EIC/VRU company IDs (integers 1–3) are **not** equivalent
+  to planetary reputations; the database does not yet persist this new standing.
+* Server-owned reputation is an integer -100..100; absent ratings are neutral
+  (zero). Standing bands: hostile -100..-60, unfriendly -59..-20, neutral
+  -19..19, friendly 20..59, allied 60..100.
+* A separate per-faction wanted warrant overrides the standing-based patrol
+  directive. Directive values are assist, clear, observe, inspect, intercept,
+  and pursue. They **do not force a fight** by themselves.
+* `Security.assess/2` accepts server-only ZOCs, reputation/warrant maps,
+  local shipping-lane density, and each faction's patrol capacity. Every
+  controlling faction is weighted separately, including overlapping claims.
+* Patrol pressure decreases with increasing normalized distance from the
+  planet centre and increases with local shipping-lane density. A faction's
+  capacity can independently reduce its presence to zero.
+* The independent-activity pressure is highest outside planetary claims,
+  elevated in contested space, and lowest near a planetary core. It is a
+  *balancing weight*, never automatic pirate ownership or a random combat roll.
+* The solar-navigation snapshots now include **read-only** `territory` with
+  `status` and `faction_ids`, computed from server-owned travel coordinates.
+  Exact security weights and personal standings remain server-side.
+
+No NPCs or interceptions are created by this phase. Reputations, warrants,
+patrol forces and faction relationships will need authoritative persistence
+before they can be meaningful per-player live state. In a later phase, the
+encounter director will consume these deterministic weights on server time,
+not directly on every client frame.
+
 ## Next implementation phases
 
-1. Faction identity, player reputation and diplomacy; influence/security
-   weighting independent of the geometry.
-2. Long-distance detection and patrol presence within these spheres,
-   including contested-area patrols from each claimant.
+1. **Complete (pure policy):** planetary faction identity, standing bands,
+   per-faction warrants, radial patrol pressure and separate independent activity.
+2. **Next:** authoritative persistence for player reputations/warrants and
+   time-based patrol assets/detection within contested and controlled space.
 3. Encounter classification (passive, optional, forced interception).
 4. Cruise interdiction and player decision states, preserving authoritative
    elapsed time, distance, multiplayer presence, and safe reconnect behaviour.
@@ -78,8 +110,12 @@ From the umbrella root, once the branch is on a machine with Elixir:
 ```sh
 mix format --check-formatted
 mix test apps/core/test/core/universe/territory_test.exs
+mix test apps/core/test/core/factions_test.exs
+mix test apps/core/test/core/universe/security_test.exs
+mix test apps/core/test/core/universe/navigation_test.exs
 mix precommit
 ```
 
-The implementation branch was authored remotely; these commands still need
-to be executed on the developer's machine.
+The code was written directly to `sbs` remotely. The commands above still
+need to run in an Elixir-equipped environment; no passing test result is
+claimed here.
