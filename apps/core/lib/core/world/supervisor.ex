@@ -22,6 +22,8 @@ defmodule Core.World.Supervisor do
     auto_tick? = Keyword.get(opts, :auto_tick, true)
     maps = Keyword.get(opts, :maps, [MapDefinition.starting_map()])
     npc_catalog = Keyword.get(opts, :npc_catalog, NPCCatalog.all())
+    initial_npcs? = Keyword.get(opts, :initial_npcs?, false)
+    auto_respawn? = Keyword.get(opts, :auto_respawn?, false)
 
     map_children =
       Enum.map(maps, fn definition ->
@@ -31,6 +33,8 @@ defmodule Core.World.Supervisor do
          tick_ms: tick_ms,
          event_sink: event_sink,
          npc_catalog: npc_catalog,
+         initial_npcs?: initial_npcs?,
+         auto_respawn?: auto_respawn?,
          auto_tick: auto_tick?}
       end)
 

@@ -17,6 +17,10 @@ defmodule DarkorbitWeb.WorldChannelTest do
     Darkorbit.DataCase.setup_sandbox(tags)
     clear_world()
     on_exit(&clear_world/0)
+    # Only tagged combat tests request a server-owned fixture encounter.
+    if Map.get(tags, :encounter) do
+      assert {:ok, _npc} = World.start_encounter("dart")
+    end
     :ok
   end
 
@@ -48,8 +52,7 @@ defmodule DarkorbitWeb.WorldChannelTest do
     assert response.player.stats.speed == 320
     assert response.player.stats.damage == 40
     assert Enum.any?(response.map.entities, &(&1.id == account.id))
-    assert Enum.count(response.map.entities, &(&1.kind == :npc)) == 1
-    assert Enum.find(response.map.entities, &(&1.kind == :npc)).npc_type_id == "dart"
+    assert Enum.count(response.map.entities, &(&1.kind == :npc)) == 0
     assert Enum.map(response.hotbar, & &1.key) == ~w(1 2 3 4 5 6 7 8 9 0)
 
     assert %{
@@ -281,6 +284,7 @@ defmodule DarkorbitWeb.WorldChannelTest do
     leave_and_wait(second_socket)
   end
 
+  @tag encounter: true
   test "authenticated pilots receive authoritative targeting and combat events" do
     first = verified_player_account_fixture()
     second = verified_player_account_fixture()
@@ -331,6 +335,7 @@ defmodule DarkorbitWeb.WorldChannelTest do
     leave_and_wait(second_socket)
   end
 
+  @tag encounter: true
   test "engagement, action activation, cancellation, and state synchronize to all pilots" do
     first = verified_player_account_fixture()
     second = verified_player_account_fixture()
@@ -450,6 +455,7 @@ defmodule DarkorbitWeb.WorldChannelTest do
     leave_and_wait(second_socket)
   end
 
+  @tag encounter: true
   test "disconnecting during pursuit clears the authoritative NPC target" do
     account = verified_player_account_fixture()
     {:ok, socket} = authenticated_socket(account)

@@ -11,7 +11,7 @@ defmodule Core.WorldTest do
   @sessions Core.WorldTest.Sessions
   @supervisor Core.WorldTest.Supervisor
 
-  setup do
+  setup tags do
     test_process = self()
     event_sink = fn map_id, event, payload -> send(test_process, {map_id, event, payload}) end
 
@@ -23,6 +23,8 @@ defmodule Core.WorldTest do
        maps: [MapDefinition.starting_map()],
        tick_ms: 100,
        auto_tick: false,
+       initial_npcs?: !Map.get(tags, :no_initial_encounter, false),
+       auto_respawn?: true,
        event_sink: event_sink}
     )
 
@@ -30,6 +32,7 @@ defmodule Core.WorldTest do
     %{stats: stats, world_options: [registry: @registry, sessions: @sessions]}
   end
 
+  @tag no_initial_encounter: true
   test "headless simulation moves a ship across the map on deterministic ticks", context do
     assert {:ok, session} = World.connect(:pilot_one, context.stats, context.world_options)
     assert_receive {"1-1", :entity_joined, %{player_id: :pilot_one}}
@@ -39,7 +42,7 @@ defmodule Core.WorldTest do
     assert initial.tick_ms == 100
     player = Enum.find(initial.entities, &(&1.kind == :player))
     assert player.position == %{x: 1_000.0, y: 1_000.0}
-    assert Enum.count(initial.entities, &(&1.kind == :npc)) == 1
+    assert Enum.count(initial.entities, &(&1.kind == :npc)) == 0
 
     assert {:ok, command_state} =
              World.move(session.id, %{x: 1_128.0, y: 1_000.0}, context.world_options)
@@ -60,6 +63,19 @@ defmodule Core.WorldTest do
 
     assert_in_delta x, 1_128.0, 0.000_001
     assert_in_delta y, 1_000.0, 0.000_001
+  end
+
+  @tag no_initial_encounter: true
+  test "server-only encounter registration creates exactly one Dart", context do
+    assert {:ok, initial} = World.snapshot("1-1", context.world_options)
+    refute Enum.any?(initial.entities, &(&1.kind == :npc))
+    assert {:error, :unknown_npc_type} = World.start_encounter("unknown", context.world_options)
+    assert {:ok, npc} = World.start_encounter("dart", context.world_options)
+    assert npc.id == "npc:1-1:dart:1"
+    assert npc.hull == 245
+    assert {:error, :encounter_active} = World.start_encounter("dart", context.world_options)
+    assert {:ok, snapshot} = World.snapshot("1-1", context.world_options)
+    assert Enum.count(snapshot.entities, &(&1.kind == :npc)) == 1
   end
 
   test "server-owned course advances ordered waypoints and finishes", context do

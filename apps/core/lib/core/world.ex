@@ -27,6 +27,14 @@ defmodule Core.World do
     end
   end
 
+  @doc "Server-authorized encounter entry; not a client command."
+  @spec start_encounter(String.t(), keyword()) :: {:ok, map()} | {:error, term()}
+  def start_encounter(npc_type_id, opts \\ []) when is_binary(npc_type_id) do
+    registry = Keyword.get(opts, :registry, Core.World.Registry)
+    map_id = Keyword.get(opts, :map_id, MapDefinition.starting_map_id())
+    MapServer.start_encounter(registry, map_id, npc_type_id)
+  end
+
   @spec disconnect(pos_integer(), keyword()) :: :ok | {:error, term()}
   def disconnect(session_id, opts \\ []) do
     registry = Keyword.get(opts, :registry, Core.World.Registry)

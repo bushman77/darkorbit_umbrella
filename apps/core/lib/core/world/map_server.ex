@@ -128,6 +128,11 @@ defmodule Core.World.MapServer do
   @spec tick(atom(), String.t()) :: {:ok, map()} | {:error, :map_not_found}
   def tick(registry, map_id), do: call_map(registry, map_id, :tick)
 
+  @doc "Create a server-authorized encounter. Not exposed directly to clients."
+  @spec start_encounter(atom(), String.t(), String.t()) :: {:ok, map()} | {:error, term()}
+  def start_encounter(registry, map_id, npc_type_id) when is_binary(npc_type_id),
+    do: call_map(registry, map_id, {:start_encounter, npc_type_id})
+
   @spec available?(atom(), String.t()) :: boolean()
   def available?(registry, map_id) do
     Registry.lookup(registry, {:world_map, map_id}) != []
@@ -154,9 +159,12 @@ defmodule Core.World.MapServer do
     state = %{
       definition: definition,
       entities: %{},
-      npcs: spawn_npcs(npc_definitions, tick_ms),
+      # An Atlas session begins peacefully. Definitions remain dormant.
+      npcs: if(Keyword.get(opts, :initial_npcs?, false),
+        do: spawn_npcs(npc_definitions, tick_ms), else: %{}),
       npc_definitions: npc_definitions,
       respawns: %{},
+      auto_respawn?: Keyword.get(opts, :auto_respawn?, false),
       event_sink: Keyword.fetch!(opts, :event_sink),
       tick: 0,
       tick_ms: tick_ms,
@@ -205,6 +213,23 @@ defmodule Core.World.MapServer do
         payload = public_entity(entity)
         broadcast(new_state, :entity_joined, payload)
         {:reply, {:ok, payload}, new_state}
+    end
+  end
+
+  def handle_call({:start_encounter, npc_type_id}, _from, state) do
+    with {:ok, definition} <- NPCCatalog.fetch(npc_type_id, state.npc_definitions),
+         [_position | _] <- definition.spawn.positions do
+      npc = NPCEntity.spawn(definition, 0, state.tick_ms)
+      if Map.has_key?(state.npcs, npc.id) or Map.has_key?(state.respawns, npc.id) do
+        {:reply, {:error, :encounter_active}, state}
+      else
+        new_state = %{state | npcs: Map.put(state.npcs, npc.id, npc)}
+        broadcast(new_state, :npc_spawned, public_entity(npc))
+        {:reply, {:ok, public_entity(npc)}, new_state}
+      end
+    else
+      :error -> {:reply, {:error, :unknown_npc_type}, state}
+      [] -> {:reply, {:error, :no_spawn_position}, state}
     end
   end
 
@@ -721,8 +746,16 @@ defmodule Core.World.MapServer do
   end
 
   defp destroy_npc(state, npc, attacker_id, attack_payload) do
-    due_tick = state.tick + npc.respawn_delay_ticks
-    respawn = %{npc_type_id: npc.npc_type_id, spawn_index: npc.spawn_index, due_tick: due_tick}
+    # An encounter ends on destruction. Legacy combat regression fixtures
+    # alone opt into the automatic respawn behavior.
+    due_tick = if state.auto_respawn?, do: state.tick + npc.respawn_delay_ticks, else: nil
+    respawns =
+      if is_integer(due_tick) do
+        Map.put(state.respawns, npc.id,
+          %{npc_type_id: npc.npc_type_id, spawn_index: npc.spawn_index, due_tick: due_tick})
+      else
+        state.respawns
+      end
 
     {entities, cleared_entities} =
       Enum.reduce(state.entities, {%{}, []}, fn {entity_id, entity}, {entities, cleared} ->
@@ -738,7 +771,7 @@ defmodule Core.World.MapServer do
       state
       | entities: entities,
         npcs: Map.delete(state.npcs, npc.id),
-        respawns: Map.put(state.respawns, npc.id, respawn)
+        respawns: respawns
     }
 
     Enum.each(cleared_entities, fn entity ->
