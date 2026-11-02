@@ -324,3 +324,17 @@
   and other player meshes to share authoritative orientation.
 - Added shortest-path quaternion slerp and actual nose-based HUD heading,
   pitch and bank readouts plus body-relative regression coverage.
+
+### SBS branch — dual wing-mounted laser hits (2026-11-01)
+
+- Replaced single visual-offset shot with two server-positioned,
+  body-relative laser rays from symmetric cockpit/wing emitters.
+- Traced independent ray/target intersections using authoritative
+  orientation, 3D NPC collision spheres, and the existing weapon range.
+- Combined concurrent hits in one authorized burst and single cooldown;
+  damage is not doubled if both rays connect with the same target.
+- Broadcast per-wing endpoints, collision flags and impacted NPC states;
+  client applies all damage states and draws two red beams and hit flashes.
+- Aligned NPC render positions with collision geometry and included
+  twin wing beams on existing targeted automatic fire.
+- Added paired-hit, miss, yaw/roll, multi-target and world damage tests.

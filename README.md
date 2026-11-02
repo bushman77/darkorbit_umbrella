@@ -181,3 +181,17 @@ authoritative quaternion. Pitch is no longer tied to the original world
 orientation: roll the ship and W/S follows its rotated local up/down.
 The same forward orientation drives cruise thrust and nose-aimed red lasers.
 The 3D/SBS client slerps the quaternion between server snapshots.
+
+### Twin wing-mounted red lasers
+
+Manual Space fire now launches two simultaneous, genuine 3D rays from
+physically symmetric wing emitters. The muzzles belong to the ship's
+server-owned quaternion orientation, so yaw, pitch and roll move the
+mounts with the craft. Each ray can hit or miss independently; NPCs
+within range receive server-authoritative shield/hull damage, and
+collisions are replicated to all clients as paired impact endpoints.
+A single Space activation uses one cooldown and the original total
+damage budget: double hits on the same NPC do not double the damage.
+Existing lock-on automatic laser fire also renders both wing beams.
+Bright red impact flashes indicate confirmed hits; no-target shots
+show two red streaks with no hit flash.

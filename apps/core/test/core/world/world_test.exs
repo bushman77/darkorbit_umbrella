@@ -4,6 +4,7 @@ defmodule Core.WorldTest do
   alias Core.Ships.Stats
   alias Core.World
   alias Core.World.MapDefinition
+  alias Core.World.Orientation
   alias Core.World.Supervisor, as: WorldSupervisor
 
   @registry Core.WorldTest.Registry
@@ -322,6 +323,62 @@ defmodule Core.WorldTest do
     assert pilot.target_id == nil
     assert pilot.engaged_target_id == nil
     assert pilot.next_attack_tick == shot.next_attack_tick
+  end
+
+  test "aligned dual lasers reduce authoritative NPC shields with one cooldown", context do
+    assert {:ok, session} = World.connect(:wing_test_pilot, context.stats, context.world_options)
+    assert {:ok, initial} = World.snapshot("1-1", context.world_options)
+    own = Enum.find(initial.entities, &(&1.id == :wing_test_pilot))
+
+    npcs =
+      Enum.filter(initial.entities, fn entity ->
+        if entity.kind != :npc do
+          false
+        else
+          dx = entity.position_3d.x - own.position_3d.x
+          dy = entity.position_3d.y - own.position_3d.y
+          dz = entity.position_3d.z - own.position_3d.z
+          distance = :math.sqrt(dx * dx + dy * dy + dz * dz)
+          distance > 130.0 and distance < 680.0
+        end
+      end)
+
+    assert npcs != []
+    target = hd(npcs)
+    dx = target.position_3d.x - own.position_3d.x
+    dy = target.position_3d.y - own.position_3d.y
+    dz = target.position_3d.z - own.position_3d.z
+    yaw = :math.atan2(dx, -dy)
+    pitch = :math.atan2(dz, :math.sqrt(dx * dx + dy * dy))
+
+    # Test-only direct state setup allows us to aim precisely without a
+    # keyboard hold/release timing dependency. Public gameplay never accepts
+    # client-supplied quaternions or client-selected hit IDs.
+    [{map_pid, _}] = Registry.lookup(@registry, {:world_map, "1-1"})
+    :sys.replace_state(map_pid, fn state ->
+      entity = Map.fetch!(state.entities, :wing_test_pilot)
+      entity = %{entity | orientation: Orientation.from_angles(
+        %{yaw: yaw, pitch: pitch, roll: 0.0}
+      )}
+      %{state | entities: Map.put(state.entities, :wing_test_pilot, entity)}
+    end)
+
+    assert {:ok, burst} = World.fire_ready_weapon(session.id, context.world_options)
+    assert burst.hit
+    assert length(burst.beams) == 2
+    assert Enum.all?(burst.beams, & &1.hit)
+    assert length(burst.hits) == 1
+    assert burst.target_id == target.id
+    assert burst.damage == context.stats.damage
+    assert burst.next_attack_tick > burst.tick
+    assert {:error, :weapon_cooldown} =
+      World.fire_ready_weapon(session.id, context.world_options)
+
+    assert {:ok, after_fire} = World.snapshot("1-1", context.world_options)
+    updated = Enum.find(after_fire.entities, &(&1.id == target.id))
+    assert updated.shields < target.shields or updated.hull < target.hull
+    assert updated.shields == burst.target.shields
+    assert updated.hull == burst.target.hull
   end
 
   test "selection is distinct from persistent tick-owned combat engagement", context do

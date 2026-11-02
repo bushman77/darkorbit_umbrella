@@ -369,3 +369,27 @@ Roll 90°, then hold W: the nose should move horizontally relative to
 the world because the ship's own 'up' axis is now sideways. No pitch
 limit or fixed world-axis pitch is imposed. Autopilot's destination
 camera remains separate.
+
+## Wing-mounted dual red lasers
+
+The single visual laser offset has been replaced with a **server-owned
+pair of muzzle hardpoints**. In scene ship coordinates, the left/right
+hardpoints are (±1.75, +1.3, -3.2) scene units from the ship centre,
+with the pilot eye at (0,+2.75,0); the game-to-scene scale remains 0.06.
+The server rotates both offsets with `Core.World.Orientation`, casts
+two independent rays down the actual ship nose, tests the nearest
+living NPC collision sphere and uses the existing max range/cooldown.
+The crosshair ray and symmetric muzzles both intersect a centred
+40-world-unit NPC sphere within range; the ray is never steered toward
+an arbitrarily selected target. NPC mesh centres are now rendered
+at their actual authoritative positions rather than offset vertically.
+
+Each valid burst consumes one cooldown. If both rays hit one NPC, it
+receives the normal weapon damage once; if two different NPCs intersect
+separate rays, damage is divided between them. Both beam endpoints,
+`hit` flags, and impacted target states are sent in the authoritative
+`laser_fired` event. The client renders thin red cores, red glows and
+short bright impact flashes only for actual hits. Automatic targeted
+fire retains its existing lock-on rules and receives a matching pair
+of visual wing beams. Clients must never calculate damage or authoritative
+hits from selected IDs.
