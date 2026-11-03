@@ -47,9 +47,11 @@ From the umbrella root:
     mix ecto.migrate
     npm install --prefix apps/darkorbit_web/assets
     mix assets.build
-    iex -S mix phx.server
+    DARKORBIT_LAN_HMD=1 iex -S mix phx.server
 
-The server must listen on a LAN-reachable interface. Use the LAN host/IP in the
+In development, DARKORBIT_LAN_HMD=1 intentionally enables LAN binding; without it
+Phoenix stays on loopback. Prefer a trusted private hotspot, not a shared or
+untrusted Wi-Fi network. Use the LAN host/IP in the
 Atlas headset URL, including port. Avoid exposing these bearer tokens over an
 untrusted network: deploy HTTPS/WSS for networks beyond a trusted local setup.
 Phone landscape, lens alignment and frame rate require hardware testing.
