@@ -589,8 +589,8 @@ the drive encounter/interdiction model.
 
 `Core.Universe.OrbitalEntry` establishes one region-local map per
 destination planet. `sol:<planet>` maps for eight bodies have a
-400,000 × 400,000 ±200,000 coordinate volume; Earth keeps its older
-`1-1` combat fixture. These regional coordinates represent provisional
+400,000 × 400,000 ±200,000 coordinate volume; Earth also has `sol:earth`; its older `1-1` combat fixture remains
+available only for isolated test compatibility. These regional coordinates represent provisional
 planet-relative kilometres; they must not be equated with compressed
 `Sol.game_position_km` cruise coordinates.
 
@@ -625,9 +625,9 @@ previous starfield fixed near the old world origin.
 
 **Remaining limitations:** no Kepler orbits, gravitational attraction,
 surface landing, proper atmospheric physics, resource stations or
-durable ship state handoff. Earth's old `1-1` fixture continues to use
-its small map and first-login spawn for regression compatibility;
-a *return* voyage to Earth does receive a direction-derived position.
+durable ship state handoff. Live gameplay now enters Earth's real-radius
+`sol:earth` map, while tests alone retain the old `1-1` fixture;
+return voyages to Earth receive a direction-derived position.
 Server restarts reset in-memory voyages and destination metadata.
 
 
