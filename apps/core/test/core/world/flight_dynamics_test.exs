@@ -314,6 +314,75 @@ defmodule Core.World.FlightDynamicsTest do
     assert braking.angular_velocity.pitch >= 0.0
   end
 
+  test "mouse-look neutral input stops yaw and pitch on the next simulation tick" do
+    map = MapDefinition.starting_map()
+    {:ok, captured} =
+      FlightDynamics.controls(ship(),
+        %{yaw: 1.0, pitch: -1.0, mouse_steering: true}, 0)
+    rotating = FlightDynamics.step(captured, map, 0.1, 1)
+    assert rotating.angular_velocity.yaw > 0.0
+    assert rotating.angular_velocity.pitch < 0.0
+
+    {:ok, neutral} =
+      FlightDynamics.controls(rotating,
+        %{yaw: 0.0, pitch: 0.0, mouse_steering: true}, 1)
+    stopped = FlightDynamics.step(neutral, map, 0.1, 2)
+
+    assert stopped.angular_velocity.yaw == 0.0
+    assert stopped.angular_velocity.pitch == 0.0
+    assert_in_delta stopped.attitude.yaw, rotating.attitude.yaw, 1.0e-12
+    assert_in_delta stopped.attitude.pitch, rotating.attitude.pitch, 1.0e-12
+  end
+
+  test "mouse input stops an inactive axis while allowing the other to steer" do
+    map = MapDefinition.starting_map()
+    {:ok, captured} =
+      FlightDynamics.controls(ship(),
+        %{yaw: 1.0, pitch: 1.0, mouse_steering: true}, 0)
+    rotating = FlightDynamics.step(captured, map, 0.1, 1)
+
+    {:ok, vertical_only} =
+      FlightDynamics.controls(rotating,
+        %{yaw: 0.0, pitch: 1.0, mouse_steering: true}, 1)
+    next = FlightDynamics.step(vertical_only, map, 0.1, 2)
+
+    assert next.angular_velocity.yaw == 0.0
+    assert next.angular_velocity.pitch > 0.0
+    assert_in_delta next.attitude.yaw, rotating.attitude.yaw, 1.0e-12
+  end
+
+  test "releasing mouse capture cancels residual mouse angular velocity" do
+    map = MapDefinition.starting_map()
+    {:ok, captured} =
+      FlightDynamics.controls(ship(),
+        %{yaw: 1.0, pitch: 1.0, mouse_steering: true}, 0)
+    rotating = FlightDynamics.step(captured, map, 0.1, 1)
+
+    {:ok, released} =
+      FlightDynamics.controls(rotating,
+        %{yaw: 0.0, pitch: 0.0, mouse_steering: false}, 1)
+    assert released.angular_velocity.yaw == 0.0
+    assert released.angular_velocity.pitch == 0.0
+
+    stopped = FlightDynamics.step(released, map, 0.1, 2)
+    assert stopped.angular_velocity.yaw == 0.0
+    assert stopped.angular_velocity.pitch == 0.0
+    assert_in_delta stopped.attitude.yaw, rotating.attitude.yaw, 1.0e-12
+    assert_in_delta stopped.attitude.pitch, rotating.attitude.pitch, 1.0e-12
+  end
+
+  test "stale mouse-only input also snaps to neutral on expiry" do
+    map = MapDefinition.starting_map()
+    {:ok, captured} =
+      FlightDynamics.controls(ship(), %{yaw: 1.0, mouse_steering: true}, 0)
+    after_expiry =
+      Enum.reduce(1..16, captured, fn tick, current ->
+        FlightDynamics.step(current, map, 0.1, tick)
+      end)
+
+    assert after_expiry.angular_velocity.yaw == 0.0
+  end
+
   test "untrusted mouse steering mode must be boolean and cannot override rotation bounds" do
     assert {:error, :invalid_flight_controls} =
       FlightDynamics.controls(ship(), %{yaw: 1.0, mouse_steering: "fast"}, 0)
