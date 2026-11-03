@@ -1,4 +1,5 @@
 import QRCode from "qrcode"
+import {chooseHelmetOrigin} from "./helmet_network.mjs"
 
 // The Atlas owns enrollment; the cockpit owns the headset's operating mode.
 export class HelmetControl {
@@ -11,6 +12,7 @@ export class HelmetControl {
     this.status = {paired: false, connected: false, rendering: false}
     this.code = null
     this.open = false
+    this.hostEdited = false
   }
 
   start() {
@@ -18,20 +20,44 @@ export class HelmetControl {
     this.root.querySelector("#nav-helmet-open")?.addEventListener("click", () => this.openPanel())
     this.root.querySelector("#nav-helmet-close")?.addEventListener("click", () => this.closePanel())
     this.root.querySelector("#helmet-forget")?.addEventListener("click", () => this.forget())
-    this.root.querySelector("#helmet-host")?.addEventListener("change", () => this.drawQR())
-    this.root.querySelector("#helmet-host").value = window.location.origin
+    const host = this.root.querySelector("#helmet-host")
+    host?.addEventListener("input", () => { this.hostEdited = true })
+    host?.addEventListener("change", () => this.drawQR())
+    // Do not offer localhost as a QR destination: a phone cannot reach it.
+    if (host) host.value = chooseHelmetOrigin(window.location.origin)
 
     this.channel = this.socket.channel("helmet:control:" + this.playerId, {})
     this.channel.on("helmet_status", data => this.updateStatus(data))
     this.channel.onError(() => this.message("Helmet link interrupted. Reconnecting…"))
     this.channel.join()
       .receive("ok", reply => {
+        this.suggestNetworkHosts(reply.network_hosts || [])
         this.updateStatus(reply.status)
         this.setCombat(this.combatActive)
         if (this.open && !reply.status.paired) this.requestPairing()
       })
       .receive("error", () => this.message("Helmet control channel unavailable."))
     return this
+  }
+
+  suggestNetworkHosts(hosts) {
+    const address = chooseHelmetOrigin(window.location.origin, hosts)
+    const input = this.root.querySelector("#helmet-host")
+    if (input && !this.hostEdited) input.value = address
+    const options = this.root.querySelector("#helmet-host-candidates")
+    if (options) {
+      options.replaceChildren()
+      for (const hostname of hosts) {
+        const origin = chooseHelmetOrigin("http://localhost:4000", [hostname])
+        if (!origin) continue
+        const candidate = new URL(window.location.origin)
+        candidate.hostname = hostname
+        const item = document.createElement("option")
+        item.value = candidate.origin
+        options.appendChild(item)
+      }
+    }
+    if (this.open && this.code) this.drawQR()
   }
 
   setCombat(active) {
@@ -80,7 +106,7 @@ export class HelmetControl {
     const host = this.root.querySelector("#helmet-host")?.value.trim().replace(/\/+$/, "")
     const canvas = this.root.querySelector("#helmet-qr")
     if (!/^https?:\/\/[^/]+$/i.test(host)) {
-      this.message("Enter your laptop's reachable http(s) address, including port.")
+      this.message("No LAN address detected. Enter the laptop IP and port (find it with: hostname -I).")
       return
     }
     try {
