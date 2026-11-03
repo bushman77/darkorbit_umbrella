@@ -94,7 +94,8 @@ defmodule Core.Universe.TrafficTest do
     refute Map.has_key?(hd(contacts), :cargo)
     refute Map.has_key?(hd(contacts), :manifest)
 
-    remote = %{earth | x: earth.x + Traffic.sensor_radius_km() + 100_000.0}
+    # Move away from all outbound Earth lanes, not toward Vesper's courier route.
+    remote = %{earth | x: earth.x - Traffic.sensor_radius_km() - 100_000.0}
     assert Traffic.contacts(fleet, remote) == []
     assert {:error, :contact_out_of_range} =
       Traffic.hail(fleet, remote, "traffic:sol:meridian-01")
