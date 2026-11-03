@@ -42,9 +42,15 @@ export class MouseSteering {
     // Keep part of the previous neighboring impulse so a stream of small
     // movement events adds up to useful steering, rather than replacing the
     // input with the last 1px event.
-    const carry = time - this.lastMovementAt <= 120 ? 0.5 : 0
-    this.yaw = clamp(this.yaw * carry + yaw, -1, 1)
-    this.pitch = clamp(this.pitch * carry + pitch, -1, 1)
+    const adjacent = time - this.lastMovementAt <= 120
+    const carryYaw = adjacent && yaw !== 0 && Math.sign(yaw) === Math.sign(this.yaw)
+      ? 0.5 : 0
+    const carryPitch = adjacent && pitch !== 0 && Math.sign(pitch) === Math.sign(this.pitch)
+      ? 0.5 : 0
+    // Carry only while continuing the SAME axis/direction. Vertical-only
+    // movement must not preserve old yaw, or vice versa.
+    this.yaw = clamp(this.yaw * carryYaw + yaw, -1, 1)
+    this.pitch = clamp(this.pitch * carryPitch + pitch, -1, 1)
     this.lastMovementAt = time
     return this.axes()
   }
