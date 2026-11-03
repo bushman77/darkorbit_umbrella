@@ -644,6 +644,20 @@
     class="pointer-events-none absolute left-1/2 top-[39%] z-30 hidden -translate-x-1/2 rounded-lg border border-transparent bg-slate-950/85 px-4 py-2 text-center font-mono text-sm font-bold tracking-wider shadow-lg backdrop-blur-sm">
   </div>
 
+  <%!-- Authoritative proximity status. Live text is announced only when the
+       warning level changes; clearance updates are visual to avoid speech spam. --%>
+  <div id="planetary-proximity-warning" hidden data-level="clear"
+       class="pointer-events-none absolute left-1/2 top-[18%] z-40 w-max max-w-[min(28rem,90vw)] -translate-x-1/2 rounded-xl border border-amber-400/60 bg-amber-950/85 px-4 py-3 text-center font-mono shadow-lg backdrop-blur-sm">
+    <p id="planetary-proximity-level" class="text-sm font-black tracking-widest text-amber-100">
+      CAUTION · PLANETARY PROXIMITY
+    </p>
+    <p id="planetary-proximity-detail" class="mt-1 text-xs font-semibold tracking-wider text-amber-200">
+      Maintain safe distance
+    </p>
+  </div>
+  <p id="planetary-proximity-announcement" role="status" aria-live="polite"
+     class="sr-only"></p>
+
   <p id="combat-status" role="status" aria-live="polite"
      class="pointer-events-none absolute bottom-24 left-4 z-30 max-w-[min(22rem,40vw)] font-mono text-xs text-rose-200 drop-shadow-md">
     RMB red laser · T nearest target · L autofire
