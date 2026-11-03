@@ -115,9 +115,16 @@ The flight layout is **W/S pitch up/down**, **A/D turn left/right**,
 **Q/E roll left/right**, and the **mouse wheel for target throttle**.
 Wheel up increases signed throttle by 5% per notch; wheel down decreases it,
 passing through neutral into reverse. The setting remains at the chosen
-level when you stop scrolling. `=/-` remain keyboard throttle alternatives.
-Only scrolling over the active cockpit flight viewport changes throttle;
-scrolling in the Atlas or over other controls retains its normal meaning.
+level when you stop scrolling. **Hold Ctrl while scrolling over the cockpit
+flight viewport to roll the ship**: Ctrl+wheel up banks right (E direction);
+Ctrl+wheel down banks left (Q direction). Each notch commands a short roll
+pulse and then releases automatically; scrolling repeatedly extends the bank.
+Ordinary scrolling still adjusts throttle. `Q/E` remain roll alternatives,
+and `=/-` remain keyboard throttle alternatives. Mouse controls are accepted
+only over the active cockpit flight viewport; scrolling in the Atlas or other
+controls retains its normal meaning. Ctrl+wheel is prevented from zooming
+the browser when the cockpit receives it; OS/browser-reserved gestures may
+take priority on some systems.
 
 **Ctrl+E** switches between **assisted Cruise Flight**, where the server
 smoothly accelerates toward your requested speed and brakes when you dial
