@@ -8,7 +8,8 @@ defmodule Core.World.MapDefinition do
   @starting_map_id "1-1"
 
   @enforce_keys [:id, :name, :width, :height, :spawn]
-  defstruct [:id, :name, :width, :height, :spawn, altitude_min: -3_000, altitude_max: 3_000]
+  defstruct [:id, :name, :width, :height, :spawn,
+             altitude_min: -3_000, altitude_max: 3_000, planet: nil]
 
   @type t :: %__MODULE__{
           id: String.t(),
@@ -17,6 +18,7 @@ defmodule Core.World.MapDefinition do
           height: pos_integer(),
           altitude_min: number(),
           altitude_max: number(),
+          planet: map() | nil,
           spawn: Position.t()
         }
 
@@ -45,6 +47,7 @@ defmodule Core.World.MapDefinition do
       height: fetch_value!(definition, :height),
       altitude_min: optional_value(definition, :altitude_min, -3_000),
       altitude_max: optional_value(definition, :altitude_max, 3_000),
+      planet: optional_value(definition, :planet, nil),
       spawn: position(fetch_value!(definition, :spawn))
     }
   end
