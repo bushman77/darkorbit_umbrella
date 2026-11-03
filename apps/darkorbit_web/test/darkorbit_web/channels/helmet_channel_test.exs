@@ -74,7 +74,7 @@ defmodule DarkorbitWeb.HelmetChannelTest do
     assert :error = Helmets.authenticate(credential)
     assert %{paired: false} = HelmetManager.status(account.id)
 
-    leave(again)
+    # Revocation stops the viewer channel; do not send a leave to a dead PID.
     leave(control)
   end
 
