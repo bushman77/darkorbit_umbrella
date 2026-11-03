@@ -1099,6 +1099,9 @@ defmodule Core.World.MapServer do
 
     %{
       map_id: state.definition.id,
+      region_name: state.definition.name,
+      planet_id: if(state.definition.planet,
+        do: state.definition.planet.body_id, else: "earth"),
       tick: state.tick,
       tick_ms: state.tick_ms,
       boundaries: %{width: state.definition.width, height: state.definition.height},
