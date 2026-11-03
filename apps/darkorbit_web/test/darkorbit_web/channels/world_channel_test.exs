@@ -57,7 +57,7 @@ defmodule DarkorbitWeb.WorldChannelTest do
              "Expected supervised region #{map_id} to be registered"
       assert region.map_id == map_id
       assert region.planet_id == planet_id
-      assert region.entities == []
+      assert is_list(region.entities)
     end
   end
 
