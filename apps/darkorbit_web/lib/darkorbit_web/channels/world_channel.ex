@@ -172,6 +172,17 @@ defmodule DarkorbitWeb.WorldChannel do
     {:noreply, socket}
   end
 
+  # Contact lists are computed from each pilot's authenticated SOL position.
+  # Do not relay another player's navigation/contact snapshot to this client.
+  def handle_info({:solar_navigation_updated, %{player_id: player_id} = payload},
+                  %{assigns: %{current_player_id: player_id}} = socket) do
+    :ok = push(socket, "solar_navigation_updated", payload)
+    {:noreply, socket}
+  end
+
+  def handle_info({:solar_navigation_updated, _payload}, socket),
+    do: {:noreply, socket}
+
   def handle_info({event, payload}, socket)
       when event in [
              :entity_left,
@@ -185,8 +196,7 @@ defmodule DarkorbitWeb.WorldChannel do
              :combat_engaged,
              :combat_disengaged,
              :laser_fired,
-             :entity_destroyed,
-             :solar_navigation_updated
+             :entity_destroyed
            ] do
     :ok = push(socket, Atom.to_string(event), payload)
     {:noreply, socket}
