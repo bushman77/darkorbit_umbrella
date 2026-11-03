@@ -134,12 +134,16 @@ shows heading, pitch, roll, commanded throttle and actual velocity.
 **M** opens the navigation Atlas for optional XYZ autopilot routes.
 
 **Optional mouse-look steering:** In **Solar Atlas → Cockpit control preferences**,
-enable **mouse-look steering** and optionally adjust sensitivity (0.4×–2.0×).
+enable **mouse-look steering** and optionally adjust sensitivity (0.4×–6.0×).
 The setting is remembered per pilot in the current browser. Return to the
 cockpit, then **left-click the flight background once** to capture the pointer.
 Moving the mouse right/left turns the ship (yaw), moving up/down pitches
 the ship, and stopping mouse movement releases the steering input after a
-brief interval. The server still owns the resulting angular acceleration,
+brief interval. Mouse input now uses approximately **2× the original gain at
+1.0× sensitivity**, plus a faster server-bounded turn profile when the mouse
+is actually captured: up to **100°/s yaw** and **88°/s pitch**. The original
+keyboard-only caps (44°/s yaw, 38°/s pitch) remain unchanged outside mouse
+capture. The server still owns the resulting angular acceleration,
 orientation and movement. **Esc** releases the pointer without changing the
 flight mode; **M** opens the Atlas and releases it automatically. A quick
 left-click after capture selects the centered target; **T** selects the nearest
