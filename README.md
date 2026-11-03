@@ -416,6 +416,49 @@ Tests: `mix test apps/core/test/core/universe/traffic_test.exs
 apps/core/test/core/universe/navigation_test.exs
 apps/core/test/core/world/world_test.exs` (from umbrella root).
 
+### Planetary cockpit visuals V1 — large Venus approach (2026-11-03)
+
+The **3D and SBS cockpits now show the actual current/target SOL planet**
+rather than a miniature sphere inside the old sector map. A new
+`Core.Universe.PlanetaryView` derives an authenticated, visual-only view
+from server-owned SOL navigation progress and actual planetary radii
+(Venus mean radius **6,051.8 km**). Its `planetary_view` snapshot has
+`body_id`, `radius_km`, `visual_distance_km`,
+`angular_diameter_deg`, and a preview stage.
+
+`PlanetaryBody` draws a cloud-textured, lit planet and atmospheric halo
+in the existing Three.js cockpit, using a fixed 900-unit camera-relative
+display distance and a matching projected radius. This **preserves
+angular size** in both normal 3D and SBS without increasing the original
+3,000-unit camera clip plane or corrupting laser/NPC depth and physics.
+Stars render behind the planet. The planet's bearing is anchored on
+first appearance so a pilot may later turn the cockpit away from it.
+
+During Earth → Venus cruise, Venus begins at 1.5° across and becomes
+steadily larger as course progress increases; at arrival it occupies
+**65°**, nearly the entire 70° vertical cockpit view. The same preview
+exists for Earth and other navigable SOL planets. A small cockpit label
+clearly identifies the selected planet, angular size and **visual preview**
+status. There are no external planet textures or network requests.
+
+**Scope:** these are artistically staged approach/orbit *visuals* in
+compressed SOL coordinates, **not** true orbital locations, collisions,
+gravitational or atmospheric physics, or the ability to physically fly
+down to a planetary surface. On arrival the current tactical map remains
+unchanged; local throttle will not yet change orbital altitude or planet
+apparent size. Proper shared planetary coordinate frames and travel
+handoffs are the next milestone.
+
+Because SOL voyage state is currently in memory, restarting the game to
+load this build returns pilots to Earth. Earth is visible immediately;
+to see Venus grow, set a new course to Venus and return to the cockpit
+with M or Esc while cruise continues. No change to cruise lockouts.
+
+Test targeted changes from `apps/core` with
+`mix test test/core/universe/planetary_view_test.exs
+test/core/universe/navigation_test.exs`, and frontend with
+`npm test --prefix apps/darkorbit_web/assets` from the umbrella root.
+
 ### Interplanetary cruise V2 — real-time sublight travel (2026-11-02)
 
 The game now implements two **mutually exclusive propulsion regimes**:
