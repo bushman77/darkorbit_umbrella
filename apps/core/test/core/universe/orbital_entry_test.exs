@@ -6,12 +6,13 @@ defmodule Core.Universe.OrbitalEntryTest do
   alias Core.Universe.Sol
   alias Core.World.FlightDynamics
 
-  test "each non-Earth planetary destination owns exactly one shared orbital region" do
+  test "every registered planetary destination has exactly one true-scale orbital region" do
     maps = OrbitalEntry.planet_maps()
-    assert length(maps) == 8
+    assert length(maps) == length(Sol.planets())
+    assert length(maps) == 9
     assert Enum.uniq(Enum.map(maps, & &1.id)) == Enum.map(maps, & &1.id)
 
-    for id <- ~w(mercury venus mars jupiter saturn uranus neptune pluto) do
+    for id <- ~w(mercury venus earth mars jupiter saturn uranus neptune pluto) do
       region_id = "sol:" <> id
       map = Enum.find(maps, &(&1.id == region_id))
       assert map
@@ -27,7 +28,7 @@ defmodule Core.Universe.OrbitalEntryTest do
       assert map.altitude_min < 0
       assert map.altitude_max > 0
     end
-    assert OrbitalEntry.map_id("earth") == "1-1"
+    assert OrbitalEntry.map_id("earth") == "sol:earth"
     assert OrbitalEntry.map_id("venus") == "sol:venus"
     assert OrbitalEntry.map_id("sun") == nil
     assert OrbitalEntry.map_id("bogus") == nil
@@ -84,13 +85,14 @@ defmodule Core.Universe.OrbitalEntryTest do
     refute first.position == second.position
 
     assert {:ok, return_earth} = OrbitalEntry.entry("venus", "earth", 42, 2)
-    assert return_earth.map_id == "1-1"
+    assert return_earth.map_id == "sol:earth"
     assert return_earth.position.x >= 0
-    assert return_earth.position.x <= 20_000
+    assert return_earth.position.x <= 400_000
     assert return_earth.position.y >= 0
-    assert return_earth.position.y <= 12_000
+    assert return_earth.position.y <= 400_000
 
     assert {:error, :invalid_planet} = OrbitalEntry.entry("earth", "sun", 42)
     assert {:error, :invalid_planet} = OrbitalEntry.entry("earth", "unknown", 42)
   end
 end
+
