@@ -22,21 +22,17 @@ config :darkorbit,
 # at the `config/runtime.exs`.
 config :darkorbit, Darkorbit.Mailer, adapter: Swoosh.Adapters.Local
 
-# The simulation owns ephemeral world state. These values are placeholder game
-# data and can be overridden per environment without changing core mechanics.
+# Core.World.Supervisor owns the default SOL map catalogue: legacy Earth 1-1
+# plus all eight planetary orbital regions. Do not set a single-map "maps"
+# override here, or the planet processes will never be supervised and clients
+# will get :map_not_found when arriving at Venus/Mars/etc.
+#
+# Isolated test worlds may still supply an explicit :maps list in their own
+# supervisor options. Runtime simulation defaults stay configurable here.
 config :core, Core.World,
   tick_ms: 100,
   auto_tick: true,
-  event_sink: Darkorbit.World.PubSub,
-  maps: [
-    %{
-      id: "1-1",
-      name: "Home Sector",
-      width: 20_000,
-      height: 12_000,
-      spawn: {1_000.0, 1_000.0}
-    }
-  ]
+  event_sink: Darkorbit.World.PubSub
 
 config :darkorbit_web,
   ecto_repos: [Darkorbit.Repo],
