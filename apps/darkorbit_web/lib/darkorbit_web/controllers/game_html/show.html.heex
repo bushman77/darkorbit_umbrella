@@ -98,9 +98,12 @@
             <div class="max-w-md space-y-2 text-sm text-slate-300">
               <p>Scan once with your phone. The ship automatically authorizes it as a read-only SBS helmet.</p>
               <label for="helmet-host" class="block font-semibold text-cyan-100">Reachable laptop address</label>
-              <input id="helmet-host" type="text" class="w-full rounded border border-slate-600 bg-slate-900 p-2 text-white"
+              <input id="helmet-host" type="text" list="helmet-host-candidates"
+                     class="w-full rounded border border-slate-600 bg-slate-900 p-2 text-white"
                      placeholder="http://192.168.1.100:4000" />
-              <p>If the laptop address says localhost, replace it with its LAN IP and port. Phone and laptop must share a reachable network.</p>
+              <datalist id="helmet-host-candidates"></datalist>
+              <p>The laptop's LAN IP is detected automatically. If you have multiple network interfaces,
+                choose another suggested address or enter one manually. The phone must be able to reach this address.</p>
               <p id="helmet-pairing-message" role="status">Open this panel to generate a pairing invitation.</p>
             </div>
           </div>
