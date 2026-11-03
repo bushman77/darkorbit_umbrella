@@ -74,6 +74,9 @@ class SpaceClient {
     this.selfId = null
     this.planetaryWarningLevel = "clear"
     this.planetaryWarningPlanet = null
+    this.solarEncounter = null
+    this.encounterDisplayedId = null
+    this.encounterDismissedId = null
     this.player = null
     this.commandDestination = null
     this.selectedTargetId = null
@@ -131,6 +134,29 @@ class SpaceClient {
         this.spaceLaser?.release()
       }
     })
+    this.root.querySelector("#solar-encounter-hail")?.addEventListener("click", () => {
+      const id = this.solarEncounter?.contact_id
+      if (!id) return
+      const output = this.root.querySelector("#solar-encounter-message")
+      if (output) output.textContent = "Opening secure civilian frequency…"
+      this.solarHail(id, (ok, communication, reason) => {
+        if (this.solarEncounter?.contact_id !== id || !output) return
+        if (!ok) {
+          output.textContent = "Contact lost: " + (reason || "out of range")
+          return
+        }
+        const manifest = Object.entries(communication.cargo || {})
+          .map(([item, count]) => item.replaceAll("_", " ") + ": " + count)
+          .join(", ")
+        output.textContent = String(communication.message || "Communications established.") +
+          (manifest ? "\nManifest: " + manifest : "")
+      })
+    })
+    this.root.querySelector("#solar-encounter-dismiss")?.addEventListener("click", () => {
+      this.encounterDismissedId = this.solarEncounter?.id || null
+      this.showSolarEncounter()
+    })
+
     this.navComputer = new NavigationComputer({
       root: this.root.querySelector("#navigation-computer"),
       getEntities: () => this.entities,
@@ -250,6 +276,11 @@ class SpaceClient {
       }
     })
     channel.on("world_region_changed", payload => this.switchOrbitalRegion(payload?.map_id))
+    channel.on("solar_encounter_started", payload => {
+      if (String(payload.player_id) === String(this.selfId) && payload.encounter) {
+        this.setSolarEncounter(payload.encounter)
+      }
+    })
     channel.on("movement_started", entity => this.upsertEntity(entity))
     channel.on("entity_joined", entity => this.entityJoined(entity))
     channel.on("entity_left", entity => this.removeEntity(entity.id))
@@ -324,6 +355,7 @@ class SpaceClient {
     this.commandDestination = null
     this.entities.clear()
     this.beams = []
+    this.setSolarEncounter(null)
     this.applyPlanetaryWarning(null, {announce: false})
     this.stereoView?.planetaryBody?.dispose()
     const previous = this.channel
@@ -507,6 +539,7 @@ class SpaceClient {
 
   applySolarNavigation(navigation) {
     this.navComputer.setSolarNavigation(navigation)
+    this.setSolarEncounter(navigation?.encounter || null)
     const body = navigation?.planetary_view
     const planetaryStatus = this.root.querySelector("#planetary-view-status")
     if (planetaryStatus) {
@@ -530,6 +563,40 @@ class SpaceClient {
       this.flightControls?.release({silent:true})
       this.spaceLaser?.release()
       this.navigation?.cancel()
+    }
+  }
+
+  setSolarEncounter(encounter) {
+    const nextId = typeof encounter?.id === "string" ? encounter.id : null
+    if (nextId !== this.encounterDisplayedId) {
+      this.encounterDisplayedId = nextId
+      this.encounterDismissedId = null
+      const output = this.root.querySelector("#solar-encounter-message")
+      if (output) {
+        output.textContent = nextId
+          ? "Non-hostile traffic flyby. Cruise continues. Hail to identify its mission."
+          : ""
+      }
+    }
+    this.solarEncounter = nextId ? encounter : null
+    this.showSolarEncounter()
+  }
+
+  showSolarEncounter() {
+    const panel = this.root.querySelector("#solar-encounter-panel")
+    const encounter = this.solarEncounter
+    const visible = Boolean(encounter && encounter.id !== this.encounterDismissedId)
+    if (panel) panel.hidden = !visible
+    if (!visible) return
+    const title = this.root.querySelector("#solar-encounter-title")
+    const range = this.root.querySelector("#solar-encounter-distance")
+    if (title) title.textContent = String(encounter.call_sign || "Unidentified vessel") +
+      " · " + String(encounter.kind || "vessel").replaceAll("_", " ")
+    if (range && Number.isFinite(encounter.distance_km)) {
+      range.textContent = Math.round(encounter.distance_km).toLocaleString("en-US") +
+        " game km · NON-HOSTILE · " +
+        String(encounter.origin_id || "?") + " → " +
+        String(encounter.destination_id || "?")
     }
   }
 
