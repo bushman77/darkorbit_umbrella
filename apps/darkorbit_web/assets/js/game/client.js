@@ -130,6 +130,7 @@ class SpaceClient {
       halt: done => this.stopNavigation(done),
       solarSetCourse: (bodyId, done) => this.solarSetCourse(bodyId, done),
       solarCancelCourse: done => this.solarCancelCourse(done),
+      solarHail: (contactId, done) => this.solarHail(contactId, done),
       onOpen: () => {
         this.exitMouseSteering({silent: true})
         this.helmet?.setCombat(false)
@@ -447,6 +448,14 @@ class SpaceClient {
       .receive("ok",response=>done(true,response.navigation))
       .receive("error",response=>done(false,null,response.reason))
       .receive("timeout",()=>done(false,null,"timeout"))
+  }
+
+  solarHail(contactId, done) {
+    if (this.channel?.state !== "joined") return done(false, null, "relay offline")
+    this.channel.push("solar_hail", {contact_id: contactId}, 3000)
+      .receive("ok", response => done(true, response.communication))
+      .receive("error", response => done(false, null, response.reason))
+      .receive("timeout", () => done(false, null, "timeout"))
   }
 
   plotCourse(waypoints, done) {
