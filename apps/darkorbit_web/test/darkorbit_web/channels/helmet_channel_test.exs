@@ -28,13 +28,16 @@ defmodule DarkorbitWeb.HelmetChannelTest do
     assert_reply ref, :ok, %{code: code}
     assert byte_size(code) == 43
 
-    {:ok, pending} = connect(UserSocket, %{"pair_code" => code})
+    # QR invitations cannot be used to connect directly to Phoenix Socket.
+    # Redeem first, retain the credential, then join as a read-only viewer.
+    assert :error = connect(UserSocket, %{"pair_code" => code})
+    assert {:ok, %{credential: credential}} = HelmetManager.redeem(code, "Galaxy S21")
+    {:ok, helmet_socket} = connect(UserSocket, %{"helmet_token" => credential})
     assert {:error, %{reason: "map_not_found"}} =
-      subscribe_and_join(pending, WorldChannel, "world:1-1")
+      subscribe_and_join(helmet_socket, WorldChannel, "world:1-1")
 
-    {:ok, %{credential: credential, mode: :standby}, viewer} =
-      subscribe_and_join(pending, HelmetChannel, "helmet:viewer",
-        %{"device_name" => "Galaxy S21"})
+    {:ok, %{mode: :standby}, viewer} =
+      subscribe_and_join(helmet_socket, HelmetChannel, "helmet:viewer")
 
     assert {:ok, %{player_id: id}} = Helmets.authenticate(credential)
     assert id == account.id
@@ -43,10 +46,7 @@ defmodule DarkorbitWeb.HelmetChannelTest do
 
     # A second use of the invitation is forbidden; an enrolled viewer still
     # cannot subscribe as a pilot or send any world commands.
-    {:ok, replay} = connect(UserSocket, %{"pair_code" => code})
-    assert {:error, %{reason: "invalid_pairing"}} =
-      subscribe_and_join(replay, HelmetChannel, "helmet:viewer",
-        %{"device_name" => "another phone"})
+    assert {:error, :invalid_pairing} = HelmetManager.redeem(code, "another phone")
 
     ref = push(viewer, "flight_controls", %{"throttle" => 1.0})
     assert_reply ref, :error, %{reason: "read_only_or_invalid_command"}
@@ -55,6 +55,14 @@ defmodule DarkorbitWeb.HelmetChannelTest do
     assert_reply ref, :ok, %{mode: "combat"}
     assert_push "helmet_mode", %{mode: "combat"}
     assert_push "helmet_snapshot", %{player_id: ^id, map: %{entities: _}}
+
+    # Regression: simulation broadcasts more event types than just snapshots.
+    # A movement_started notification previously crashed the GenServer and
+    # stranded the already-redeemed QR without a saved phone credential.
+    send(viewer.channel_pid, {:movement_started, %{id: account.id}})
+    send(viewer.channel_pid, {:movement_stopped, %{id: account.id}})
+    ref = push(viewer, "rendering_status", %{"rendering" => false})
+    assert_reply ref, :ok
 
     ref = push(viewer, "rendering_status", %{"rendering" => true})
     assert_reply ref, :ok
@@ -94,10 +102,8 @@ defmodule DarkorbitWeb.HelmetChannelTest do
     ref = push(control, "cancel_pairing", %{})
     assert_reply ref, :ok
 
-    {:ok, pending} = connect(UserSocket, %{"pair_code" => code})
-    assert {:error, %{reason: "invalid_pairing"}} =
-      subscribe_and_join(pending, HelmetChannel, "helmet:viewer",
-        %{"device_name" => "expired invitation"})
+    assert {:error, :invalid_pairing} = HelmetManager.redeem(code, "expired invitation")
+    assert :error = connect(UserSocket, %{"pair_code" => code})
 
     assert %{paired: false, pairing: false} = HelmetManager.status(account.id)
     leave(control)
