@@ -31,6 +31,7 @@ import {applyLaserBurstDamage, visualLaserRays} from "./laser_burst.mjs"
 import {laserFeedback, LASER_FEEDBACK_MS} from "./laser_feedback.mjs"
 import {nextFlightMode, validFlightMode} from "./display_modes.mjs"
 import {cameraSettleSeconds} from "./camera_response.mjs"
+import {planetaryImpactMessage} from "./planetary_impact.mjs"
 import {validOrbitalMapId, shouldEnterOrbitalRegion} from "./orbital_regions.mjs"
 
 const clamp = (value, minimum, maximum) => Math.min(Math.max(value, minimum), maximum)
@@ -815,13 +816,21 @@ class SpaceClient {
 
   entityDestroyed(destruction) {
     const id = entityKey(destruction.entity.id)
-    const entity = this.entities.get(id)
-    if (destruction.entity.kind === "npc") this.removeEntity(id)
+    const isNpc = destruction.entity.kind === "npc"
+    const impact = planetaryImpactMessage(destruction)
+    if (isNpc) this.removeEntity(id)
+    else this.upsertEntity(destruction.entity, true)
     if (this.selectedTargetId === id) this.selectedTargetId = null
 
-    this.setCombatMessage(
-      destruction.entity.kind === "npc" ? "Hostile destroyed. Respawn telemetry queued." : "Ship destroyed."
-    )
+    const label = impact ||
+      (isNpc ? "Hostile destroyed. Respawn telemetry queued." : "Ship destroyed.")
+    this.setCombatMessage(label)
+    if (impact && id === this.selfId) {
+      // This is a SERVER-confirmed death, never a client-side distance guess.
+      // Free the pointer for navigation and make the result unmistakable.
+      this.exitMouseSteering({silent: true})
+      this.showError(label)
+    }
     this.updateCombatHud()
   }
 
