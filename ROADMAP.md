@@ -449,3 +449,20 @@ validation remain deferred.
 - [ ] Add optional configurable warning audio.
 - [ ] Add recovery/respawn mechanics, planetary approach autopilot
   protections and realistic atmospheric/orbital physics.
+
+### Planet hazard parity across SOL and future catalogue extension (2026-11-03)
+
+- [x] One physical radius source in the authoritative SOL catalogue.
+- [x] All nine navigable worlds, **including Earth**, receive the same
+  region-local kilometres, approach-direction arrival, caution/critical
+  alerts, lethal swept collision and destroyed-ship protocol.
+- [x] First Earth gameplay session enters `sol:earth`; the original
+  `1-1` sector is retained only as an explicit test-only fixture.
+- [x] Planetary region sizing can expand automatically for very large
+  future planets; no special collision handler per body.
+- [x] Generic future planet-ID syntax and procedural texture fallback.
+- [x] Add full nine-planet map-server integration crash parity test plus
+  fresh-Earth safe-arrival and catalogue radius regression tests.
+- [ ] Build multi-system celestial catalogue and separate cross-system
+  travel/wormhole transitions (future phase, not part of this release).
+- [ ] Add destruction recovery and persistent ship state between sessions.
