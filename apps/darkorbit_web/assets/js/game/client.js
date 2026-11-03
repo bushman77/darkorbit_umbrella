@@ -30,6 +30,7 @@ import {SpaceLaserTrigger} from "./space_laser_trigger.mjs"
 import {applyLaserBurstDamage, visualLaserRays} from "./laser_burst.mjs"
 import {laserFeedback, LASER_FEEDBACK_MS} from "./laser_feedback.mjs"
 import {nextFlightMode, validFlightMode} from "./display_modes.mjs"
+import {cameraSettleSeconds} from "./camera_response.mjs"
 import {validOrbitalMapId, shouldEnterOrbitalRegion} from "./orbital_regions.mjs"
 
 const clamp = (value, minimum, maximum) => Math.min(Math.max(value, minimum), maximum)
@@ -868,8 +869,17 @@ class SpaceClient {
 
   interpolate(deltaSeconds) {
     const positionBlend = 1 - Math.exp(-deltaSeconds / 0.085)
+    const pointerLocked = this.mouseSteeringEnabled &&
+      document.pointerLockElement === this.canvas
 
     for (const entity of this.entities.values()) {
+      // The local pointer-lock camera should not trail far behind the last
+      // server orientation when the user releases the mouse. Remote players
+      // and keyboard-only flight retain the original 85ms smoothing.
+      const cameraSettle = cameraSettleSeconds({
+        ownShip: entity.id === this.selfId,
+        pointerLocked,
+      })
       entity.render.x += (entity.target.x - entity.render.x) * positionBlend
       entity.render.y += (entity.target.y - entity.render.y) * positionBlend
       entity.render.z = (entity.render.z ?? 0) +
@@ -878,13 +888,14 @@ class SpaceClient {
         entity.renderAttitude = smoothAttitude(
           entity.renderAttitude || entity.attitude,
           entity.attitude,
-          deltaSeconds
+          deltaSeconds,
+          cameraSettle
         )
       }
       if (entity.orientation) {
         entity.renderOrientation = smoothOrientation(
           entity.renderOrientation || entity.orientation,
-          entity.orientation, deltaSeconds
+          entity.orientation, deltaSeconds, cameraSettle
         )
       }
     }
