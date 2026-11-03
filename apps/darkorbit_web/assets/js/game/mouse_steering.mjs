@@ -1,11 +1,10 @@
 // Optional pointer-locked cockpit steering. Mouse input is an impulse on
 // server-authoritative yaw/pitch; throttle, roll and weapons remain separate.
 //
-// Raw browser mousemove events arrive in uneven bursts (and may include 0,0).
-// Accumulate nearby impulses, tolerate short input gaps, and smoothly ease
-// back to neutral so turning doesn't abruptly stop after a single frame.
-export const MOUSE_STEERING_IDLE_MS = 300
-export const MOUSE_STEERING_DECAY_MS = 150
+// The browser does not provide a "mouse stopped" event. Treat the lack of
+// a nonzero movement packet for roughly three 60Hz frames as release.
+// Preserve small-event accumulation while moving, but NEVER coast afterward.
+export const MOUSE_STEERING_IDLE_MS = 55
 export const MOUSE_STEERING_DEFAULT_SENSITIVITY = 1
 
 const clamp = (value, low, high) => Math.min(high, Math.max(low, value))
@@ -30,7 +29,6 @@ export class MouseSteering {
     this.yaw = 0
     this.pitch = 0
     this.lastMovementAt = -Infinity
-    this.lastDecayAt = -Infinity
   }
 
   move(deltaX, deltaY) {
@@ -48,7 +46,6 @@ export class MouseSteering {
     this.yaw = clamp(this.yaw * carry + yaw, -1, 1)
     this.pitch = clamp(this.pitch * carry + pitch, -1, 1)
     this.lastMovementAt = time
-    this.lastDecayAt = -Infinity
     return this.axes()
   }
 
@@ -58,17 +55,10 @@ export class MouseSteering {
     if (time - this.lastMovementAt < MOUSE_STEERING_IDLE_MS) return null
     if (this.yaw === 0 && this.pitch === 0) return null
 
-    // Decay after the grace period. This is called by the cockpit animation
-    // loop, making mouse release independent of OS event packet frequency.
-    const previous = this.lastDecayAt === -Infinity
-      ? this.lastMovementAt + MOUSE_STEERING_IDLE_MS : this.lastDecayAt
-    const dt = Math.max(0, time - previous)
-    this.lastDecayAt = time
-    const decay = Math.exp(-dt / MOUSE_STEERING_DECAY_MS)
-    this.yaw *= decay
-    this.pitch *= decay
-    if (Math.abs(this.yaw) < 0.015) this.yaw = 0
-    if (Math.abs(this.pitch) < 0.015) this.pitch = 0
+    // One hard stop. Do not decay the last command over subsequent frames;
+    // that looked like the cursor/ship continued moving after the hand stopped.
+    this.yaw = 0
+    this.pitch = 0
     return this.axes()
   }
 
@@ -76,7 +66,6 @@ export class MouseSteering {
     this.yaw = 0
     this.pitch = 0
     this.lastMovementAt = -Infinity
-    this.lastDecayAt = -Infinity
     return this.axes()
   }
 }
