@@ -609,9 +609,14 @@ entity events). Upon arrival `WorldChannel` signals
 and joins its new region. Joins to the wrong region return a server
 redirect. Chart XYZ bounds are refreshed using the new map snapshot.
 
-Planetary maps include a server-owned real-radius sphere plus a small
-exclusion buffer; `FlightDynamics` projects an encroaching vessel
-outside this boundary and stops its velocity. The 3D and SBS renderer
+Planetary maps include a server-owned real-radius sphere plus an 8%
+exclusion buffer. A swept check in `Core.World.PlanetaryCollision`,
+called by the authoritative map server for manual AND autopilot flight,
+now destroys a player ship crossing that boundary rather than harmlessly
+stopping or projecting it outside. The old clamp in `FlightDynamics`
+was removed. Death follows the existing `entity_destroyed` event protocol,
+with an explicit `:planetary_collision` reason. There is no atmospheric
+entry or surface landing yet. The 3D and SBS renderer
 keeps the planet in the direction of its real local map centre and
 scales its projected apparent diameter with ship radial distance.
 The four obsolete fly-through demo asteroids are gone. Because the
