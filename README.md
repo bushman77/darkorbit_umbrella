@@ -155,12 +155,18 @@ so the original cockpit behavior is unchanged until deliberately enabled.
 Browser support for Pointer Lock is required for the optional mode.
 
 Mouse steering still buffers nearby mousemove events while the pointer
-is moving, but now **sends zero yaw/pitch without any easing or trailing
-coast** after approximately 55ms with no movement. The zero input bypasses
-ordinary client command throttling. On the next server simulation tick, mouse
-yaw/pitch angular velocity snaps to zero; keyboard steering keeps its smooth
-braking model, and translational flight inertia is unchanged. Actual response
-is subject to browser frame scheduling and the server tick. If Firefox releases
+is moving, but now detects inactivity after approximately **25ms** instead
+of 55ms. An independent browser timer and a render-frame fallback send a
+zero yaw/pitch command immediately, bypassing ordinary motion command
+throttling. While moving, packets are capped at roughly 40 per second.
+The server zeros the mouse's angular velocity **on receipt of neutral input**,
+rather than waiting for its next 100ms simulation tick. Pointer-locked local
+camera interpolation is also reduced from 85ms to 25ms; remote players
+and keyboard steering retain their usual smoothing and braking.
+These are best-effort responsiveness improvements, not a guarantee of an
+instantaneous physical stop: browser scheduling, packet transit, a server tick
+that has already run, and rendering frame cadence can still add latency.
+Translational flight inertia is unchanged. If Firefox releases
 pointer lock (for example after Esc, switching windows or opening Atlas),
 the cockpit explicitly displays **MOUSE STEERING PAUSED · CLICK COCKPIT TO
 RESUME**. Click inside the cockpit once to recapture; this is a browser
