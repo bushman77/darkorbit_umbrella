@@ -269,6 +269,7 @@ class SpaceClient {
         if (this.channel !== channel) return
         if (response.reason === "region_redirect" &&
             response.map_id !== mapId && retry < 2) {
+          channel.leave()
           this.joinSector(response.map_id, retry + 1)
           return
         }
@@ -277,7 +278,10 @@ class SpaceClient {
           // Phoenix may acknowledge leaving before the old session's
           // terminate callback has removed its server-owned registration.
           setTimeout(() => {
-            if (this.channel === channel) this.joinSector(mapId, retry + 1)
+            if (this.channel === channel) {
+              channel.leave()
+              this.joinSector(mapId, retry + 1)
+            }
           }, 250)
           return
         }
@@ -330,6 +334,9 @@ class SpaceClient {
     this.volume = response.map.volume || this.volume
     this.worldTick = response.map.tick
     this.tickMs = response.map.tick_ms
+    this.navComputer?.setRegion(response.map.region_name, response.map.map_id)
+    const minimap = this.root.querySelector("#minimap-title")
+    if (minimap) minimap.textContent = response.map.region_name || "Sector Minimap"
     this.pilots = new Map(Object.entries(response.pilots || {}))
 
     if(response.solar_navigation)this.applySolarNavigation(response.solar_navigation)
