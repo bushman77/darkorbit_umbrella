@@ -19,6 +19,7 @@ defmodule Core.Universe.Navigation do
   use GenServer
 
   alias Core.Universe.Sol
+  alias Core.Universe.PlanetaryView
   alias Core.Universe.Traffic
   alias Core.Universe.Territory
   alias Core.World.EventSink
@@ -225,6 +226,7 @@ defmodule Core.Universe.Navigation do
       progress: progress,
       remaining_ms: remaining_ms,
       contacts: Traffic.contacts(traffic, voyage.position_km),
+      planetary_view: PlanetaryView.describe(voyage),
       territory: %{
         status: jurisdiction.status,
         faction_ids: Enum.map(jurisdiction.claims, & &1.faction_id)
