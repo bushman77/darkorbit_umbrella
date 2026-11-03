@@ -527,3 +527,18 @@ validation remain deferred.
 - [x] Provide `DARKORBIT_LOOPBACK_ONLY=1` opt-out for laptop-only debugging.
 - [ ] Verify remote HMD pairing from another device and review production
   origin/security rules before any public hosting.
+
+
+### Encounter popup reliability and paired HMD notification (2026-11-03)
+
+- [x] Open the existing laptop encounter modal as soon as the authenticated
+  first-contact event arrives, without waiting for a navigation snapshot.
+- [x] Restore held decision state from navigation snapshots on reconnect;
+  block underlying Atlas focus until decision is resolved.
+- [x] Mirror read-only, authenticated close-pass status to the paired
+  headset in both SBS eyes while the helmet is in cockpit mode.
+- [x] Add unit tests for per-eye rendering and channel tests for
+  privacy filtering and read-only commands.
+- [ ] Run tests, build assets, and manually verify both displays.
+- [ ] Add authorized VR controls for choices only if/when the helmet is
+  upgraded from a read-only viewer to an authenticated input device.

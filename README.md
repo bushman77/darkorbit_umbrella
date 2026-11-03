@@ -846,3 +846,29 @@ prevent headset access even when Bandit listens on all interfaces.
 
 Configuration change inspected on the `sbs` branch. Browser/HMD connectivity
 has not been manually verified.
+
+
+### Encounter popup delivery in laptop and paired SBS headset (2026-11-03)
+
+The laptop cockpit now handles the authenticated `solar_encounter_started`
+notification directly so the server-held encounter decision opens immediately.
+The normal navigation snapshot still restores the popup when reconnecting.
+The modal covers both Atlas and cockpit until the pilot selects **Hail vessel**
+or **Ignore / Resume course**, and the Atlas is made inert underneath it.
+
+A paired **phone headset runs a different, read-only Phoenix channel**. When
+in cockpit mode it now subscribes to SOL and receives only its authenticated
+pilot's minimal encounter display status; it shows a matching stereo
+contact-hold notification in each eye. No contact cargo, reputation data,
+other pilot's encounter IDs, or ship commands are delivered to the headset.
+The phone displays a prompt to make the Hail/Resume choice on the laptop.
+In Atlas/standby mode the headset remains black as designed.
+
+The ship remains paused by the authoritative navigation process while a
+decision is pending. Other ships and the SOL clock keep moving. The
+encounter is still a strategic decision, not physical tactical interception.
+The HMD overlay is informational, not a VR controller.
+
+Added `helmet_encounter_view_test.mjs` and new helmet channel event
+privacy tests. Execution of Mix, JS and browser/HMD manual verification
+remains outstanding at this commit.

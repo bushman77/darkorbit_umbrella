@@ -908,3 +908,36 @@ body:has(#helmet-client) {
   .solar-encounter-actions { grid-template-columns: 1fr; }
   #game-client[data-display-mode="sbs"] .solar-encounter-note { font-size: .58rem; }
 }
+
+ 
+/* Read-only HMD close-pass alert; duplicate card for each eye's viewport. */
+.helmet-encounter-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 24;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: center;
+  pointer-events: none;
+  background: rgb(0 5 15 / .72);
+}
+.helmet-encounter-eye { display: flex; min-width: 0; justify-content: center; padding: .45rem; }
+.helmet-encounter-card {
+  display: grid;
+  gap: .35rem;
+  width: min(100%, 25rem);
+  min-width: 0;
+  border: 1px solid #66e6ee;
+  border-radius: .75rem;
+  padding: clamp(.55rem, 1.7vw, 1rem);
+  background: #081c32;
+  box-shadow: 0 15px 35px #0009;
+  text-align: center;
+  color: #e5fbff;
+  overflow-wrap: anywhere;
+}
+.helmet-encounter-kicker { font: 750 clamp(.5rem, .85vw, .7rem) ui-monospace, monospace; letter-spacing: .08em; color: #69e1f5; }
+.helmet-encounter-card strong { font-size: clamp(.8rem, 1.6vw, 1.4rem); }
+.helmet-encounter-card [data-helmet-encounter-kind] { font: 700 clamp(.55rem, 1vw, .75rem) ui-monospace, monospace; color: #fcd34d; }
+.helmet-encounter-instruction { font-size: clamp(.6rem, .9vw, .78rem); color: #b3eaf2; }
+#helmet-encounter[hidden] { display: none !important; }

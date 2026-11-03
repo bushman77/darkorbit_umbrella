@@ -56,6 +56,35 @@ defmodule DarkorbitWeb.HelmetChannelTest do
     assert_push "helmet_mode", %{mode: "combat"}
     assert_push "helmet_snapshot", %{player_id: ^id, map: %{entities: _}}
 
+    # A real encounter hold is mirrored only to the paired pilot's HMD.
+    # The viewer receives a read-only alert, not cargo or a flight command.
+    encounter_id = "flyby:traffic:sol:vesper-02:1"
+    encounter = %{
+      id: encounter_id, call_sign: "Vesper-02", classification: :neutral_flyby,
+      kind: :courier, distance_km: 120_000.0, cargo: %{secret: 999}
+    }
+
+    Phoenix.PubSub.broadcast(Darkorbit.PubSub, Darkorbit.World.PubSub.topic("sol"),
+      {:solar_encounter_started, %{player_id: id, encounter: encounter}})
+
+    assert_push "helmet_encounter", %{paused: true, encounter: %{id: ^encounter_id,
+      call_sign: "Vesper-02", classification: :neutral_flyby} = visual}
+    refute Map.has_key?(visual, :cargo)
+
+    Phoenix.PubSub.broadcast(Darkorbit.PubSub, Darkorbit.World.PubSub.topic("sol"),
+      {:solar_encounter_started, %{player_id: id + 1,
+                                   encounter: %{id: "foreign-encounter"}}})
+    refute_push "helmet_encounter", %{encounter: %{id: "foreign-encounter"}}, 30
+
+    Phoenix.PubSub.broadcast(Darkorbit.PubSub, Darkorbit.World.PubSub.topic("sol"),
+      {:solar_navigation_updated, %{player_id: id,
+                                    navigation: %{pending_encounter: nil}}})
+    assert_push "helmet_encounter", %{paused: false, encounter: nil}
+
+    ref = push(viewer, "solar_resolve_encounter",
+      %{"encounter_id" => encounter_id, "choice" => "continue"})
+    assert_reply ref, :error, %{reason: "read_only_or_invalid_command"}
+
     # Regression: simulation broadcasts more event types than just snapshots.
     # A movement_started notification previously crashed the GenServer and
     # stranded the already-redeemed QR without a saved phone credential.

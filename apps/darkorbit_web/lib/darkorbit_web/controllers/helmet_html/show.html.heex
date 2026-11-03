@@ -5,6 +5,28 @@
        scissored eye viewports; no duplicate canvases or video stream. --%>
   <canvas id="helmet-viewport" class="absolute inset-0 block h-full w-full" hidden></canvas>
 
+  <%!-- Read-only encounter decision mirror: two independent eye panels.
+       The authenticated laptop provides the Hail and Resume controls. --%>
+  <section id="helmet-encounter" hidden class="helmet-encounter-overlay"
+    aria-label="Encounter hold" role="status">
+    <div class="helmet-encounter-eye">
+      <div class="helmet-encounter-card">
+        <p class="helmet-encounter-kicker">SOL / ENCOUNTER DETECTED</p>
+        <strong data-helmet-encounter-title>Unidentified vessel</strong>
+        <p data-helmet-encounter-kind>INTERPLANETARY CRUISE PAUSED</p>
+        <p class="helmet-encounter-instruction">Choose HAIL or RESUME on the laptop</p>
+      </div>
+    </div>
+    <div class="helmet-encounter-eye" aria-hidden="true">
+      <div class="helmet-encounter-card">
+        <p class="helmet-encounter-kicker">SOL / ENCOUNTER DETECTED</p>
+        <strong data-helmet-encounter-title>Unidentified vessel</strong>
+        <p data-helmet-encounter-kind>INTERPLANETARY CRUISE PAUSED</p>
+        <p class="helmet-encounter-instruction">Choose HAIL or RESUME on the laptop</p>
+      </div>
+    </div>
+  </section>
+
   <div id="helmet-message" hidden
        class="pointer-events-none absolute inset-x-0 top-1/2 z-20 mx-auto max-w-md -translate-y-1/2 px-6 text-center text-sm text-cyan-100"
        role="status"></div>

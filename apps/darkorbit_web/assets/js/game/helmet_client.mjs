@@ -5,6 +5,7 @@ import {laserFeedback} from "./laser_feedback.mjs"
 import {helmetSocketParams} from "./helmet_auth.mjs"
 import {adjustedHelmetAlignment, HELMET_GAP_MIN, HELMET_GAP_MAX} from "./helmet_alignment.mjs"
 import {restoredHelmetCalibration} from "./helmet_calibration_restore.mjs"
+import {renderHelmetEncounter} from "./helmet_encounter_view.mjs"
 
 const STORAGE_KEY = "darkorbit:pilot_hmd_credential"
 const GAP_KEY = "darkorbit:pilot_hmd_eye_gap"
@@ -19,6 +20,7 @@ export class HelmetClient {
     this.root = root
     this.canvas = root.querySelector("#helmet-viewport")
     this.messageNode = root.querySelector("#helmet-message")
+    this.encounterNode = root.querySelector("#helmet-encounter")
     this.pairCode = root.dataset.pairCode || null
     this.credential = localStorage.getItem(STORAGE_KEY)
     // Keep the QR invitation until the saved token has been verified.
@@ -81,6 +83,9 @@ export class HelmetClient {
       if (this.mode === "combat") this.applyWorld(map)
     })
     this.channel.on("laser_fired", shot => this.laserFired(shot))
+    this.channel.on("helmet_encounter", payload => {
+      renderHelmetEncounter(this.encounterNode, payload)
+    })
     this.channel.on("helmet_revoked", () => {
       localStorage.removeItem(STORAGE_KEY)
       this.credential = null
@@ -406,6 +411,7 @@ export class HelmetClient {
 
   setMode(mode) {
     this.mode = mode === "combat" ? "combat" : "standby"
+    if (this.mode !== "combat") renderHelmetEncounter(this.encounterNode, null)
     if (this.mode === "combat") {
       if (this.immersiveReady) this.startRendering()
     } else {
@@ -443,6 +449,7 @@ export class HelmetClient {
   stop() {
     this.running = false
     this.frameCount = 0
+    renderHelmetEncounter(this.encounterNode, null)
     this.canvas.hidden = true
     this.entities.clear()
     this.beams = []

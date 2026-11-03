@@ -484,3 +484,18 @@
   listener on untrusted networks. Production endpoint configuration is unchanged.
 - Not verified on physical headset; run from a trusted LAN and use the
   laptop's IPv4 address for remote device connections.
+
+
+### Encounter popup delivery and HMD overlay (2026-11-03)
+
+- Restored the direct `solar_encounter_started` listener in the laptop
+  cockpit so its server-held encounter popup opens on first notification.
+- Preserved snapshot-based reconnect recovery and keyboard-modal behaviour;
+  the Atlas is inert while the popup is awaiting a decision.
+- Added a filtered, read-only SOL encounter subscription for the separate
+  phone headset and a per-eye alert; decisions still use the laptop's
+  authenticated WorldChannel.
+- Added headset view and channel privacy regression tests; no combat,
+  trade or tactical travel changes were introduced.
+- Tests and real headset/browser verification were not run in the
+  editing environment.

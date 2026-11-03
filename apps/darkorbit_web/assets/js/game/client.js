@@ -308,8 +308,13 @@ class SpaceClient {
       }
     })
     channel.on("world_region_changed", payload => this.switchOrbitalRegion(payload?.map_id))
-    // The private first-contact event is accompanied by a navigation update;
-    // only that authoritative snapshot opens or closes the decision panel.
+    // Open the pilot's decision at first contact, without waiting for another
+    // navigation tick. The authoritative snapshot also restores it on reconnect.
+    channel.on("solar_encounter_started", payload => {
+      if (String(payload.player_id) === String(this.selfId) && payload.encounter?.id) {
+        this.setSolarEncounter(payload.encounter)
+      }
+    })
     channel.on("movement_started", entity => this.upsertEntity(entity))
     channel.on("entity_joined", entity => this.entityJoined(entity))
     channel.on("entity_left", entity => this.removeEntity(entity.id))
@@ -625,7 +630,16 @@ class SpaceClient {
     if (!panel) return
     const wasHidden = panel.hidden
     panel.hidden = !this.solarEncounter
-    if (!this.solarEncounter) return
+    if (this.navComputer?.root) this.navComputer.root.inert = Boolean(this.solarEncounter)
+    if (!this.solarEncounter) {
+      if (!wasHidden) {
+        const focus = this.navComputer?.isOpen
+          ? this.navComputer.root.querySelector("#nav-close")
+          : this.canvas
+        focus?.focus?.({preventScroll: true})
+      }
+      return
+    }
 
     const encounter = this.solarEncounter
     const status = encounter.classification === "hostile_contact"

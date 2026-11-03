@@ -113,6 +113,8 @@ defmodule DarkorbitWeb.HelmetChannel do
   def handle_info({:helmet_mode, :combat}, socket) do
     unless socket.assigns.helmet_active do
       :ok = World.subscribe(@map_id)
+      # The viewer receives only its own encounter status, not pilot commands.
+      :ok = World.subscribe("sol")
     end
 
     push(socket, "helmet_mode", %{mode: "combat"})
@@ -128,6 +130,7 @@ defmodule DarkorbitWeb.HelmetChannel do
   def handle_info({:helmet_mode, :standby}, socket) do
     if socket.assigns.helmet_active do
       Phoenix.PubSub.unsubscribe(Darkorbit.PubSub, Darkorbit.World.PubSub.topic(@map_id))
+      Phoenix.PubSub.unsubscribe(Darkorbit.PubSub, Darkorbit.World.PubSub.topic("sol"))
     end
     push(socket, "helmet_mode", %{mode: "standby"})
     {:noreply, assign(socket, :helmet_active, false)}
@@ -135,6 +138,26 @@ defmodule DarkorbitWeb.HelmetChannel do
 
   def handle_info({:world_state, map}, %{assigns: %{helmet_active: true}} = socket) do
     push(socket, "world_state", map)
+    {:noreply, socket}
+  end
+
+  # Only the paired pilot's encounter reaches the read-only viewer.
+  # Limit payloads to visual metadata; never forward cargo or reputation.
+  def handle_info({:solar_navigation_updated,
+                   %{player_id: player_id, navigation: navigation}},
+                  %{assigns: %{helmet_role: :viewer, helmet_active: true,
+                               helmet_player_id: helmet_player_id}} = socket)
+      when player_id == helmet_player_id do
+    push(socket, "helmet_encounter", helmet_encounter(navigation))
+    {:noreply, socket}
+  end
+
+  def handle_info({:solar_encounter_started,
+                   %{player_id: player_id, encounter: encounter}},
+                  %{assigns: %{helmet_role: :viewer, helmet_active: true,
+                               helmet_player_id: helmet_player_id}} = socket)
+      when player_id == helmet_player_id do
+    push(socket, "helmet_encounter", helmet_encounter(%{pending_encounter: encounter}))
     {:noreply, socket}
   end
 
@@ -169,6 +192,13 @@ defmodule DarkorbitWeb.HelmetChannel do
 
   # Unrelated process messages must never tear down a registered HMD.
   def handle_info(_message, socket), do: {:noreply, socket}
+
+  defp helmet_encounter(%{pending_encounter: encounter}) when is_map(encounter) do
+    %{paused: true, encounter: Map.take(encounter,
+      [:id, :call_sign, :kind, :classification, :distance_km])}
+  end
+
+  defp helmet_encounter(_navigation), do: %{paused: false, encounter: nil}
 
   @impl true
   def terminate(_reason, %{assigns: %{helmet_role: :viewer}}) do
