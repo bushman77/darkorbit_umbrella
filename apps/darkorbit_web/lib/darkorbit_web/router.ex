@@ -29,6 +29,14 @@ defmodule DarkorbitWeb.Router do
     delete "/logout", SessionController, :delete
   end
 
+  # The phone checks a saved HMD bearer credential without joining a pilot
+  # channel. JSON API avoids exposing the credential in URL or browser session.
+  scope "/", DarkorbitWeb do
+    pipe_through :api
+
+    post "/helmet/verify", HelmetController, :verify
+  end
+
   scope "/", DarkorbitWeb do
     pipe_through [:browser, :require_authenticated_player]
 
