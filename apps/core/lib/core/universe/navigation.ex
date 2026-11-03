@@ -103,6 +103,7 @@ defmodule Core.Universe.Navigation do
         updated = %{voyage |
           origin_id: voyage.location_id,
           destination_id: destination_id,
+          voyage_number: voyage.voyage_number + 1,
           origin_position_km: voyage.position_km,
           destination_position_km: destination_position,
           propulsion_mode: :interplanetary_cruise,
@@ -161,6 +162,7 @@ defmodule Core.Universe.Navigation do
     {:ok, position_km} = Sol.game_position_km(location_id)
     %{system_id: @system_id, status: :idle, location_id: location_id,
       origin_id: location_id, destination_id: nil,
+      arrival_origin_id: nil, voyage_number: 0,
       propulsion_mode: :conventional,
       origin_position_km: position_km, position_km: position_km,
       destination_position_km: nil,
@@ -184,7 +186,9 @@ defmodule Core.Universe.Navigation do
           voyage.cruise_speed_km_s * elapsed / 1_000.0)
         updated =
           if distance_covered >= voyage.travel_distance_km do
-            idle(voyage.destination_id)
+            %{idle(voyage.destination_id) |
+              arrival_origin_id: voyage.origin_id,
+              voyage_number: voyage.voyage_number}
           else
             fraction = distance_covered / voyage.travel_distance_km
             %{voyage | elapsed_ms: elapsed,
@@ -235,7 +239,7 @@ defmodule Core.Universe.Navigation do
   end
 
   defp broadcast(state, player_id, voyage) do
-    EventSink.dispatch(state.event_sink, "1-1", :solar_navigation_updated, %{
+    EventSink.dispatch(state.event_sink, "sol", :solar_navigation_updated, %{
       player_id: player_id,
       navigation: public(voyage, state.traffic)
     })
