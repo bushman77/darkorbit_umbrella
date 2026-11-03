@@ -136,6 +136,33 @@ defmodule DarkorbitWeb.WorldChannelTest do
     leave_and_wait(joined)
   end
 
+  test "SOL flyby event is delivered only to the authenticated pilot" do
+    account = verified_player_account_fixture()
+    other = verified_player_account_fixture()
+    {:ok, socket} = authenticated_socket(account)
+    {:ok, _response, joined} =
+      subscribe_and_join(socket, WorldChannel, "world:1-1")
+
+    event = %{
+      player_id: account.id,
+      encounter: %{
+        id: "flyby:traffic:sol:vesper-02:1",
+        contact_id: "traffic:sol:vesper-02",
+        call_sign: "Vesper-02",
+        mode: :strategic_flyby
+      }
+    }
+
+    send(joined.channel_pid, {:solar_encounter_started, %{event | player_id: other.id}})
+    refute_push "solar_encounter_started", _, 50
+
+    send(joined.channel_pid, {:solar_encounter_started, event})
+    assert_push "solar_encounter_started",
+      %{player_id: player_id, encounter: %{contact_id: "traffic:sol:vesper-02"}}
+    assert player_id == account.id
+    leave_and_wait(joined)
+  end
+
   test "SOL interplanetary courses are server-authorized and no NPC spawns on travel" do
     account = verified_player_account_fixture()
     {:ok, socket} = authenticated_socket(account)
