@@ -73,6 +73,17 @@ defmodule DarkorbitWeb.WorldChannel do
     end
   end
 
+  def handle_in("solar_hail", %{"contact_id" => id}, socket)
+      when is_binary(id) do
+    case World.solar_hail(socket.assigns.world_session_id, id) do
+      {:ok, communication} -> {:reply, {:ok, %{communication: communication}}, socket}
+      {:error, reason} -> {:reply, {:error, %{reason: error_reason(reason)}}, socket}
+    end
+  end
+
+  def handle_in("solar_hail", _payload, socket),
+    do: {:reply, {:error, %{reason: "invalid_contact"}}, socket}
+
   def handle_in("stop_navigation", _payload, socket) do
     case World.stop_navigation(socket.assigns.world_session_id) do
       {:ok, entity} -> {:reply, {:ok, %{entity: entity}}, socket}
