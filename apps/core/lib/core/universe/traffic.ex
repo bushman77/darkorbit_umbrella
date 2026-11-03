@@ -3,7 +3,7 @@ defmodule Core.Universe.Traffic do
   Deterministic, player-independent SOL traffic for the first living-universe
   slice. This is strategic game-km movement, never a tactical map spawn.
 
-  A named civilian freighter has a cargo manifest, purpose, route and schedule.
+  Every traffic vessel has a cargo manifest, purpose, route and schedule.
   It continues traveling and docking without connected pilots. Sensor contacts
   and hails are derived from server-owned positions; players do not create or
   steer the freighter by encountering it.
@@ -18,7 +18,6 @@ defmodule Core.Universe.Traffic do
   @sensor_radius_km 2_000_000.0
   @dock_ms 45_000
   @cruise_speed_km_s 42_000.0
-  @freighter_id "traffic:sol:meridian-01"
 
   @doc """
   Persistent scheduled ships. Their routes/initial phases are world data, not
@@ -193,7 +192,6 @@ defmodule Core.Universe.Traffic do
         origin_id: origin_id,
         destination_id: destination_id,
         cargo: cargo,
-        purpose: :scheduled_delivery,
         elapsed_ms: 0,
         dwell_remaining_ms: 0,
         voyage_number: vessel.voyage_number + 1,
