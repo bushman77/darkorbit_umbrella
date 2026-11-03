@@ -6,6 +6,7 @@ import {flightBasis, degrees} from "./flight_basis.mjs"
 import {orientationTelemetry} from "./orientation_interpolation.mjs"
 import {targetRange, LASER_FEEDBACK_MS} from "./laser_feedback.mjs"
 import {createDartModel, DART_MODEL_ID, dartHeadingRotation} from "./dart_model.mjs"
+import {PlanetaryBody} from "./planetary_body.js"
 
 // Rendering only: no Phoenix socket, no movement authority, no combat calculations.
 const clamp = (value, min, max) => Math.max(min, Math.min(value, max))
@@ -79,6 +80,9 @@ export class StereoSpaceView {
     this.scene.add(sun)
     // Space has no artificial ground plane. The atlas alone owns the XY chart.
     this.addStars()
+    // The spherical planet is visually scaled by its angular diameter.
+    // It must not inherit the tactical map's 3,000-unit clipping limits.
+    this.planetaryBody = new PlanetaryBody(THREE, this.scene)
     this.addSpaceLandmarks()
     this.addCockpit()
     this.beamGroup = new THREE.Group()
@@ -100,7 +104,12 @@ export class StereoSpaceView {
     }
     const geometry = new THREE.BufferGeometry()
     geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3))
-    this.scene.add(new THREE.Points(geometry, new THREE.PointsMaterial({color: 0xc8e3ff, size: 1.3})))
+    const stars = new THREE.Points(geometry, new THREE.PointsMaterial({
+      color: 0xc8e3ff, size: 1.3, depthTest: false, depthWrite: false,
+    }))
+    // Stars are an infinitely distant backdrop, never in front of a planet.
+    stars.renderOrder = -100
+    this.scene.add(stars)
   }
 
   addSpaceLandmarks() {
@@ -400,6 +409,7 @@ export class StereoSpaceView {
     this.sight?.material?.color?.setHex(active ?
       feedback.hit ? 0x79ff9b : 0xff7272 : 0x78e6fc)
     this.setCamera(client.entities.get(client.selfId))
+    this.planetaryBody.update(client.navComputer?.solarNavigation, this.camera, time)
     this.syncShips(client)
     this.syncBeams(client, time)
     this.updateHud(client, time)
