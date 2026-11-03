@@ -416,3 +416,42 @@ test("Atlas disables mouse steering, and blur and autopilot clear all mouse inpu
   flight.resetThrottle()
   assert.deepEqual(flight.axes(), {yaw: 0, pitch: 0, roll: 0})
 })
+
+test("pointer capture advertises faster mouse profile only while active", () => {
+  let time = 1000
+  const sent = []
+  const flight = new FlightControls({send: data => sent.push(data), now: () => time})
+
+  assert.equal(flight.payload().mouse_steering, false)
+  assert.equal(flight.setMouseMode(true), true)
+  assert.equal(sent.at(-1).mouse_steering, true)
+
+  time += 100
+  flight.setMouseSteering({yaw: 0.7, pitch: 0.6})
+  assert.equal(sent.at(-1).mouse_steering, true)
+  assert.equal(sent.at(-1).yaw, 0.7)
+
+  time += 100
+  assert.equal(flight.setMouseMode(false), true)
+  assert.equal(sent.at(-1).mouse_steering, false)
+  assert.equal(sent.at(-1).yaw, 0)
+  assert.equal(sent.at(-1).pitch, 0)
+  assert.equal(flight.throttle, 0)
+})
+
+test("Atlas, blur and autopilot restore keyboard-only turn profile", () => {
+  const flight = new FlightControls({send: () => {}, now: () => 1000})
+  flight.setMouseMode(true)
+  flight.setMouseSteering({yaw: 1})
+  flight.release({silent: true})
+  assert.equal(flight.payload().mouse_steering, false)
+  assert.equal(flight.axes().yaw, 0)
+
+  flight.setMouseMode(true)
+  flight.resetThrottle()
+  assert.equal(flight.payload().mouse_steering, false)
+
+  flight.setMouseMode(true)
+  flight.setMouseMode(false, {silent: true})
+  assert.equal(flight.payload().mouse_steering, false)
+})
