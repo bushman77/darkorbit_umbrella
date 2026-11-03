@@ -29,10 +29,12 @@ through the existing Three.js StereoSpaceView (no video stream).
 The QR code contains a random **single-use invitation**, not the pilot's normal
 socket token, world topic, or account credentials. The invitation remains valid
 while the panel stays open and is cancelled on closing it. It is deliberately
-not time-limited. A successful scan creates a persistent, revocable device
-registration in PostgreSQL; only a SHA-256 hash of its bearer credential is
-stored. The phone retains its credential in browser localStorage and reconnects
-without scanning again. Pilot **Forget headset** invalidates that credential.
+not time-limited. A successful scan sends a single `POST /helmet/pair` request, creating a
+persistent, revocable device registration in PostgreSQL; only a SHA-256 hash of
+its bearer credential is stored. The phone saves the returned credential to
+browser localStorage **before** opening the viewer WebSocket. The socket accepts
+only a saved helmet credential, never a QR invitation. Ordinary disconnects do
+not require another QR scan. Pilot **Forget headset** invalidates the credential.
 
 ## View-mode and bandwidth contract
 
@@ -47,10 +49,13 @@ without scanning again. Pilot **Forget headset** invalidates that credential.
   phone cannot continue receiving world updates after the controlling session closes.
 - Helmet clients have no Core.World session and cannot call movement, combat or
   navigation commands. WorldChannel explicitly requires a pilot-role socket.
-- Re-scanning an old QR on a previously registered phone must use the persistent
-  local helmet credential rather than attempting the consumed invitation.
-  A refused new pairing code means it was used, cancelled or the Atlas panel
-  was closed. Reopen the panel and scan a fresh code if not already paired.
+- Re-scanning an old QR on a previously registered phone uses the persistent
+  local credential rather than redeeming the consumed invitation.
+  A rejected QR code means it was already consumed or the panel was closed;
+  it never means the registered device itself has expired.
+- World notifications such as `:movement_started` are ignored by the helmet
+  channel unless they are part of the intentionally limited display feed.
+  Unknown world events cannot crash the viewer channel.
 
 The Atlas manager reports separate pairing, connection, rendering, and mode
 states. The phone reports rendering health rather than claiming it is physically
@@ -76,7 +81,10 @@ Phone landscape, lens alignment and frame rate require hardware testing.
 
 ## Tests
 
-    mix test apps/darkorbit_web/test/darkorbit_web/channels/helmet_channel_test.exs
+    cd apps/darkorbit_web
+    mix test test/darkorbit_web/channels/helmet_channel_test.exs \
+             test/darkorbit_web/controllers/helmet_controller_test.exs
+    cd ../..
     npm test --prefix apps/darkorbit_web/assets
 
 The remote repository edits were not run through an Elixir compiler or a real
@@ -108,3 +116,17 @@ headset is merely offline, leave the registration intact and reopen
 Tests:
 \`mix test test/darkorbit_web/controllers/helmet_controller_test.exs\`
 from \`apps/darkorbit_web\`.
+
+
+## Recovery after the earlier world-event crash
+
+Old versions redeemed the invitation **inside** a viewer WebSocket join.
+The first `:movement_started` event then crashed the viewer GenServer. If the
+phone did not receive/save the registration credential before the crash, the
+Atlas may show **PAIRED** but the phone cannot reconnect. That existing,
+inaccessible registration cannot be recovered from a consumed QR code. Use
+**Forget headset** on the laptop once, open the fresh QR, and scan again
+after installing this update.
+
+New versions persist the credential via `POST /helmet/pair` before the viewer
+socket joins; the same failure cannot consume a QR unnoticed during joining.
