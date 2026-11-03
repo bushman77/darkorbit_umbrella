@@ -393,8 +393,9 @@ validation remain deferred.
 
 ### Planetary orbital regions V2 (2026-11-03)
 
-- [x] Eight independently supervised planetary tactical regions plus
-  the legacy Earth map; server-owned map identities and join validation.
+- [x] Nine independently supervised SOL planetary tactical regions,
+  including Earth, plus an isolated legacy `1-1` combat test fixture;
+  server-owned map identities and join validation.
 - [x] Arrival side derived from the incoming SOL voyage, with deterministic
   pilot staggering and heading toward the actual planet centre.
 - [x] Separate local provisional-kilometre coordinates from compressed
@@ -406,8 +407,8 @@ validation remain deferred.
 - [x] Remove the four original procedural test asteroid spheres and
   relocate the starfield around the camera in large maps.
 - [x] Add directional arrival, region routing, collision and view tests.
-- [ ] Migrate Earth's legacy 1-1 map and first-time spawn onto the new
-  consistent planetary frame, retaining any needed combat fixtures.
+- [x] Send live Earth pilots to `sol:earth` with a real-radius map,
+  retaining the old `1-1` first-login spawn only under test configuration.
 - [ ] Preserve active hull/shields/loadout and physical orbital coordinates
   across region transitions, disconnects and full server restarts.
 - [ ] Implement trajectory-preserving interplanetary handoff, orbital
@@ -429,13 +430,14 @@ validation remain deferred.
   first impact, fast through-crossing and safety of other flight modes.
 - [ ] Add escalating proximity/collision alerts and gravitational effects.
 - [ ] Implement controlled respawn or rescue/recovery workflow for pilots.
-- [ ] Enable consistent collision behavior in Earth's migrated orbital map.
+- [x] Enable identical lethal collision and proximity warning behavior
+  for Earth and every other SOL planetary region.
 
 
 ### Planetary proximity warning V1 (2026-11-03)
 
 - [x] Server-owned CAUTION (1.55× lethal radius) and CRITICAL
-  (1.20× lethal radius) proximity bands for all eight orbital maps.
+  (1.20× lethal radius) proximity bands for all nine orbital maps.
 - [x] Publish one event per zone change, including retreat to safety,
   without emitting a warning every 100ms simulation tick.
 - [x] Include current per-pilot 3D collision clearance and warning level
