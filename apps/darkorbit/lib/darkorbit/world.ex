@@ -19,16 +19,18 @@ defmodule Darkorbit.World do
   alias Darkorbit.ShipStats
   alias Darkorbit.World.PubSub
 
+  @legacy_test_earth_sector Application.compile_env(:darkorbit, :legacy_test_earth_sector, false)
+
   @doc "Resolve an authenticated pilot's current planetary map and arrival pose."
   @spec region_for_player(pos_integer()) :: {:ok, map()} | {:error, term()}
   def region_for_player(user_id) when is_integer(user_id) and user_id > 0 do
     server = Module.concat(SessionManager, SolarNavigation)
 
     with {:ok, navigation} <- SolarNavigation.snapshot(server, user_id) do
-      # Retain the original Sector 1-1 join fixture for fresh Earth accounts;
-      # it is still used by existing combat/channel integration tests. Actual
-      # interplanetary arrivals get their direction-derived orbital entry.
-      if navigation.location_id == "earth" and
+      # Only the test environment runs the isolated legacy Sector 1-1
+      # channel fixtures. In production EVERY planet (including Earth)
+      # receives the same physical orbital region and collision mechanics.
+      if @legacy_test_earth_sector and navigation.location_id == "earth" and
            navigation.arrival_origin_id == nil do
         {:ok, %{
           map_id: "1-1",
