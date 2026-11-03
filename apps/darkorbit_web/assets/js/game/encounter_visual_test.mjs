@@ -54,7 +54,7 @@ test("Scow strategic flyby classification survives a server-owned encounter hold
   const pending = {...navigation, encounter: null, cruise_paused: true,
     pending_encounter: navigation.encounter}
   const spec = encounterRenderSpec(pending)
-  assert.equal(spec.id, navigation.pending_encounter.id)
+  assert.equal(spec.id, pending.pending_encounter.id)
   assert.equal(spec.shipClass, "scow")
   assert.equal(spec.position.z, -90)
 })
