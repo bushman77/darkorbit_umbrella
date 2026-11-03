@@ -21,6 +21,7 @@ import {HelmetControl} from "./helmet_control.mjs"
 import {helmetAlignmentKeyIntent} from "./helmet_alignment_keys.mjs"
 import {NavigationComputer} from "./navigation_computer.mjs"
 import {FlightControls} from "./flight_controls.mjs"
+import {MouseSteering, validMouseSensitivity} from "./mouse_steering.mjs"
 import {smoothAttitude} from "./attitude_interpolation.mjs"
 import {smoothOrientation, orientationTelemetry} from "./orientation_interpolation.mjs"
 import {SpaceLaserTrigger} from "./space_laser_trigger.mjs"
@@ -48,6 +49,14 @@ class SpaceClient {
     this.displayMode = "3d"
     this.mapId = root.dataset.mapId
     this.token = root.dataset.socketToken
+    // Per-pilot browser preference, not an authority-bearing network setting.
+    this.mouseSteeringKey = "darkorbit:mouse-steering:" + root.dataset.layoutPlayerId
+    this.mouseSensitivityKey = "darkorbit:mouse-sensitivity:" + root.dataset.layoutPlayerId
+    this.mouseSteeringEnabled = localStorage.getItem(this.mouseSteeringKey) === "1"
+    const savedSensitivity = Number(localStorage.getItem(this.mouseSensitivityKey))
+    this.mouseSteeringSensitivity = validMouseSensitivity(savedSensitivity)
+      ? savedSensitivity : 1
+    this.mouseSteering = new MouseSteering({sensitivity: this.mouseSteeringSensitivity})
     this.entities = new Map()
     this.pilots = new Map()
     this.boundaries = {width: 20000, height: 12000}
@@ -91,6 +100,7 @@ class SpaceClient {
         this.entities.get(this.selfId)?.status !== "destroyed",
       send: input => this.sendFlightControls(input),
     })
+    this.setupMouseSteering()
     window.addEventListener("keydown", event => this.flightControls.keyDown(event))
     window.addEventListener("keyup", event => this.flightControls.keyUp(event))
     // Only the cockpit hit canvas owns flight input; menus/Atlas retain
@@ -98,11 +108,13 @@ class SpaceClient {
     this.canvas.addEventListener("wheel", event => this.flightControls.wheel(event),
       {passive: false})
     window.addEventListener("blur", () => {
+      this.exitMouseSteering()
       this.flightControls.release()
       this.spaceLaser?.release()
     })
     document.addEventListener("visibilitychange", () => {
       if (document.hidden) {
+        this.exitMouseSteering()
         this.flightControls.release()
         this.spaceLaser?.release()
       }
@@ -118,12 +130,14 @@ class SpaceClient {
       solarSetCourse: (bodyId, done) => this.solarSetCourse(bodyId, done),
       solarCancelCourse: done => this.solarCancelCourse(done),
       onOpen: () => {
+        this.exitMouseSteering({silent: true})
         this.helmet?.setCombat(false)
         this.navigation?.cancel()
         this.flightControls.release({silent: true})
         this.spaceLaser?.release()
       },
       onClose: () => {
+        this.updateMouseSteeringStatus()
         this.helmet?.closePanel()
         this.helmet?.setCombat(true)
         this.canvas.focus({preventScroll: true})
@@ -145,7 +159,17 @@ class SpaceClient {
       sendDestination: destination => this.sendDestination(destination),
       // In cockpit mode click selects targets; travel is plotted on the atlas.
       interceptPointerDown: pointer => {
-        this.selectTargetAtPointer(pointer)
+        // While pointer-locked, the mouse coordinates are frozen: left-click
+        // targets what the ship is pointing at in the center of the cockpit.
+        if (document.pointerLockElement === this.canvas) {
+          const rect = this.canvas.getBoundingClientRect()
+          this.selectTargetAtPointer({
+            clientX: rect.left + rect.width / 2,
+            clientY: rect.top + rect.height / 2,
+          })
+        } else {
+          this.selectTargetAtPointer(pointer)
+        }
         return true
       },
     }).attach()
@@ -401,6 +425,7 @@ class SpaceClient {
     const label=this.root.querySelector("#propulsion-status")
     if(label)label.textContent=active?"SUBLIGHT CRUISE / FLIGHT LOCKED":"CONVENTIONAL FLIGHT"
     if(active){
+      this.exitMouseSteering({silent: true})
       this.flightControls?.release({silent:true})
       this.spaceLaser?.release()
       this.navigation?.cancel()
@@ -727,6 +752,10 @@ class SpaceClient {
     const deltaSeconds = Math.min((time - this.lastFrame) / 1000, 0.1)
     this.lastFrame = time
     this.interpolate(deltaSeconds)
+    if (this.mouseSteeringEnabled && document.pointerLockElement === this.canvas) {
+      const expired = this.mouseSteering.expire(time)
+      if (expired) this.flightControls?.setMouseSteering(expired)
+    }
     this.flightControls?.heartbeat(time)
     this.spaceLaser?.update(time)
     this.draw(time)
