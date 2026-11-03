@@ -860,3 +860,10 @@ body:has(#helmet-client) {
   overflow: hidden;
   overscroll-behavior: none;
 }
+
+
+/* In SBS, proximity alerts appear on the per-eye 3D cockpit HUD instead.
+   A flat alert spanning both halves would be uncomfortable in a headset. */
+[data-display-mode="sbs"] #planetary-proximity-warning {
+  display: none !important;
+}
