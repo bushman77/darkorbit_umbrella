@@ -28,6 +28,7 @@ import {SpaceLaserTrigger} from "./space_laser_trigger.mjs"
 import {applyLaserBurstDamage, visualLaserRays} from "./laser_burst.mjs"
 import {laserFeedback, LASER_FEEDBACK_MS} from "./laser_feedback.mjs"
 import {nextFlightMode, validFlightMode} from "./display_modes.mjs"
+import {validOrbitalMapId, shouldEnterOrbitalRegion} from "./orbital_regions.mjs"
 
 const clamp = (value, minimum, maximum) => Math.min(Math.max(value, minimum), maximum)
 const validDestination = (destination, boundaries) =>
@@ -224,7 +225,7 @@ class SpaceClient {
   joinSector(mapId, retry = 0) {
     // Map identity comes from an authenticated region redirect/arrival event,
     // never from browser-provided world coordinates.
-    if (!/^(1-1|sol:(mercury|venus|mars|jupiter|saturn|uranus|neptune|pluto))$/.test(mapId)) {
+    if (!validOrbitalMapId(mapId)) {
       this.showError("Invalid orbital destination map.")
       return
     }
@@ -302,11 +303,7 @@ class SpaceClient {
   }
 
   switchOrbitalRegion(mapId) {
-    if (!mapId || mapId === this.mapId || this.switchingRegion) return
-    if (!/^(1-1|sol:(mercury|venus|mars|jupiter|saturn|uranus|neptune|pluto))$/.test(mapId)) {
-      this.showError("The server sent an unsupported orbital region.")
-      return
-    }
+    if (!shouldEnterOrbitalRegion(this.mapId, mapId, this.switchingRegion)) return
     this.switchingRegion = true
     this.setConnection("Entering " + mapId + " orbital region", "online")
     this.exitMouseSteering({silent: true})
