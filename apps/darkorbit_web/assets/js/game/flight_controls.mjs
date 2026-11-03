@@ -33,6 +33,7 @@ export class FlightControls {
     this.wheelRollDirection = 0
     this.wheelRollUntil = -Infinity
     this.mouseAxes = {yaw: 0, pitch: 0}
+    this.mouseMode = false
     this.mouseDirty = false
     this.lastMouseEmit = -Infinity
   }
@@ -53,12 +54,27 @@ export class FlightControls {
   }
 
   payload() {
-    return {throttle: this.throttle, mode: this.mode, ...this.axes()}
+    return {throttle: this.throttle, mode: this.mode,
+      mouse_steering: this.mouseMode, ...this.axes()}
   }
 
   emit() {
     this.lastEmit = this.now()
     this.send(this.payload())
+  }
+
+  // Only actual pointer capture enables the server's faster, bounded
+  // mouse turn profile. Keyboard-only flight keeps its original rates.
+  setMouseMode(enabled, {silent = false} = {}) {
+    const next = enabled === true
+    if (this.mouseMode === next) return false
+    this.mouseMode = next
+    if (!next) {
+      this.mouseAxes = {yaw: 0, pitch: 0}
+      this.mouseDirty = false
+    }
+    if (!silent && this.active()) this.emit()
+    return true
   }
 
   setMouseSteering({yaw = 0, pitch = 0} = {}) {
@@ -225,12 +241,13 @@ export class FlightControls {
   }
 
   release({silent = false} = {}) {
-    if (!this.pressed.size && !this.wheelRollDirection &&
+    if (!this.pressed.size && !this.wheelRollDirection && !this.mouseMode &&
         this.mouseAxes.yaw === 0 && this.mouseAxes.pitch === 0) return
     this.pressed.clear()
     this.lastPitchKey = null
     this.clearWheelRoll()
     this.clearMouseSteering({silent: true})
+    this.setMouseMode(false, {silent: true})
     if (!silent) this.emit()
   }
 
@@ -242,6 +259,7 @@ export class FlightControls {
     this.wheelAccumulated = 0
     this.clearWheelRoll()
     this.clearMouseSteering({silent: true})
+    this.setMouseMode(false, {silent: true})
   }
 
   heartbeat(time) {
