@@ -990,14 +990,17 @@ class SpaceClient {
       this.flightControls.setMouseSteering(axes)
     })
     document.addEventListener("pointerlockchange", () => {
-      if (document.pointerLockElement !== this.canvas) {
+      const captured = this.mouseSteeringEnabled &&
+        document.pointerLockElement === this.canvas
+      // Use the faster mouse-only angular rate profile on the server ONLY
+      // during pointer capture, reverting when the cursor is released.
+      if (!captured) {
         this.mouseSteering.release()
-        // The Atlas and autopilot must never have manual commands injected
-        // by an asynchronous pointerlockchange callback.
-        this.flightControls.clearMouseSteering({
-          silent: Boolean(this.navComputer?.isOpen || this.inSystemCruise()),
-        })
+        this.flightControls.clearMouseSteering({silent: true})
       }
+      this.flightControls.setMouseMode(captured, {
+        silent: Boolean(this.navComputer?.isOpen || this.inSystemCruise()),
+      })
       this.updateMouseSteeringStatus()
     })
     document.addEventListener("pointerlockerror", () =>
@@ -1033,7 +1036,8 @@ class SpaceClient {
 
   exitMouseSteering({silent = false} = {}) {
     this.mouseSteering.release()
-    this.flightControls?.clearMouseSteering({silent})
+    this.flightControls?.clearMouseSteering({silent: true})
+    this.flightControls?.setMouseMode(false, {silent})
     if (document.pointerLockElement === this.canvas) document.exitPointerLock?.()
     this.updateMouseSteeringStatus()
   }
