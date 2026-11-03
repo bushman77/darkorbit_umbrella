@@ -1,4 +1,4 @@
-// Holding Space requests one manual shot whenever the world-owned weapon is
+// Holding right mouse button requests one shot whenever the world-owned weapon is
 // ready. The client never computes hits, damage, heading or cooldown duration.
 export class SpaceLaserTrigger {
   constructor({fire, active, worldTick, nextAttackTick, now = () => performance.now()}) {
