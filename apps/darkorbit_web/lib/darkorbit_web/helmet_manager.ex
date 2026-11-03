@@ -31,7 +31,7 @@ defmodule DarkorbitWeb.HelmetManager do
   end
 
   def report_alignment(pid, gap_px, separation_mm)
-      when is_integer(gap_px) and gap_px in 0..80 and
+      when is_integer(gap_px) and gap_px in -160..80 and
            is_integer(separation_mm) and separation_mm in 40..85 do
     GenServer.call(__MODULE__, {:alignment_report, pid, gap_px, separation_mm})
   end
