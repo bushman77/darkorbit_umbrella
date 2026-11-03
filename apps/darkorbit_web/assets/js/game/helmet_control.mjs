@@ -182,7 +182,7 @@ export class HelmetControl {
     const label = this.root.querySelector("#cockpit-helmet-alignment")
     if (label && status.alignment) {
       label.textContent =
-        "GAP " + status.alignment.eye_gap_px + "px · IPD " +
+        "CENTER " + status.alignment.eye_gap_px + "px · IPD " +
         status.alignment.eye_sep_mm + "mm"
       this.alignmentFeedback("")
     } else if (label) {
