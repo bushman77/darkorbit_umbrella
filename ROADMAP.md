@@ -603,3 +603,23 @@ validation remain deferred.
   existing Dart-class tactical placeholder.
 - [ ] Add standing/reputation penalties, faction-law response, cargo/loot,
   and rewards for attacking civilian traffic.
+
+
+### Scow merchant hull implementation (2026-11-03)
+
+- [x] Register a separate Scow NPC type with reference-grounded 210 armor
+  and Garnet 10-class laser and provisional balance values.
+- [x] Assign server-owned Scow identity to independent traders, couriers
+  and scheduled merchant traffic without changing their routes or cargo.
+- [x] Spawn actual Scow combat opponents via authenticated neutral SOL
+  encounter handoff, while hostile fighters retain the Dart placeholder.
+- [x] Create and render an original blue low-poly cargo vessel in normal
+  cockpit and SBS phone headset with existing target selection geometry.
+- [x] Add model and simulation tests for class identifiers, hull, damage
+  and SOL encounter mapping.
+- [ ] Verify full Mix/JavaScript test suites and live laptop/HMD gameplay.
+- [ ] Implement NPC captain doctrine: flight, surrender, radio threats,
+  variable morale and faction standing/reputation penalties, rather
+  than assuming every attacked Scow fights to destruction.
+- [ ] Implement larger Tanker merchants as a separate hull with stronger
+  defenses; add salvage and transferred cargo after surrender/defeat.

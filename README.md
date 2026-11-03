@@ -989,3 +989,47 @@ Regression coverage includes an ordinary neutral scheduled encounter,
 a genuine procedurally generated Harbor-1 contact, prevented pre-hit
 aggression, first-hit retaliation, and exact-encounter session authorization.
 Mix tests and live headset/browser verification were not run here.
+
+
+### Distinct Scow merchant vessels (2026-11-03)
+
+The original Space Rogue (1989) recognition guide describes the Scow as a
+blue, 23-metre, 74-tonne small merchant freighter with a 10-tonne cargo
+capacity, 210 armor, a turreted Garnet laser (10), an aft shield and no
+missiles. The live system now registers **Scow** as a distinct NPC ship type
+alongside the Dart fighter. The original's 210 armor and 10-damage beam are
+represented by max hull and laser damage. Other ship physics are balancing
+approximations because the current combat model lacks directional shields,
+per-class acceleration and cargo-tonnage slots.
+
+Scow template stats: hull 210, generic shields 45, laser 10, movement 105
+game units/second, attack range 380 units, fire cooldown 1800 ms. Compare
+Dart's hull 245, shields 120, damage 35 and movement 210 in the current
+prototype. The Scow is deliberately the slower civilian target and is not
+automatically spawned into the legacy test sector.
+
+Every live independent trader, scheduled commercial freighter and courier
+is identified as a Scow in shared SOL traffic. Contacts carry that
+authoritative type into the held encounter and authenticated tactical
+handoff, spawning `solar-scow-<player id>` with genuine Scow hull and
+weapon values. Raid patrol/raider combat uses the existing Dart template.
+Traffic schedules and cargo manifests remain unchanged.
+
+A new, original low-poly Three.js Scow is rendered in both laptop and SBS
+headset through the same 3D model-selection path: blue rounded cargo bow,
+wide rear cargo deck, sectional cargo holds, dorsal turret and twin engines.
+No third-party game art is embedded. The tactical opponent displays its
+real callsign and Scow geometry, never a generic Dart.
+
+Scows currently start passive on player-initiated attack and fight back
+only after receiving a confirmed hit (the existing neutral-contact rule).
+Proper captain decisions to flee, surrender cargo or fight in self-defense
+and corresponding reputation, loot and trading outcomes remain the next
+behavioral milestone. Adding a new ship class alone must not falsely
+claim that the original game's surrender/flight logic is already present.
+
+Regression tests cover SOL encounter classification, different Scow
+combat stats and render selection for dynamically named Scow NPCs.
+Run Core World and Universe Traffic tests, Phoenix WorldChannel tests,
+Node assets tests, then assets build. The original source reference is
+the published 1989 Sunracer Owner's Guide, recognition guide p. 31.

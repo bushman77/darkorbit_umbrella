@@ -92,7 +92,7 @@ defmodule Core.World do
 
       case MapServer.start_solar_tactical(registry, session.map_id, session.id,
              session.entity_id, encounter_id, navigation.tactical_encounter.call_sign,
-             aggressive?) do
+             navigation.tactical_encounter.ship_class, aggressive?) do
         {:ok, enemy} ->
           {:ok, %{navigation: navigation, enemy: enemy}}
 

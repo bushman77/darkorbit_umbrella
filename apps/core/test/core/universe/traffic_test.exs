@@ -4,12 +4,22 @@ defmodule Core.Universe.TrafficTest do
   alias Core.Universe.Sol
   alias Core.Universe.Traffic
 
+  test "Scow exists as a separate merchant hull, not an automatic test-sector spawn" do
+    assert {:ok, scow} = Core.NPC.Catalog.fetch("scow")
+    assert scow.max_hull == 210
+    assert scow.laser_damage == 10
+    assert scow.movement_speed < Core.NPC.Catalog.fetch!("dart").movement_speed
+    assert scow.spawn.map_id == "npc:templates"
+    assert Enum.map(Core.NPC.Catalog.for_map("1-1"), & &1.id) == ["dart"]
+  end
+
   test "a scheduled civilian freighter exists before any player arrives" do
     fleet = Traffic.seed()
     assert map_size(fleet) == 6
     vessel = Map.fetch!(fleet, "traffic:sol:meridian-01")
     assert vessel.id == "traffic:sol:meridian-01"
     assert vessel.kind == :commercial_freighter
+    assert vessel.ship_class == "scow"
     assert vessel.disposition == :neutral
     assert vessel.purpose == :scheduled_delivery
     assert vessel.origin_id == "earth"
@@ -122,6 +132,7 @@ defmodule Core.Universe.TrafficTest do
     assert map_size(traffic) == map_size(base) + 1
     contact = Map.fetch!(traffic, "traffic:sol:cruise-1")
     assert contact.kind == :independent_trader
+    assert contact.ship_class == "scow"
     assert contact.origin_id == "venus"
     assert contact.destination_id == "earth"
     assert contact.state == :in_transit
@@ -151,9 +162,11 @@ defmodule Core.Universe.TrafficTest do
     {:ok, patrol} = Traffic.launch_contact(base, "earth", "venus", 7, :patrol, 0.5)
     assert patrol["traffic:sol:cruise-7"].faction_id == "venus"
     assert patrol["traffic:sol:cruise-7"].kind == :patrol
+    assert patrol["traffic:sol:cruise-7"].ship_class == "dart"
 
     {:ok, hostile} = Traffic.launch_contact(base, "earth", "venus", 8, :raider, 0.5)
     assert hostile["traffic:sol:cruise-8"].disposition == :hostile
+    assert hostile["traffic:sol:cruise-8"].ship_class == "dart"
     assert {:error, :invalid_route} =
       Traffic.launch_contact(base, "earth", "earth", 9, :patrol, 0.5)
     assert {:error, :invalid_archetype} =

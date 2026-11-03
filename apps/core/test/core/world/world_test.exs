@@ -916,6 +916,10 @@ defmodule Core.WorldTest do
     assert combat.tactical_encounter.classification == :neutral_flyby
     assert combat.cruise_paused
     assert enemy.display_name == held.pending_encounter.call_sign
+    assert enemy.npc_type_id == "solar-scow-9735"
+    assert enemy.max_hull == 210
+    assert enemy.damage == 10
+    assert enemy.speed == 105
 
     [{map_pid, _}] = Registry.lookup(@registry, {:world_map, "1-1"})
     assert :sys.get_state(map_pid).solar_tactical[session.entity_id].provoked? == false
@@ -973,7 +977,8 @@ defmodule Core.WorldTest do
     assert combat.cruise_paused
     assert enemy.display_name == held.pending_encounter.call_sign
     assert enemy.kind == :npc
-    assert enemy.npc_type_id == "solar-dart-9731"
+    # Vesper-02 is a courier, so it remains a Scow even when hostile.
+    assert enemy.npc_type_id == "solar-scow-9731"
     # The cockpit shows the physical current planetary region during combat;
     # the distant destination preview would conceal actual collision geometry.
     assert combat.planetary_view.body_id == "earth"

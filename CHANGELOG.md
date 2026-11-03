@@ -551,3 +551,19 @@
 - Updated UI copy and added JS, Core World and Phoenix channel regressions.
 - Trader-specific models, reputation/penalties, trade inventory outcomes
   and actual loot remain future work. Tests still require local execution.
+
+
+### Scow trader hull (2026-11-03)
+
+- Introduced **Scow** as a separate Core NPC ship definition (210 hull,
+  10-damage laser, slower movement) rather than reusing Dart stats.
+- Annotated existing scheduled/procedural merchant and courier traffic
+  with a server-owned Scow class; surfaced it through encounter
+  snapshots and authenticated tactical entry.
+- Added a distinctive procedural blue, rounded-bow cargo vessel and
+  Scow model selection in the shared Three.js/SBS renderer.
+- Expanded Core World, traffic and Phoenix channel regression tests,
+  and added Node tests for the model's identity and dimensions.
+- Flight, surrender, jettison, reputation and loot behavior remain
+  future work; this commit does not claim these are implemented.
+- Elixir suites and physical browser/HMD verification still pending.

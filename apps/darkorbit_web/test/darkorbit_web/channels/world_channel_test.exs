@@ -217,7 +217,10 @@ defmodule DarkorbitWeb.WorldChannelTest do
 
     ref = push(joined, "solar_enter_encounter", %{"encounter_id" => encounter_id})
     assert_reply ref, :ok, %{navigation: %{tactical_encounter: %{
-      id: ^encounter_id, classification: :neutral_flyby}}, enemy: %{kind: :npc, id: npc_id}}
+      id: ^encounter_id, classification: :neutral_flyby,
+      ship_class: "scow"}}, enemy: %{kind: :npc, id: npc_id,
+                                    npc_type_id: npc_type_id}}
+    assert String.starts_with?(npc_type_id, "solar-scow-")
 
     assert {:ok, world} = World.snapshot("1-1")
     assert Enum.any?(world.entities, &(&1.id == npc_id))

@@ -37,6 +37,34 @@ defmodule Core.NPC.Catalog do
         patrol_radius: 240.0,
         respawn_delay_ms: 3_000
       }
+    },
+    %Definition{
+      id: "scow",
+      display_name: "Scow",
+      # Original Space Rogue recognition guide: 23 m blue merchant,
+      # 74 t displacement, 10 t cargo capacity, 210 armor, 10-class
+      # turreted Garnet laser, aft shield, no missiles or ECM.
+      #
+      # The original 210 armor and laser rating are directly represented
+      # as hull/damage. Shields, speeds, ranges and cooldowns below are
+      # provisional because this combat engine has no directional shields,
+      # acceleration, turret arcs, or strategic cargo tonnage-to-slot model.
+      max_hull: 210,
+      max_shields: 45,
+      shield_absorption: 0.45,
+      movement_speed: 105,
+      laser_damage: 10,
+      attack_range: 380.0,
+      attack_cooldown_ms: 1_800,
+      detection_radius: 720.0,
+      # This is a template for real shared SOL trader contacts, not an extra
+      # automatic NPC in legacy Sector 1-1 or each planetary orbital map.
+      spawn: %{
+        map_id: "npc:templates",
+        positions: [%Position{x: 1_480.0, y: 1_000.0}],
+        patrol_radius: 110.0,
+        respawn_delay_ms: 3_000
+      }
     }
   ]
 

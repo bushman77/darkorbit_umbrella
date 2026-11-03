@@ -142,14 +142,15 @@ defmodule Core.World.MapServer do
     do: call_map(registry, map_id, {:start_encounter, npc_type_id})
 
   @doc "Spawn an encounter NPC for the authenticated pilot in their current map."
-  @spec start_solar_tactical(atom(), String.t(), pos_integer(), term(), String.t(), String.t(), boolean()) ::
+  @spec start_solar_tactical(atom(), String.t(), pos_integer(), term(), String.t(), String.t(), String.t(), boolean()) ::
           {:ok, map()} | {:error, term()}
   def start_solar_tactical(registry, map_id, session_id, player_id, encounter_id,
-          call_sign, aggressive?)
+          call_sign, ship_class, aggressive?)
       when is_integer(player_id) and is_binary(encounter_id) and is_binary(call_sign) and
-           is_boolean(aggressive?) do
+           is_binary(ship_class) and is_boolean(aggressive?) do
     call_map(registry, map_id,
-      {:start_solar_tactical, session_id, player_id, encounter_id, call_sign, aggressive?})
+      {:start_solar_tactical, session_id, player_id, encounter_id,
+       call_sign, ship_class, aggressive?})
   end
 
   @doc "Server-authorized victory verification or safe retreat."
@@ -291,15 +292,17 @@ defmodule Core.World.MapServer do
   end
 
   def handle_call(
-        {:start_solar_tactical, session_id, player_id, encounter_id, call_sign, aggressive?},
+        {:start_solar_tactical, session_id, player_id, encounter_id,
+         call_sign, ship_class, aggressive?},
         _from, state
       ) do
-    with {:ok, ship} <- authorized_entity(state, session_id, player_id),
+    with :ok <- validate_tactical_ship_class(ship_class),
+         {:ok, ship} <- authorized_entity(state, session_id, player_id),
          :ok <- living_attacker(ship),
          false <- Map.has_key?(state.solar_tactical, player_id),
-         {:ok, base} <- NPCCatalog.fetch("dart", NPCCatalog.all()),
+         {:ok, base} <- NPCCatalog.fetch(ship_class, NPCCatalog.all()),
          {:ok, spawn} <- solar_tactical_position(state.definition, ship) do
-      type_id = "solar-dart-" <> Integer.to_string(player_id)
+      type_id = "solar-" <> ship_class <> "-" <> Integer.to_string(player_id)
       definition = %{base |
         id: type_id,
         display_name: call_sign,
@@ -969,7 +972,8 @@ defmodule Core.World.MapServer do
     # An encounter ends on destruction. Legacy combat regression fixtures
     # alone opt into the automatic respawn behavior.
     due_tick =
-      if state.auto_respawn? and not String.starts_with?(npc.npc_type_id, "solar-dart-"),
+      if state.auto_respawn? and
+           not String.starts_with?(npc.npc_type_id, ["solar-dart-", "solar-scow-"]),
         do: state.tick + npc.respawn_delay_ticks, else: nil
     respawns =
       if is_integer(due_tick) do
@@ -1207,6 +1211,9 @@ defmodule Core.World.MapServer do
       state_events
     end
   end
+
+  defp validate_tactical_ship_class(class) when class in ["dart", "scow"], do: :ok
+  defp validate_tactical_ship_class(_class), do: {:error, :invalid_ship_class}
 
   # Player-initiated attacks on a neutral trader/patrol are not themselves
   # hits. A peaceful contact patrols until an authoritative weapon impact.

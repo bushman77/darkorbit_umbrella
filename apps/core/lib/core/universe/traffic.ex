@@ -57,6 +57,7 @@ defmodule Core.Universe.Traffic do
           id: "traffic:sol:" <> suffix,
           call_sign: name,
           kind: kind,
+          ship_class: ship_class(kind),
           faction_id: faction_id,
           disposition: disposition,
           purpose: purpose,
@@ -139,6 +140,7 @@ defmodule Core.Universe.Traffic do
             id: id,
             call_sign: name <> "-" <> Integer.to_string(serial),
             kind: kind,
+            ship_class: ship_class(kind),
             faction_id: faction_id,
             disposition: disposition,
             purpose: purpose,
@@ -207,6 +209,7 @@ defmodule Core.Universe.Traffic do
           id: vessel.id,
           call_sign: vessel.call_sign,
           kind: vessel.kind,
+          ship_class: Map.get(vessel, :ship_class, ship_class(vessel.kind)),
           faction_id: vessel.faction_id,
           disposition: vessel.disposition,
           origin_id: vessel.origin_id,
@@ -262,6 +265,7 @@ defmodule Core.Universe.Traffic do
     %{
       id: vessel.id,
       call_sign: vessel.call_sign,
+      ship_class: Map.get(vessel, :ship_class, ship_class(vessel.kind)),
       faction_id: vessel.faction_id,
       disposition: vessel.disposition,
       origin_id: vessel.origin_id,
@@ -333,6 +337,12 @@ defmodule Core.Universe.Traffic do
       %{vessel | dwell_remaining_ms: remaining}
     end
   end
+
+  # Ship class is authoritative world data. Merchants and couriers use the
+  # new Scow light trader; no client-supplied class or NPC ID is accepted.
+  defp ship_class(kind) when kind in
+    [:independent_trader, :commercial_freighter, :courier], do: "scow"
+  defp ship_class(_other), do: "dart"
 
   defp duration(vessel) do
     max(1, ceil(vessel.distance_km / vessel.cruise_speed_km_s * 1_000))

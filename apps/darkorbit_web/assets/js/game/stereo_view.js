@@ -6,6 +6,7 @@ import {flightBasis, degrees} from "./flight_basis.mjs"
 import {orientationTelemetry} from "./orientation_interpolation.mjs"
 import {targetRange, LASER_FEEDBACK_MS} from "./laser_feedback.mjs"
 import {createDartModel, isDartModelId, dartHeadingRotation} from "./dart_model.mjs"
+import {createScowModel, isScowModelId} from "./scow_model.mjs"
 import {PlanetaryBody} from "./planetary_body.js"
 import {EncounterShipVisual} from "./encounter_ship.js"
 
@@ -27,6 +28,7 @@ function beam(a, b, radius, mat) {
 
 function shipModel(npc, npcTypeId = null) {
   if (npc && isDartModelId(npcTypeId)) return createDartModel(THREE)
+  if (npc && isScowModelId(npcTypeId)) return createScowModel(THREE)
   const root = new THREE.Group()
   const hull = new THREE.Mesh(
     npc ? new THREE.OctahedronGeometry(2, 0) : new THREE.ConeGeometry(1.65, 4.8, 4),
@@ -277,7 +279,8 @@ export class StereoSpaceView {
       } else if (entity.kind === "player" && !entity.destination && entity.attitude) {
         const a = entity.renderAttitude || entity.attitude
         node.rotation.set(a.pitch, -a.yaw, a.roll, "YXZ")
-      } else if (entity.kind === "npc" && isDartModelId(entity.npcTypeId)) {
+      } else if (entity.kind === "npc" &&
+        (isDartModelId(entity.npcTypeId) || isScowModelId(entity.npcTypeId))) {
         node.rotation.y = dartHeadingRotation(entity.angle)
       } else {
         node.rotation.y = -entity.angle

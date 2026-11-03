@@ -225,6 +225,7 @@ defmodule Core.Universe.Navigation do
         # The UI shows the combat cockpit instead of the modal during combat.
         tactical = %{id: encounter_id, contact_id: voyage.pending_encounter.contact_id,
           call_sign: voyage.pending_encounter.call_sign,
+          ship_class: Map.get(voyage.pending_encounter, :ship_class, "dart"),
           classification: voyage.pending_encounter.classification}
         updated = %{voyage | tactical_encounter: tactical}
         state = put_voyage(state, player_id, updated)
