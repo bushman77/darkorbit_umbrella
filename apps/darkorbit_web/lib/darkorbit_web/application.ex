@@ -9,6 +9,7 @@ defmodule DarkorbitWeb.Application do
   def start(_type, _args) do
     children = [
       DarkorbitWeb.Telemetry,
+      DarkorbitWeb.HelmetManager,
       # Start a worker by calling: DarkorbitWeb.Worker.start_link(arg)
       # {DarkorbitWeb.Worker, arg},
       # Start to serve requests, typically the last entry
