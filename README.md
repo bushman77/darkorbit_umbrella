@@ -133,6 +133,23 @@ existing momentum. **F** releases held attitude controls. The flight HUD
 shows heading, pitch, roll, commanded throttle and actual velocity.
 **M** opens the navigation Atlas for optional XYZ autopilot routes.
 
+**Optional mouse-look steering:** In **Solar Atlas → Cockpit control preferences**,
+enable **mouse-look steering** and optionally adjust sensitivity (0.4×–2.0×).
+The setting is remembered per pilot in the current browser. Return to the
+cockpit, then **left-click the flight background once** to capture the pointer.
+Moving the mouse right/left turns the ship (yaw), moving up/down pitches
+the ship, and stopping mouse movement releases the steering input after a
+brief interval. The server still owns the resulting angular acceleration,
+orientation and movement. **Esc** releases the pointer without changing the
+flight mode; **M** opens the Atlas and releases it automatically. A quick
+left-click after capture selects the centered target; **T** selects the nearest
+hostile, and right mouse still fires lasers. While pointer-locked, accidental
+**V** presses cannot change the display; release with Esc to use V normally.
+W/S, A/D, Q/E, wheel throttle and Ctrl+wheel roll continue to work, with
+keyboard pitch/yaw taking priority on any held axis. The feature defaults off
+so the original cockpit behavior is unchanged until deliberately enabled.
+Browser support for Pointer Lock is required for the optional mode.
+
 See [SBS flight and navigation notes](docs/sbs-3d.md).
 
 ### Rebuild the 3D cockpit JavaScript after changes
