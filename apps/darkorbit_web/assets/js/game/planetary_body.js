@@ -109,7 +109,7 @@ export class PlanetaryBody {
       // provisional kilometre. Recalculate the planet's apparent diameter
       // as actual local ship movement changes its radial distance.
       // Legacy Sector 1-1 (Earth) remains an isolated smaller-scale map.
-      if (spec.id !== "earth" && view.stage === "orbital_preview") {
+      if (view.stage === "orbital_preview") {
         const separationKm = Math.hypot(
           center.x - localPosition.x,
           center.y - localPosition.y,
