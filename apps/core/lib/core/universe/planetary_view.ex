@@ -2,25 +2,13 @@ defmodule Core.Universe.PlanetaryView do
   @moduledoc """
   Server-owned *visual staging* for celestial bodies in the cockpit.
 
-  True planetary radii (km) are independent of SOL's compressed GAME-km
-  travel distances and Sector 1-1 combat coordinates. V1 displays a clear,
-  increasingly large approach during the final cruise, and stages an
-  orbital-looking view when regional travel arrives. This is NOT a collision
-  volume, physical orbital altitude, gravitational field or actual ship position.
-  Real orbital entry and planetary-scale navigation will replace the staging.
+  Physical radii are read from the canonical SOL catalogue. The interplanetary
+  cruise approach remains visual-only because SOL distances are compressed;
+  planetary region centres and collision boundaries are authoritative and
+  tracked separately by the orbital simulation.
   """
 
-  @radii_km %{
-    "mercury" => 2_439.7,
-    "venus" => 6_051.8,
-    "earth" => 6_371.0,
-    "mars" => 3_389.5,
-    "jupiter" => 69_911.0,
-    "saturn" => 58_232.0,
-    "uranus" => 25_362.0,
-    "neptune" => 24_622.0,
-    "pluto" => 1_188.3
-  }
+  alias Core.Universe.Sol
 
   # Dramatic but non-intersecting arrival view: a 65-degree wide sphere
   # within the standard 70-degree vertical cockpit camera.
@@ -29,7 +17,7 @@ defmodule Core.Universe.PlanetaryView do
 
   @spec describe(map()) :: map() | nil
   def describe(%{status: :traveling, destination_id: id} = voyage) do
-    with {:ok, radius} <- Map.fetch(@radii_km, id) do
+    with {:ok, radius} <- Sol.planet_radius_km(id) do
       fraction =
         if voyage.travel_distance_km > 0 do
           min(1.0, max(0.0,
@@ -52,7 +40,7 @@ defmodule Core.Universe.PlanetaryView do
   end
 
   def describe(%{status: :idle, location_id: id}) do
-    with {:ok, radius} <- Map.fetch(@radii_km, id) do
+    with {:ok, radius} <- Sol.planet_radius_km(id) do
       visual(id, radius, @arrival_diameter_deg, :orbital_preview)
       |> Map.put(:planet_center, Core.Universe.OrbitalEntry.center(id))
     else
@@ -63,7 +51,7 @@ defmodule Core.Universe.PlanetaryView do
   def describe(_), do: nil
 
   @spec radius_km(String.t()) :: {:ok, float()} | :error
-  def radius_km(id), do: Map.fetch(@radii_km, id)
+  def radius_km(id), do: Sol.planet_radius_km(id)
 
   defp visual(id, radius, diameter, stage) do
     angle = diameter * :math.pi() / 360.0
