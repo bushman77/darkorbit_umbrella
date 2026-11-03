@@ -6,17 +6,20 @@ defmodule Core.Universe.Navigation do
   Earth as a new pilot's start location, and real-time sublight interplanetary
   cruise through compressed game-scale system coordinates.
   Navigation and map-space combat are separate: no AU values are mapped into
-  Sector 1-1 coordinates and travel alone never creates an NPC encounter.
+  Sector 1-1 coordinates. Strategic civilian traffic is simulated even when
+  no player is connected; overlapping sensors expose observational contacts
+  and authenticated hails, but do not yet instantiate tactical 3D NPCs.
 
-  Transits are ephemeral per server runtime and progress even when a user
-  disconnects while the supervised world stays up. Persistent locations,
-  true orbital positions, physical transit and encounter generation are later
-  milestones. Never accept player_id from the browser payload.
+  Voyages and traffic persist within the supervised server runtime and
+  advance independently of player sessions. Database persistence across
+  restarts, live orbital positions and tactical encounter handoffs remain
+  future milestones. Never accept player_id from a browser payload.
   """
 
   use GenServer
 
   alias Core.Universe.Sol
+  alias Core.Universe.Traffic
   alias Core.Universe.Territory
   alias Core.World.EventSink
 
@@ -45,6 +48,13 @@ defmodule Core.Universe.Navigation do
     GenServer.call(server, {:cancel_course, player_id})
   end
 
+  @doc "Hail an in-range contact; identity and position come from the server."
+  @spec hail(GenServer.server(), pos_integer(), term()) :: {:ok, map()} | {:error, atom()}
+  def hail(server, player_id, contact_id)
+      when is_integer(player_id) and player_id > 0 do
+    GenServer.call(server, {:hail, player_id, contact_id})
+  end
+
   @doc "Deterministic server test hook; never exposed to client channels."
   @spec tick(GenServer.server()) :: :ok
   def tick(server), do: GenServer.call(server, :tick)
@@ -58,6 +68,7 @@ defmodule Core.Universe.Navigation do
 
     state = %{
       voyages: %{},
+      traffic: Keyword.get(opts, :traffic, Traffic.seed()),
       tick_ms: tick_ms,
       auto_tick?: Keyword.get(opts, :auto_tick, true),
       event_sink: Keyword.fetch!(opts, :event_sink)
@@ -68,7 +79,7 @@ defmodule Core.Universe.Navigation do
   @impl true
   def handle_call({:snapshot, player_id}, _from, state) do
     {voyage, state} = ensure_player(state, player_id)
-    {:reply, {:ok, public(voyage)}, state}
+    {:reply, {:ok, public(voyage, state.traffic)}, state}
   end
 
   def handle_call({:set_course, player_id, destination_id}, _from, state) do
@@ -103,7 +114,7 @@ defmodule Core.Universe.Navigation do
         }
         state = put_voyage(state, player_id, updated)
         broadcast(state, player_id, updated)
-        {:reply, {:ok, public(updated)}, state}
+        {:reply, {:ok, public(updated, state.traffic)}, state}
     end
   end
 
@@ -118,8 +129,13 @@ defmodule Core.Universe.Navigation do
       updated = idle(voyage.location_id)
       state = put_voyage(state, player_id, updated)
       broadcast(state, player_id, updated)
-      {:reply, {:ok, public(updated)}, state}
+      {:reply, {:ok, public(updated, state.traffic)}, state}
     end
+  end
+
+  def handle_call({:hail, player_id, contact_id}, _from, state) do
+    {voyage, state} = ensure_player(state, player_id)
+    {:reply, Traffic.hail(state.traffic, voyage.position_km, contact_id), state}
   end
 
   def handle_call(:tick, _from, state) do
@@ -156,6 +172,10 @@ defmodule Core.Universe.Navigation do
     do: %{state | voyages: Map.put(state.voyages, player_id, voyage)}
 
   defp advance(state) do
+    old_traffic = state.traffic
+    # Strategic traffic advances even if no pilot has ever joined.
+    state = %{state | traffic: Traffic.advance(state.traffic, state.tick_ms)}
+
     Enum.reduce(state.voyages, state, fn
       {player_id, %{status: :traveling} = voyage}, current ->
         elapsed = min(voyage.duration_ms, voyage.elapsed_ms + state.tick_ms)
@@ -175,11 +195,19 @@ defmodule Core.Universe.Navigation do
         broadcast(current, player_id, updated)
         current
 
-      {_player_id, _voyage}, current -> current
+      {player_id, voyage}, current ->
+        # Idle pilots receive contact motion/exit updates only while there is
+        # something on their sensors. Other players do not cause spawns.
+        before = Traffic.contacts(old_traffic, voyage.position_km)
+        after_contacts = Traffic.contacts(current.traffic, voyage.position_km)
+        if before != [] or after_contacts != [] do
+          broadcast(current, player_id, voyage)
+        end
+        current
     end)
   end
 
-  defp public(voyage) do
+  defp public(voyage, traffic) do
     {progress, remaining_ms} =
       if voyage.status == :traveling and voyage.travel_distance_km > 0 do
         remaining_km = max(0.0, voyage.travel_distance_km - voyage.distance_travelled_km)
@@ -196,6 +224,7 @@ defmodule Core.Universe.Navigation do
     Map.merge(voyage, %{
       progress: progress,
       remaining_ms: remaining_ms,
+      contacts: Traffic.contacts(traffic, voyage.position_km),
       territory: %{
         status: jurisdiction.status,
         faction_ids: Enum.map(jurisdiction.claims, & &1.faction_id)
@@ -206,7 +235,7 @@ defmodule Core.Universe.Navigation do
   defp broadcast(state, player_id, voyage) do
     EventSink.dispatch(state.event_sink, "1-1", :solar_navigation_updated, %{
       player_id: player_id,
-      navigation: public(voyage)
+      navigation: public(voyage, state.traffic)
     })
   end
 
