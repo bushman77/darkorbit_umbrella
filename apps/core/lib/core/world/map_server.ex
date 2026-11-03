@@ -19,6 +19,7 @@ defmodule Core.World.MapServer do
   alias Core.World.MapDefinition
   alias Core.World.Movement
   alias Core.World.Orientation
+  alias Core.World.PlanetaryCollision
   alias Core.World.Session
 
   def child_spec(opts) do
@@ -587,15 +588,60 @@ defmodule Core.World.MapServer do
     next_tick = state.tick + 1
     distance_factor = state.tick_ms / 1_000
 
-    entities =
-      Map.new(state.entities, fn {entity_id, entity} ->
+    # Apply one authoritative swept planet test after either manual thrust
+    # OR plotted autopilot movement. Even a single fast tick that enters and
+    # exits the sphere must register a fatal impact.
+    {entities, impacts} =
+      state.entities
+      |> Enum.sort_by(fn {id, _} -> inspect(id) end)
+      |> Enum.reduce({%{}, []}, fn {entity_id, entity}, {entities, impacts} ->
         moved =
           cond do
             not Combat.alive?(entity) -> entity
             entity.destination != nil -> advance_entity(entity, entity.speed * distance_factor)
             true -> FlightDynamics.step(entity, state.definition, distance_factor, next_tick)
           end
-        {entity_id, moved}
+
+        case PlanetaryCollision.resolve(entity, moved, state.definition) do
+          {:ok, safe} ->
+            {Map.put(entities, entity_id, safe), impacts}
+
+          {:crashed, destroyed} ->
+            {Map.put(entities, entity_id, destroyed),
+             [{entity, destroyed} | impacts]}
+        end
+      end)
+
+    state = %{state | entities: entities, tick: next_tick}
+
+    state =
+      impacts
+      |> Enum.reverse()
+      |> Enum.reduce(state, fn {previous, destroyed}, current ->
+        {npcs, _cleared} = clear_npc_targets(current.npcs, destroyed.id)
+        current = %{current | npcs: npcs}
+
+        if not is_nil(previous.engaged_target_id) do
+          broadcast(current, :combat_disengaged,
+            disengagement_payload(previous, :player_destroyed, next_tick))
+        end
+
+        if not is_nil(previous.target_id) do
+          broadcast(current, :target_cleared, %{
+            player_id: previous.id, target_id: nil, tick: next_tick
+          })
+        end
+
+        broadcast(current, :entity_destroyed, %{
+          entity: public_entity(destroyed),
+          reason: :planetary_collision,
+          planet_id: current.definition.planet.body_id,
+          attacker_id: nil,
+          tick: next_tick,
+          respawn_tick: nil
+        })
+
+        current
       end)
 
     {npcs, attack_actions, npc_events} =
@@ -619,7 +665,7 @@ defmodule Core.World.MapServer do
         }
       end)
 
-    state = %{state | entities: entities, npcs: npcs, tick: next_tick}
+    state = %{state | npcs: npcs}
 
     Enum.each(npc_events, fn {event, npc_id} ->
       broadcast(state, event, public_entity(Map.fetch!(state.npcs, npc_id)))
