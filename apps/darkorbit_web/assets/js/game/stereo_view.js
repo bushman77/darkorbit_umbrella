@@ -375,10 +375,19 @@ export class StereoSpaceView {
       Math.abs(degrees(rates.yaw)) + " / " + Math.abs(degrees(rates.roll)) +
       " deg/s", 30, 194)
     const range = targetRange(own, selected)
-    ctx.fillStyle = range?.inRange === false ? "#ff9b96" : "#9fc7df"
+    const planetWarning = client.planetaryWarningDisplay
+    // This canvas is a stereo-correct 3D HUD surface shared by both SBS
+    // eyes. Render the hazard inside the instrument rather than a flat
+    // non-stereoscopic banner that would be uncomfortable in a headset.
+    ctx.fillStyle = planetWarning
+      ? planetWarning.level === "critical" ? "#ff8f90" : "#ffcf7a"
+      : range?.inRange === false ? "#ff9b96" : "#9fc7df"
     ctx.font = "bold 22px monospace"
-    ctx.fillText(range ? range.label :
-      "LASER " + Math.round(own?.attackRange || 0) + "u  ·  RMB FIRE  ·  T TARGET", 30, 234)
+    ctx.fillText(planetWarning
+      ? planetWarning.level.toUpperCase() + " · " + planetWarning.detail
+      : range ? range.label :
+        "LASER " + Math.round(own?.attackRange || 0) + "u  ·  RMB FIRE  ·  T TARGET",
+      30, 234)
     this.hudTexture.needsUpdate = true
   }
 
