@@ -17,12 +17,8 @@ export class HelmetClient {
     this.messageNode = root.querySelector("#helmet-message")
     this.pairCode = root.dataset.pairCode || null
     this.credential = localStorage.getItem(STORAGE_KEY)
-    // A remembered helmet must win over an old one-time QR invitation.
-    // Otherwise scanning the QR again repeatedly attempts a consumed code.
-    if (this.credential && this.pairCode) {
-      this.pairCode = null
-      window.history.replaceState({}, "", "/helmet")
-    }
+    // Keep the QR invitation until the saved token has been verified.
+    // If the local credential was revoked, the new QR can still enroll.
     this.mode = "standby"
     this.immersiveReady = false
     this.windowed = false
@@ -38,8 +34,16 @@ export class HelmetClient {
     this.frameCount = 0
   }
 
-  start() {
+  async start() {
     this.setupImmersiveControls()
+
+    if (this.credential) {
+      const verification = await this.verifySavedCredential()
+      if (verification === true && this.pairCode) {
+        this.pairCode = null
+        window.history.replaceState({}, "", "/helmet")
+      }
+    }
 
     if (!this.pairCode && !this.credential) {
       this.message("Open the Pilot HMD panel in your laptop's Atlas and scan its QR code.")
@@ -73,7 +77,18 @@ export class HelmetClient {
       this.stop()
       this.message("Helmet link interrupted. Reconnecting…")
     })
-    this.socket.onError(() => this.message("Socket unavailable. Check the phone's network connection or headset registration."))
+    this.socket.onError(async () => {
+      // A rejected WebSocket transport doesn't expose a Phoenix channel
+      // reason. Check the bearer credential separately so a stale pairing
+      // isn't misreported as an unreachable LAN.
+      if (this.credential && await this.verifySavedCredential() === false) {
+        this.socket.disconnect()
+        this.stop()
+        this.message("Saved helmet pairing rejected by Phoenix. Open Atlas → PILOT HMD → Forget headset, then scan a fresh QR code.")
+      } else {
+        this.message("Helmet WebSocket interrupted or blocked. Check that the laptop is still serving on the phone's network.")
+      }
+    })
     this.channel.join()
       .receive("ok", ({mode, player_id, credential}) => {
         if (credential) {
@@ -109,6 +124,33 @@ export class HelmetClient {
       }
     })
     setInterval(() => this.report(this.running && this.frameCount > 0 && !document.hidden), 5000)
+  }
+
+  async verifySavedCredential() {
+    if (!this.credential) return null
+    try {
+      const response = await fetch("/helmet/verify", {
+        method: "POST",
+        headers: {
+          "Accept": "application/json",
+          "Authorization": "Bearer " + this.credential,
+        },
+        cache: "no-store",
+        credentials: "omit",
+      })
+      if (response.status === 401) {
+        // Local bearer is stale or revoked. The phone can re-enroll with
+        // a newly scanned QR, or tell the pilot how to regenerate pairing.
+        localStorage.removeItem(STORAGE_KEY)
+        this.credential = null
+        this.message("Saved helmet registration is not recognized. In the laptop Atlas, choose Forget headset, then scan its new QR code.")
+        return false
+      }
+      return response.ok ? true : null
+    } catch (_error) {
+      // Could be a temporary LAN failure: do not destroy a valid credential.
+      return null
+    }
   }
 
   setupImmersiveControls() {
