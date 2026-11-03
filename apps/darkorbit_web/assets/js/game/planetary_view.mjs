@@ -13,10 +13,27 @@ export const PLANET_APPEARANCE = Object.freeze({
   pluto:   {base: [162, 139, 120], pale: [222, 195, 174], dark: [99, 86, 86], haze: 0xceb6aa},
 })
 
+// Existing SOL worlds retain their hand-tuned procedural palettes; newly
+// registered planets receive a neutral procedural appearance automatically.
+const GENERIC_PLANET_APPEARANCE = Object.freeze({
+  base: [132, 149, 171], pale: [198, 213, 226],
+  dark: [79, 94, 123], haze: 0x8fa8bd,
+})
+
+const validBodyId = id =>
+  typeof id === "string" && /^[a-z][a-z0-9_-]{0,39}$/.test(id)
+
+export function planetAppearance(id) {
+  if (!validBodyId(id)) return null
+  return Object.hasOwn(PLANET_APPEARANCE, id)
+    ? PLANET_APPEARANCE[id]
+    : GENERIC_PLANET_APPEARANCE
+}
+
 const finitePositive = x => Number.isFinite(x) && x > 0
 
 export function planetaryRenderSpec(view, sceneDistance = 900) {
-  if (!view || view.visual_only !== true || !Object.hasOwn(PLANET_APPEARANCE, view.body_id) ||
+  if (!view || view.visual_only !== true || !validBodyId(view.body_id) ||
       !["approach_preview", "orbital_preview"].includes(view.stage) ||
       !finitePositive(view.radius_km) || !finitePositive(view.visual_distance_km) ||
       !finitePositive(view.angular_diameter_deg) || !finitePositive(sceneDistance)) return null
@@ -40,7 +57,7 @@ export function planetaryRenderSpec(view, sceneDistance = 900) {
 // no high-resolution asset downloads, and no GPU shaders required on the
 // laptop or paired phone. Visual only, not geographically accurate terrain.
 export function generatePlanetPixels(id, width = 512, height = 256) {
-  const palette = PLANET_APPEARANCE[id]
+  const palette = planetAppearance(id)
   if (!palette || !Number.isInteger(width) || !Number.isInteger(height) ||
       width < 2 || height < 2 || width > 2048 || height > 1024) return null
   const pixels = new Uint8ClampedArray(width * height * 4)
