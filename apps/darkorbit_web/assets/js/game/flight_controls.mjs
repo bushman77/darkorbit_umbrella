@@ -1,10 +1,14 @@
 // Six-key flight attitude plus mouse-wheel target throttle in [-1, 1].
+// Ctrl+wheel emits a short, spring-return ship-roll intention.
 // The server owns orientation, position, velocity and thrust physics.
 const ROTATION_KEYS = new Set(["KeyW", "KeyS", "KeyA", "KeyD", "KeyQ", "KeyE"])
 const THROTTLE_KEYS = new Set(["Equal", "Minus", "NumpadAdd", "NumpadSubtract"])
 const THROTTLE_INTERVAL_MS = 120
 const WHEEL_THRESHOLD_PX = 80
 const WHEEL_STEP = 0.05
+const ROLL_PULSE_MS = 320
+const ROLL_EXTENSION_MS = 170
+const MAX_ROLL_PULSE_MS = 700
 
 const typing = target => Boolean(target?.isContentEditable ||
   ["INPUT", "TEXTAREA", "SELECT"].includes(target?.tagName))
@@ -24,6 +28,10 @@ export class FlightControls {
     this.lastThrottleChange = -Infinity
     this.wheelAccumulated = 0
     this.lastWheelAt = -Infinity
+    this.wheelRollAccumulated = 0
+    this.lastRollWheelAt = -Infinity
+    this.wheelRollDirection = 0
+    this.wheelRollUntil = -Infinity
   }
 
   axes() {
@@ -34,7 +42,10 @@ export class FlightControls {
       pitch: this.pressed.has("KeyW") && this.pressed.has("KeyS")
         ? (this.lastPitchKey === "KeyS" ? -1 : 1)
         : axis("KeyW", "KeyS"),
-      roll: axis("KeyE", "KeyQ"),
+      // Keyboard roll wins if Q/E is held. Ctrl+wheel provides a short pulse
+      // that springs back to neutral; it never latches a permanent roll.
+      roll: axis("KeyE", "KeyQ") ||
+        (this.now() < this.wheelRollUntil ? this.wheelRollDirection : 0),
     }
   }
 
@@ -65,20 +76,49 @@ export class FlightControls {
 
   wheel(event) {
     if (event.defaultPrevented || typing(event.target) || !this.active() ||
-        event.ctrlKey || event.altKey || event.metaKey || event.shiftKey ||
+        event.altKey || event.metaKey || event.shiftKey ||
         !Number.isFinite(event.deltaY) || event.deltaY === 0) return false
 
-    // Capture the wheel over the flight viewport, not while hovering panels
-    // or Atlas controls. Positive deltaY scrolls down => less forward thrust.
+    // The listener belongs to the flight canvas and is non-passive, so we
+    // can prevent both browser scrolling and Ctrl+wheel page zoom there.
     event.preventDefault()
     const now = this.now()
     const pixels = event.deltaY * (event.deltaMode === 1 ? 40 : event.deltaMode === 2 ? 800 : 1)
+    const cappedPixels = Math.max(-240, Math.min(240, pixels))
+
+    if (event.ctrlKey) {
+      // Scrolling UP rolls right (E direction); DOWN rolls left (Q direction).
+      // This accumulator is separate from throttle, so swapping the Ctrl
+      // modifier cannot accidentally alter the commanded target speed.
+      if (now - this.lastRollWheelAt > 250 ||
+          Math.sign(cappedPixels) !== Math.sign(this.wheelRollAccumulated)) {
+        this.wheelRollAccumulated = 0
+      }
+      this.lastRollWheelAt = now
+      this.wheelRollAccumulated += cappedPixels
+      const steps = Math.min(3, Math.floor(Math.abs(this.wheelRollAccumulated) / WHEEL_THRESHOLD_PX))
+      if (!steps) return true
+
+      const direction = -Math.sign(this.wheelRollAccumulated)
+      this.wheelRollAccumulated -= Math.sign(this.wheelRollAccumulated) *
+        steps * WHEEL_THRESHOLD_PX
+      const remaining = direction === this.wheelRollDirection
+        ? Math.max(0, this.wheelRollUntil - now) : 0
+      this.wheelRollDirection = direction
+      // Every deliberate notch causes a finite roll; repeated notches
+      // extend the command within a safe bound rather than locking it on.
+      this.wheelRollUntil = now + Math.min(MAX_ROLL_PULSE_MS,
+        Math.max(ROLL_PULSE_MS, remaining + ROLL_EXTENSION_MS * steps))
+      this.emit()
+      return true
+    }
+
+    // Unmodified wheel selects target speed. No roll state is modified.
     if (now - this.lastWheelAt > 250 || Math.sign(pixels) !== Math.sign(this.wheelAccumulated)) {
       this.wheelAccumulated = 0
     }
     this.lastWheelAt = now
-    // Cap a single OS event to avoid a huge sudden throttle jump.
-    this.wheelAccumulated += Math.max(-240, Math.min(240, pixels))
+    this.wheelAccumulated += cappedPixels
     const steps = Math.min(3, Math.floor(Math.abs(this.wheelAccumulated) / WHEEL_THRESHOLD_PX))
     if (steps === 0) return true
 
@@ -110,8 +150,9 @@ export class FlightControls {
 
     if (event.code === "KeyF") {
       event.preventDefault()
-      let changed = false
+      let changed = this.wheelRollDirection !== 0
       for (const code of ROTATION_KEYS) changed = this.pressed.delete(code) || changed
+      this.clearWheelRoll()
       if (changed) {
         this.lastPitchKey = null
         this.emit()
@@ -147,10 +188,17 @@ export class FlightControls {
     return true
   }
 
+  clearWheelRoll() {
+    this.wheelRollDirection = 0
+    this.wheelRollUntil = -Infinity
+    this.wheelRollAccumulated = 0
+  }
+
   release({silent = false} = {}) {
-    if (!this.pressed.size) return
+    if (!this.pressed.size && !this.wheelRollDirection) return
     this.pressed.clear()
     this.lastPitchKey = null
+    this.clearWheelRoll()
     if (!silent) this.emit()
   }
 
@@ -160,10 +208,19 @@ export class FlightControls {
     this.pressed.clear()
     this.lastPitchKey = null
     this.wheelAccumulated = 0
+    this.clearWheelRoll()
   }
 
   heartbeat(time) {
-    if (!this.active() || !this.pressed.size) return
+    if (!this.active()) return
+    // Always send a neutral roll intention when the wheel impulse expires,
+    // even if no keyboard button is held. Otherwise the server could keep
+    // rolling until its own input-expiry watchdog trips.
+    if (this.wheelRollDirection && time >= this.wheelRollUntil) {
+      this.clearWheelRoll()
+      this.emit()
+    }
+    if (!this.pressed.size && !this.wheelRollDirection) return
     // =/- ramp the signed throttle while held, independent of OS key repeats.
     if (this.throttleDirection() !== 0) this.stepThrottle(this.throttleDirection(), time)
     if (time - this.lastEmit > 300) this.emit()
