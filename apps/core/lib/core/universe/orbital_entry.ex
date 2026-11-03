@@ -31,6 +31,7 @@ defmodule Core.Universe.OrbitalEntry do
     Sol.all()
     |> Enum.filter(&(Sol.destination?(&1.id) and &1.id != "earth"))
     |> Enum.map(fn planet ->
+      {:ok, radius} = Core.Universe.PlanetaryView.radius_km(planet.id)
       %MapDefinition{
         id: map_id(planet.id),
         name: planet.name <> " Orbital Region",
@@ -38,7 +39,14 @@ defmodule Core.Universe.OrbitalEntry do
         height: @region_size,
         altitude_min: -200_000,
         altitude_max: 200_000,
-        spawn: %Position{x: @center.x + 15_000.0, y: @center.y, z: 0.0}
+        planet: %{
+          body_id: planet.id,
+          center: @center,
+          radius_km: radius,
+          exclusion_radius: radius * 1.08
+        },
+        spawn: %Position{x: @center.x + radius * @entry_distance_multiplier,
+                         y: @center.y, z: 0.0}
       }
     end)
   end
