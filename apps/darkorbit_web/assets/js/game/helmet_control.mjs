@@ -23,10 +23,12 @@ export class HelmetControl {
 
     this.channel = this.socket.channel("helmet:control:" + this.playerId, {})
     this.channel.on("helmet_status", data => this.updateStatus(data))
+    this.channel.onError(() => this.message("Helmet link interrupted. Reconnecting…"))
     this.channel.join()
       .receive("ok", reply => {
         this.updateStatus(reply.status)
         this.setCombat(this.combatActive)
+        if (this.open && !reply.status.paired) this.requestPairing()
       })
       .receive("error", () => this.message("Helmet control channel unavailable."))
     return this
