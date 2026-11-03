@@ -8,6 +8,7 @@ import {
 import {
   combatKeyIntent,
   gameplayTypingTarget,
+  manualLaserPointerIntent,
   desiredEntityAngle,
   hotbarActionActive,
   smoothAngle,
@@ -468,9 +469,10 @@ class SpaceClient {
   }
 
   handleLaserPointerDown(event) {
-    if (event.button !== 2 || this.navComputer?.isOpen || this.inSystemCruise() ||
-        this.channel?.state !== "joined" ||
-        this.entities.get(this.selfId)?.status === "destroyed") return
+    const active = !this.navComputer?.isOpen && !this.inSystemCruise() &&
+      this.channel?.state === "joined" &&
+      this.entities.get(this.selfId)?.status !== "destroyed"
+    if (!manualLaserPointerIntent(event, active)) return
 
     event.preventDefault()
     this.canvas.focus({preventScroll: true})
