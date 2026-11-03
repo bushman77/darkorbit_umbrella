@@ -466,3 +466,24 @@ validation remain deferred.
 - [ ] Build multi-system celestial catalogue and separate cross-system
   travel/wormhole transitions (future phase, not part of this release).
 - [ ] Add destruction recovery and persistent ship state between sessions.
+
+
+### Living SOL close-pass encounter V1 (2026-11-03)
+
+- [x] Six independent, scheduled traffic vessels with distinct routes,
+  purposes, manifests and return journeys, simulated without players.
+- [x] Encounter opportunities derive from **real** intersecting SOL routes,
+  relative velocity, departure time and fixed close-approach radius.
+- [x] Announce a close pass once per pilot per vessel voyage, isolate pilot
+  events over Phoenix and include current flyby in reconnection snapshots.
+- [x] Show a 3D traffic ship in normal/SBS cockpits using real SOL relative
+  bearing and distance-dependent visual magnification.
+- [x] Provide Hail and Dismiss; private manifest requires server-checked
+  authenticated hailing. Do not spawn NPCs or expose cargo on passive scans.
+- [x] Extend traffic, navigation, event privacy, and cockpit geometry tests.
+- [ ] Design a persistent **shared tactical encounter instance** at true
+  relative vessel coordinates, with voluntary intercept/approach and rejoin
+  to original sublight trajectory.
+- [ ] Add lawful/hostile dispositions, distress requests, NPC-v-NPC
+  conflicts, escorts, weapons and consequence/reputation systems.
+- [ ] Persist traffic schedules and pilot encounter state across restarts.
