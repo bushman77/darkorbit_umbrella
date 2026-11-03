@@ -12,21 +12,21 @@ defmodule Core.Universe.Sol do
   """
 
   @bodies %{
-    "sun" => %{id: "sun", name: "Sun", kind: :star, au: 0.0, phase_deg: 0},
-    "mercury" => %{id: "mercury", name: "Mercury", kind: :planet, au: 0.387, phase_deg: 20},
-    "venus" => %{id: "venus", name: "Venus", kind: :planet, au: 0.723, phase_deg: 69},
-    "earth" => %{id: "earth", name: "Earth", kind: :planet, au: 1.0, phase_deg: 138},
-    "mars" => %{id: "mars", name: "Mars", kind: :planet, au: 1.524, phase_deg: 218},
-    "jupiter" => %{id: "jupiter", name: "Jupiter", kind: :planet, au: 5.203, phase_deg: 282},
-    "saturn" => %{id: "saturn", name: "Saturn", kind: :planet, au: 9.582, phase_deg: 340},
-    "uranus" => %{id: "uranus", name: "Uranus", kind: :planet, au: 19.201, phase_deg: 17},
-    "neptune" => %{id: "neptune", name: "Neptune", kind: :planet, au: 30.047, phase_deg: 120},
-    "pluto" => %{id: "pluto", name: "Pluto", kind: :dwarf_planet, au: 39.482, phase_deg: 226}
+    "sun" => %{id: "sun", name: "Sun", kind: :star, au: 0.0, radius_km: nil, phase_deg: 0},
+    "mercury" => %{id: "mercury", name: "Mercury", kind: :planet, au: 0.387, radius_km: 2439.7, phase_deg: 20},
+    "venus" => %{id: "venus", name: "Venus", kind: :planet, au: 0.723, radius_km: 6051.8, phase_deg: 69},
+    "earth" => %{id: "earth", name: "Earth", kind: :planet, au: 1.0, radius_km: 6371.0, phase_deg: 138},
+    "mars" => %{id: "mars", name: "Mars", kind: :planet, au: 1.524, radius_km: 3389.5, phase_deg: 218},
+    "jupiter" => %{id: "jupiter", name: "Jupiter", kind: :planet, au: 5.203, radius_km: 69911.0, phase_deg: 282},
+    "saturn" => %{id: "saturn", name: "Saturn", kind: :planet, au: 9.582, radius_km: 58232.0, phase_deg: 340},
+    "uranus" => %{id: "uranus", name: "Uranus", kind: :planet, au: 19.201, radius_km: 25362.0, phase_deg: 17},
+    "neptune" => %{id: "neptune", name: "Neptune", kind: :planet, au: 30.047, radius_km: 24622.0, phase_deg: 120},
+    "pluto" => %{id: "pluto", name: "Pluto", kind: :dwarf_planet, au: 39.482, radius_km: 1188.3, phase_deg: 226}
   }
 
   @type body :: %{
     id: String.t(), name: String.t(), kind: atom(), au: float(),
-    phase_deg: non_neg_integer()
+    radius_km: float() | nil, phase_deg: non_neg_integer()
   }
 
   # Cruise travels 65,000 GAME-km each real second (below light speed). The
@@ -54,6 +54,20 @@ defmodule Core.Universe.Sol do
 
   @spec all() :: [body()]
   def all, do: @bodies |> Map.values() |> Enum.sort_by(& &1.au)
+
+  @doc "All registered SOL planets and dwarf planets with physical radii."
+  @spec planets() :: [body()]
+  def planets, do: all() |> Enum.filter(&destination?(&1.id))
+
+  @spec planet_radius_km(String.t()) :: {:ok, float()} | :error
+  def planet_radius_km(id) do
+    case fetch(id) do
+      {:ok, %{kind: kind, radius_km: radius}}
+          when kind in [:planet, :dwarf_planet] and is_number(radius) and radius > 0 ->
+        {:ok, radius * 1.0}
+      _ -> :error
+    end
+  end
 
   @doc """
   Deterministic, compressed system travel coordinates, not combat coordinates
