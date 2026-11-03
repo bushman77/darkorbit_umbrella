@@ -20,7 +20,8 @@ defmodule Core.World do
 
     if MapServer.available?(registry, map_id) do
       with {:ok, session} <- SessionManager.open(sessions, player_id, map_id),
-           {:ok, _entity} <- join_or_close(registry, sessions, session, stats) do
+           {:ok, _entity} <- join_or_close(registry, sessions, session, stats,
+             Keyword.get(opts, :entry)) do
         {:ok, session}
       end
     else
@@ -267,8 +268,8 @@ defmodule Core.World do
 
   defp require_conventional(_session, _opts), do: :ok
 
-  defp join_or_close(registry, sessions, session, stats) do
-    case MapServer.join(registry, session.map_id, session, stats) do
+  defp join_or_close(registry, sessions, session, stats, entry) do
+    case MapServer.join(registry, session.map_id, session, stats, entry) do
       {:ok, entity} ->
         {:ok, entity}
 
