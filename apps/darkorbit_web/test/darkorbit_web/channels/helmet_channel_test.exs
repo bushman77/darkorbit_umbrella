@@ -51,6 +51,13 @@ defmodule DarkorbitWeb.HelmetChannelTest do
     ref = push(viewer, "flight_controls", %{"throttle" => 1.0})
     assert_reply ref, :error, %{reason: "read_only_or_invalid_command"}
 
+    # The paired headset can display an intercept but cannot enter, finish
+    # or otherwise control the authoritative combat/flight session.
+    ref = push(viewer, "solar_enter_encounter", %{"encounter_id" => "forged"})
+    assert_reply ref, :error, %{reason: "read_only_or_invalid_command"}
+    ref = push(viewer, "solar_retreat_encounter", %{"encounter_id" => "forged"})
+    assert_reply ref, :error, %{reason: "read_only_or_invalid_command"}
+
     ref = push(control, "set_mode", %{"mode" => "combat"})
     assert_reply ref, :ok, %{mode: "combat"}
     assert_push "helmet_mode", %{mode: "combat"}

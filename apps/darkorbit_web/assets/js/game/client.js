@@ -77,6 +77,7 @@ class SpaceClient {
     this.solarEncounter = null
     this.encounterDisplayedId = null
     this.encounterResolving = false
+    this.tacticalRetreating = false
     this.player = null
     this.commandDestination = null
     this.selectedTargetId = null
@@ -89,7 +90,8 @@ class SpaceClient {
   }
 
   inSystemCruise() {
-    return this.navComputer?.solarNavigation?.status === "traveling"
+    const navigation = this.navComputer?.solarNavigation
+    return navigation?.status === "traveling" && !navigation?.tactical_encounter
   }
 
   start() {
@@ -155,6 +157,24 @@ class SpaceClient {
           this.encounterMessage(String(communication.message || "Communications established.") +
             (manifest ? "\nManifest: " + manifest : ""))
         })
+      } else if (choice === "engage") {
+        this.encounterResolving = true
+        this.encounterMessage("Entering tactical interception…")
+        this.showSolarEncounter()
+        this.solarEnterEncounter(encounter.id, (ok, result, reason) => {
+          this.encounterResolving = false
+          if (ok && result?.navigation) {
+            this.applySolarNavigation(result.navigation)
+            this.navComputer?.close()
+            this.setCombatMessage("Intercept engaged. " +
+              (result.enemy?.display_name || "Hostile contact") +
+              " is now in tactical range.")
+          } else if (this.solarEncounter?.id === encounter.id) {
+            this.encounterMessage("Unable to enter combat: " +
+              (reason || "intercept unavailable"))
+            this.showSolarEncounter()
+          }
+        })
       } else if (choice === "continue") {
         this.encounterResolving = true
         this.encounterMessage("Requesting course resumption…")
@@ -170,6 +190,27 @@ class SpaceClient {
         })
       }
     })
+    const tacticalPanel = this.root.querySelector("#solar-tactical-panel")
+    tacticalPanel?.addEventListener("click", event => {
+      if (!event.target?.closest?.("[data-solar-tactical-retreat]") ||
+          this.tacticalRetreating) return
+      const tactical = this.navComputer?.solarNavigation?.tactical_encounter
+      if (!tactical?.id) return
+      this.tacticalRetreating = true
+      const message = tacticalPanel.querySelector("[data-solar-tactical-message]")
+      if (message) message.textContent = "Withdrawing from interception…"
+      this.solarRetreatEncounter(tactical.id, (ok, navigation, reason) => {
+        this.tacticalRetreating = false
+        if (ok && navigation) {
+          this.applySolarNavigation(navigation)
+          this.navComputer?.open()
+        } else if (message) {
+          message.textContent = "Retreat unavailable: " + (reason || "relay error")
+        }
+        this.showSolarTactical()
+      })
+      this.showSolarTactical()
+    })
     // Modal decisions own keyboard focus. Escape and Atlas toggle cannot
     // dismiss a server-held encounter without a choice.
     window.addEventListener("keydown", event => {
@@ -177,6 +218,7 @@ class SpaceClient {
       if (event.key === "Tab") {
         const actions = [...encounterPanel.querySelectorAll(
           '.solar-encounter-eye:first-child [data-encounter-action]')]
+          .filter(button => !button.hidden && !button.disabled)
         const index = actions.indexOf(document.activeElement)
         const next = event.shiftKey
           ? actions[(index + actions.length - 1) % actions.length]
@@ -572,8 +614,16 @@ class SpaceClient {
   }
 
   applySolarNavigation(navigation) {
+    const previouslyTactical = Boolean(this.navComputer?.solarNavigation?.tactical_encounter)
     this.navComputer.setSolarNavigation(navigation)
-    this.setSolarEncounter(navigation?.pending_encounter || null)
+    this.setSolarEncounter(navigation?.tactical_encounter
+      ? null : navigation?.pending_encounter || null)
+    this.showSolarTactical()
+    if (previouslyTactical && !navigation?.tactical_encounter &&
+        navigation?.status === "traveling") {
+      this.setCombatMessage("Interception complete. Original SOL course resumed.")
+      this.navComputer?.open()
+    }
     const body = navigation?.planetary_view
     const planetaryStatus = this.root.querySelector("#planetary-view-status")
     if (planetaryStatus) {
@@ -657,7 +707,12 @@ class SpaceClient {
         String(encounter.origin_id || "?") + " → " +
         String(encounter.destination_id || "?")
     }
+    const engageAllowed = encounter.classification === "hostile_contact" ||
+      encounter.classification === "patrol_attention"
     for (const button of panel.querySelectorAll("[data-encounter-action]")) {
+      if (button.dataset.encounterAction === "engage") {
+        button.hidden = !engageAllowed
+      }
       button.disabled = this.encounterResolving
     }
     if (wasHidden) {
@@ -667,6 +722,37 @@ class SpaceClient {
       panel.querySelector('.solar-encounter-eye:first-child [data-encounter-action="hail"]')
         ?.focus({preventScroll: true})
     }
+  }
+
+  showSolarTactical() {
+    const panel = this.root.querySelector("#solar-tactical-panel")
+    if (!panel) return
+    const tactical = this.navComputer?.solarNavigation?.tactical_encounter
+    panel.hidden = !tactical
+    if (!tactical) {
+      this.tacticalRetreating = false
+      return
+    }
+    const label = panel.querySelector("[data-solar-tactical-name]")
+    if (label) label.textContent = tactical.call_sign || "Hostile interception"
+    const button = panel.querySelector("[data-solar-tactical-retreat]")
+    if (button) button.disabled = this.tacticalRetreating
+  }
+
+  solarEnterEncounter(encounterId, done) {
+    if (this.channel?.state !== "joined") return done(false, null, "relay offline")
+    this.channel.push("solar_enter_encounter", {encounter_id: encounterId}, 5000)
+      .receive("ok", response => done(true, response))
+      .receive("error", response => done(false, null, response.reason))
+      .receive("timeout", () => done(false, null, "timeout"))
+  }
+
+  solarRetreatEncounter(encounterId, done) {
+    if (this.channel?.state !== "joined") return done(false, null, "relay offline")
+    this.channel.push("solar_retreat_encounter", {encounter_id: encounterId}, 5000)
+      .receive("ok", response => done(true, response.navigation))
+      .receive("error", response => done(false, null, response.reason))
+      .receive("timeout", () => done(false, null, "timeout"))
   }
 
   solarSetCourse(bodyId, done) {
@@ -1022,12 +1108,12 @@ class SpaceClient {
     const label = impact ||
       (isNpc ? "Hostile destroyed. Respawn telemetry queued." : "Ship destroyed.")
     this.setCombatMessage(label)
-    if (impact && id === this.selfId) {
-      // This is a SERVER-confirmed death, never a client-side distance guess.
-      // Free the pointer for navigation and make the result unmistakable.
+    if (id === this.selfId) {
+      // Server-confirmed destruction: the tactical SOL hold is canceled on
+      // defeat. A fresh session recreates a ship at the departure region.
       this.exitMouseSteering({silent: true})
       this.applyPlanetaryWarning(null, {announce: false})
-      this.showError(label)
+      this.showError(impact || "Ship destroyed. Reconnect to respawn at your departure region.")
     }
     this.updateCombatHud()
   }

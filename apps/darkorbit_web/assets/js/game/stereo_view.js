@@ -5,7 +5,7 @@ import {cockpitHudFit, HUD_GEOMETRY} from "./stereo_layout.mjs"
 import {flightBasis, degrees} from "./flight_basis.mjs"
 import {orientationTelemetry} from "./orientation_interpolation.mjs"
 import {targetRange, LASER_FEEDBACK_MS} from "./laser_feedback.mjs"
-import {createDartModel, DART_MODEL_ID, dartHeadingRotation} from "./dart_model.mjs"
+import {createDartModel, isDartModelId, dartHeadingRotation} from "./dart_model.mjs"
 import {PlanetaryBody} from "./planetary_body.js"
 import {EncounterShipVisual} from "./encounter_ship.js"
 
@@ -26,7 +26,7 @@ function beam(a, b, radius, mat) {
 }
 
 function shipModel(npc, npcTypeId = null) {
-  if (npc && npcTypeId === DART_MODEL_ID) return createDartModel(THREE)
+  if (npc && isDartModelId(npcTypeId)) return createDartModel(THREE)
   const root = new THREE.Group()
   const hull = new THREE.Mesh(
     npc ? new THREE.OctahedronGeometry(2, 0) : new THREE.ConeGeometry(1.65, 4.8, 4),
@@ -277,7 +277,7 @@ export class StereoSpaceView {
       } else if (entity.kind === "player" && !entity.destination && entity.attitude) {
         const a = entity.renderAttitude || entity.attitude
         node.rotation.set(a.pitch, -a.yaw, a.roll, "YXZ")
-      } else if (entity.kind === "npc" && entity.npcTypeId === DART_MODEL_ID) {
+      } else if (entity.kind === "npc" && isDartModelId(entity.npcTypeId)) {
         node.rotation.y = dartHeadingRotation(entity.angle)
       } else {
         node.rotation.y = -entity.angle
@@ -377,7 +377,8 @@ export class StereoSpaceView {
       Math.abs(degrees(rates.yaw)) + " / " + Math.abs(degrees(rates.roll)) +
       " deg/s", 30, 194)
     const range = targetRange(own, selected)
-    const flyby = client.navComputer?.solarNavigation?.encounter
+    const nav = client.navComputer?.solarNavigation
+    const flyby = nav?.tactical_encounter ? null : nav?.encounter
     const planetWarning = client.planetaryWarningDisplay
     // This canvas is a stereo-correct 3D HUD surface shared by both SBS
     // eyes. Render the hazard inside the instrument rather than a flat
@@ -407,8 +408,11 @@ export class StereoSpaceView {
     // Keep the distant starfield surrounding the pilot even in large
     // planet-centred maps. Stars are an infinite visual background.
     this.stars?.position.copy(this.camera.position)
-    this.planetaryBody.update(client.navComputer?.solarNavigation, this.camera, time, ownShip)
-    this.encounterShip.update(client.navComputer?.solarNavigation, this.camera)
+    // Keep the actual local planet collision visual, but hide the distant
+    // strategic traffic avatar once its tactical Dart opponent is present.
+    const navigation = client.navComputer?.solarNavigation
+    this.planetaryBody.update(navigation, this.camera, time, ownShip)
+    this.encounterShip.update(navigation?.tactical_encounter ? null : navigation, this.camera)
     this.syncShips(client)
     this.syncBeams(client, time)
     this.updateHud(client, time)

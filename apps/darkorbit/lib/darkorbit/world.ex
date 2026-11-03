@@ -70,6 +70,8 @@ defmodule Darkorbit.World do
   defdelegate solar_cancel_course(session_id), to: Simulation
   defdelegate solar_hail(session_id, contact_id), to: Simulation
   defdelegate solar_resolve_encounter(session_id, encounter_id, choice), to: Simulation
+  defdelegate solar_enter_tactical(session_id, encounter_id), to: Simulation
+  defdelegate solar_finish_tactical(session_id, encounter_id, outcome), to: Simulation
   defdelegate flight_controls(session_id, input), to: Simulation
   defdelegate select_target(session_id, target_id), to: Simulation
   defdelegate clear_target(session_id), to: Simulation

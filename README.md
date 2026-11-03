@@ -907,3 +907,54 @@ and `mix precommit`. A live playtest should start from Earth, set a course
 to Venus, encounter a real trader/patrol/raider at roughly 20–40% journey
 progress, Hail, then Resume without resetting the route. Manual/automated
 test execution has not been performed in the editing environment.
+
+
+
+### SOL close-pass -> tactical cockpit handoff (2026-11-03)
+
+Hostile raiders and faction patrol attention encountered during interplanetary
+travel now offer **Engage / Enter combat** alongside **Hail vessel** and
+**Ignore / Resume course**. Neutral contacts remain hailable/ignorable.
+Only the authenticated pilot with the exact pending encounter ID can engage.
+
+Engage creates an authoritative, live Dart-class tactical opponent (shown
+under the strategic contact's call sign, e.g. Corsair-1) beside the pilot's
+ship in the existing planetary orbital combat map. This is the first
+playable handoff, not yet a dedicated mid-space battle instance. The pilot's
+SOL voyage remains held at its previous position and elapsed time; other
+pilots' journeys and the traffic simulation continue.
+
+The Atlas closes into the 3D/SBS cockpit and conventional controls and
+weapons are enabled **only** for the pilot's active tactical encounter.
+A small tactical banner offers **Retreat / Resume course**. A kill must
+be verified by the map's authoritative NPC state before the SOL navigation
+server releases the hold on victory; remote clients cannot claim a kill.
+Retreat removes the encounter NPC, clears stale target locks and resumes
+the original voyage. A failed spawn rolls back to the existing decision
+modal rather than losing the encounter.
+
+The paired phone HMD's read-only channel now follows the pilot's *actual*
+orbital region rather than always subscribing to legacy Sector 1-1. It
+still cannot submit gameplay commands. The current planet remains visible
+in the laptop cockpit during tactical play so planetary collision
+hazards aren't hidden by the previous destination's cruise preview.
+
+This is a prototype shared-map tactical handoff. It does not yet preserve
+a physical mid-voyage origin in a separately instantiated combat arena,
+translate strategic trader types to distinct NPC models, persist live
+encounters across a full server restart, or provide economic penalties and full recovery UX. When the pilot is
+destroyed in combat, the server cancels the SOL voyage and clears that
+encounter; reconnecting creates a new ship at the departure region. Credit
+loss, equipment damage and a seamless respawn screen remain separate milestones.
+
+Test with a fresh Earth -> Venus voyage that meets a Corsair raider. Click
+**Engage / Enter combat**, close on the Dart-class enemy, destroy it or
+press Retreat; the Atlas should return with the original course progressing.
+The current running server must be restarted after pulling this commit.
+Run core World tests, Core Navigation tests, Phoenix World/Helmet channel
+tests, JavaScript assets tests, then mix assets.build. Editing environment
+has not run Mix or physical HMD testing.
+
+The tactical Dart is rendered with the existing swept-wing Dart Three.js model,
+not a generic orange placeholder. The NPC targets its owning pilot only;
+other pilots may observe the shared orbital-map fight. 

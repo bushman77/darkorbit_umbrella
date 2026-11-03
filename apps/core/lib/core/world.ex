@@ -77,6 +77,53 @@ defmodule Core.World do
     end
   end
 
+  @doc "Enter the authenticated pilot's held hostile encounter in local 3D combat."
+  @spec solar_enter_tactical(pos_integer(), String.t(), keyword()) ::
+          {:ok, map()} | {:error, term()}
+  def solar_enter_tactical(session_id, encounter_id, opts \\ []) do
+    sessions = Keyword.get(opts, :sessions, SessionManager)
+    registry = Keyword.get(opts, :registry, Core.World.Registry)
+    server = solar_navigation_server(opts)
+
+    with {:ok, session} <- fetch_session(sessions, session_id),
+         {:ok, navigation} <-
+           SolarNavigation.enter_tactical(server, session.player_id, encounter_id) do
+      case MapServer.start_solar_tactical(registry, session.map_id, session.id,
+             session.entity_id, encounter_id, navigation.tactical_encounter.call_sign) do
+        {:ok, enemy} ->
+          {:ok, %{navigation: navigation, enemy: enemy}}
+
+        {:error, reason} ->
+          # Preserve the original modal if map combat could not be created.
+          _ = SolarNavigation.finish_tactical(
+            server, session.player_id, encounter_id, :rollback)
+          {:error, reason}
+      end
+    end
+  end
+
+  @doc "Map-server verified victory or retreat, then resume the held SOL voyage."
+  @spec solar_finish_tactical(pos_integer(), String.t(), atom(), keyword()) ::
+          {:ok, map()} | {:error, term()}
+  def solar_finish_tactical(session_id, encounter_id, outcome, opts \\ [])
+      when outcome in [:victory, :retreat, :defeat] do
+    sessions = Keyword.get(opts, :sessions, SessionManager)
+    registry = Keyword.get(opts, :registry, Core.World.Registry)
+    server = solar_navigation_server(opts)
+
+    with {:ok, session} <- fetch_session(sessions, session_id),
+         {:ok, %{tactical_encounter: %{id: ^encounter_id}}} <-
+           SolarNavigation.snapshot(server, session.player_id),
+         :ok <- MapServer.finish_solar_tactical(registry, session.map_id,
+           session.id, session.entity_id, encounter_id, outcome) do
+      SolarNavigation.finish_tactical(server, session.player_id, encounter_id, outcome)
+    else
+      {:ok, %{tactical_encounter: nil}} -> {:error, :no_tactical_encounter}
+      {:ok, _} -> {:error, :encounter_mismatch}
+      error -> error
+    end
+  end
+
   defp solar_navigation_server(opts) do
     Keyword.get(opts, :solar_navigation_server,
       Module.concat(Keyword.get(opts, :sessions, SessionManager), SolarNavigation))
@@ -270,6 +317,7 @@ defmodule Core.World do
   defp require_conventional(%Session{player_id: player_id}, opts)
        when is_integer(player_id) and player_id > 0 do
     case SolarNavigation.snapshot(solar_navigation_server(opts), player_id) do
+      {:ok, %{status: :traveling, tactical_encounter: %{}}} -> :ok
       {:ok, %{status: :traveling}} -> {:error, :interplanetary_cruise_active}
       {:ok, _navigation} -> :ok
       error -> error

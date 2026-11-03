@@ -557,3 +557,32 @@ validation remain deferred.
 - [ ] Execute tests and verify Earth–Venus popup on laptop/paired headset.
 - [ ] Tune actual encounter chance, route density, sector/faction hostility,
   and implement shared tactical combat interception.
+
+
+
+### SOL tactical encounter handoff (2026-11-03)
+
+- [x] Allow Engage for held hostile and patrol contacts only; retain Hail
+  and Ignore/Resume for ordinary neutral flybys.
+- [x] Validate encounter ID and session on server before entering combat;
+  prevent forged entry and resuming a voyage during an active fight.
+- [x] Spawn a Dart-class NPC under contact's callsign in the pilot's current
+  authoritative orbital map, near the live ship and outside planetary
+  exclusion geometry. Use current planet visuals for collision clarity.
+- [x] Permit local cockpit movement and weapon use during tactical hold,
+  while retaining SOL voyage position/progress and multiplayer isolation.
+- [x] Server-check NPC destruction before victory; permit explicit retreat,
+  clean up enemy and target locks, resume original travel.
+- [x] Route paired read-only HMD world subscriptions to actual orbital map.
+- [x] Add core and Phoenix channel regression tests including auth and
+  rejected client-originated victory.
+- [ ] Execute full Mix/JS suites and verify laptop plus headset gameplay.
+- [ ] Build a true isolated mid-voyage tactical arena rather than temporarily
+  using the pilot's current planetary combat map.
+- [ ] Implement pilot defeat/respawn, battle rewards, independent ship models,
+  trade scene choices, and faction-specific patrol interception.
+
+- [x] Cancel a defeated pilot's held SOL course on authoritative destruction
+  and prevent a dead pilot from invoking a fake defeat or retreat.
+- [x] Render tactical Dart variants as the actual 3D Dart ship model.
+- [ ] Implement final death/respawn UX and economic consequences.

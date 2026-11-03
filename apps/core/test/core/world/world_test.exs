@@ -28,6 +28,7 @@ defmodule Core.WorldTest do
        auto_tick: false,
        initial_npcs?: !Map.get(tags, :no_initial_encounter, false),
        auto_respawn?: !Map.get(tags, :no_auto_respawn, false),
+       procedural_contact_chance: 0.0,
        event_sink: event_sink}
     )
 
@@ -895,4 +896,138 @@ defmodule Core.WorldTest do
     assert {:error, :attacker_destroyed} =
              World.move(session.id, %{x: 1_100, y: 1_000}, context.world_options)
   end
+
+  @tag no_initial_encounter: true, no_auto_respawn: true
+  test "a held hostile SOL encounter enters map-owned 3D combat and resumes on victory",
+       context do
+    opts = context.world_options
+    stats = %{context.stats | damage: 1_200}
+    {:ok, session} = World.connect(9_731, stats, opts)
+
+    :sys.replace_state(@solar_navigation_server, fn state ->
+      hostile = Map.update!(state.traffic, "traffic:sol:vesper-02",
+        &%{&1 | disposition: :hostile})
+      %{state | traffic: hostile}
+    end)
+
+    assert {:ok, %{status: :traveling}} = World.solar_set_course(session.id, "venus", opts)
+    for _ <- 1..85, do: assert(:ok = SolarNavigation.tick(@solar_navigation_server))
+    assert {:ok, held} = World.solar_snapshot(session.id, opts)
+    assert held.cruise_paused
+    assert %{id: encounter_id, classification: :hostile_contact} = held.pending_encounter
+
+    assert {:error, :interplanetary_cruise_active} = World.attack(session.id, opts)
+    assert {:error, :encounter_mismatch} =
+      World.solar_enter_tactical(session.id, "forged-contact", opts)
+
+    assert {:ok, %{navigation: combat, enemy: enemy}} =
+      World.solar_enter_tactical(session.id, encounter_id, opts)
+    assert combat.tactical_encounter.id == encounter_id
+    assert combat.cruise_paused
+    assert enemy.display_name == held.pending_encounter.call_sign
+    assert enemy.kind == :npc
+    assert enemy.npc_type_id == "solar-dart-9731"
+    # The cockpit shows the physical current planetary region during combat;
+    # the distant destination preview would conceal actual collision geometry.
+    assert combat.planetary_view.body_id == "earth"
+    assert combat.planetary_view.stage == :orbital_preview
+    assert :ok = SolarNavigation.tick(@solar_navigation_server)
+    assert {:ok, frozen} = World.solar_snapshot(session.id, opts)
+    assert frozen.elapsed_ms == held.elapsed_ms
+    assert {:error, :enemy_still_active} =
+      World.solar_finish_tactical(session.id, encounter_id, :victory, opts)
+    assert {:error, :tactical_encounter_active} =
+      World.solar_resolve_encounter(session.id, encounter_id, :continue, opts)
+
+    assert {:ok, other} = World.connect(9_732, context.stats, opts)
+    assert {:error, :no_pending_encounter} =
+      World.solar_enter_tactical(other.id, encounter_id, opts)
+
+    assert {:ok, _lock} = World.select_target(session.id, enemy.id, opts)
+    assert {:ok, %{destroyed: true}} = World.attack(session.id, opts)
+    assert {:ok, resumed} =
+      World.solar_finish_tactical(session.id, encounter_id, :victory, opts)
+    assert resumed.status == :traveling
+    refute resumed.cruise_paused
+    assert resumed.tactical_encounter == nil
+    assert resumed.pending_encounter == nil
+    assert {:ok, map} = World.snapshot("1-1", opts)
+    refute Enum.any?(map.entities, &(&1.id == enemy.id))
+
+    assert :ok = SolarNavigation.tick(@solar_navigation_server)
+    assert {:ok, moving} = World.solar_snapshot(session.id, opts)
+    assert moving.elapsed_ms == held.elapsed_ms + 1_000
+    assert {:error, :no_tactical_encounter} =
+      World.solar_finish_tactical(session.id, encounter_id, :victory, opts)
+  end
+
+  @tag no_initial_encounter: true, no_auto_respawn: true
+  test "retreat removes only this pilot's encounter NPC and preserves SOL progress", context do
+    opts = context.world_options
+    {:ok, session} = World.connect(9_733, context.stats, opts)
+
+    :sys.replace_state(@solar_navigation_server, fn state ->
+      hostile = Map.update!(state.traffic, "traffic:sol:vesper-02",
+        &%{&1 | disposition: :hostile})
+      %{state | traffic: hostile}
+    end)
+
+    assert {:ok, _} = World.solar_set_course(session.id, "venus", opts)
+    for _ <- 1..85, do: assert(:ok = SolarNavigation.tick(@solar_navigation_server))
+    {:ok, held} = World.solar_snapshot(session.id, opts)
+    encounter_id = held.pending_encounter.id
+    assert {:ok, %{enemy: enemy}} =
+      World.solar_enter_tactical(session.id, encounter_id, opts)
+    assert {:error, :encounter_mismatch} =
+      World.solar_finish_tactical(session.id, "other", :retreat, opts)
+    assert {:ok, resumed} =
+      World.solar_finish_tactical(session.id, encounter_id, :retreat, opts)
+    assert resumed.elapsed_ms == held.elapsed_ms
+    assert resumed.pending_encounter == nil
+    assert resumed.tactical_encounter == nil
+    assert {:ok, map} = World.snapshot("1-1", opts)
+    refute Enum.any?(map.entities, &(&1.id == enemy.id))
+  end
+
+
+  @tag no_initial_encounter: true, no_auto_respawn: true
+  test "a defeated pilot cannot forge survival and does not retain a stuck SOL hold",
+       context do
+    opts = context.world_options
+    {:ok, session} = World.connect(9_734, context.stats, opts)
+
+    :sys.replace_state(@solar_navigation_server, fn state ->
+      hostile = Map.update!(state.traffic, "traffic:sol:vesper-02",
+        &%{&1 | disposition: :hostile})
+      %{state | traffic: hostile}
+    end)
+
+    assert {:ok, _} = World.solar_set_course(session.id, "venus", opts)
+    for _ <- 1..85, do: assert(:ok = SolarNavigation.tick(@solar_navigation_server))
+    {:ok, held} = World.solar_snapshot(session.id, opts)
+    encounter_id = held.pending_encounter.id
+
+    assert {:ok, %{enemy: enemy}} =
+      World.solar_enter_tactical(session.id, encounter_id, opts)
+    assert {:error, :pilot_still_alive} =
+      World.solar_finish_tactical(session.id, encounter_id, :defeat, opts)
+
+    [{map_server, _}] = Registry.lookup(@registry, {:world_map, "1-1"})
+    :sys.replace_state(map_server, fn state ->
+      player = Map.fetch!(state.entities, session.entity_id)
+      destroyed = %{player | status: :destroyed, hull: 0}
+      %{state | entities: Map.put(state.entities, session.entity_id, destroyed)}
+    end)
+
+    assert {:ok, canceled} =
+      World.solar_finish_tactical(session.id, encounter_id, :defeat, opts)
+    assert canceled.status == :idle
+    assert canceled.location_id == "earth"
+    assert canceled.pending_encounter == nil
+    assert canceled.tactical_encounter == nil
+    assert {:ok, map} = World.snapshot("1-1", opts)
+    refute Enum.any?(map.entities, &(&1.id == enemy.id))
+    assert {:error, :attacker_destroyed} = World.attack(session.id, opts)
+  end
+
 end

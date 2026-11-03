@@ -93,6 +93,28 @@ defmodule DarkorbitWeb.WorldChannel do
   def handle_in("solar_resolve_encounter", _payload, socket),
     do: {:reply, {:error, %{reason: "invalid_encounter_choice"}}, socket}
 
+  def handle_in("solar_enter_encounter", %{"encounter_id" => id}, socket)
+      when is_binary(id) do
+    case World.solar_enter_tactical(socket.assigns.world_session_id, id) do
+      {:ok, result} -> {:reply, {:ok, result}, socket}
+      {:error, reason} -> {:reply, {:error, %{reason: error_reason(reason)}}, socket}
+    end
+  end
+
+  def handle_in("solar_enter_encounter", _payload, socket),
+    do: {:reply, {:error, %{reason: "invalid_encounter"}}, socket}
+
+  def handle_in("solar_retreat_encounter", %{"encounter_id" => id}, socket)
+      when is_binary(id) do
+    case World.solar_finish_tactical(socket.assigns.world_session_id, id, :retreat) do
+      {:ok, navigation} -> {:reply, {:ok, %{navigation: navigation}}, socket}
+      {:error, reason} -> {:reply, {:error, %{reason: error_reason(reason)}}, socket}
+    end
+  end
+
+  def handle_in("solar_retreat_encounter", _payload, socket),
+    do: {:reply, {:error, %{reason: "invalid_encounter"}}, socket}
+
   def handle_in("solar_hail", %{"contact_id" => id}, socket)
       when is_binary(id) do
     case World.solar_hail(socket.assigns.world_session_id, id) do
@@ -226,6 +248,37 @@ defmodule DarkorbitWeb.WorldChannel do
 
   def handle_info({:solar_navigation_updated, _payload}, socket),
     do: {:noreply, socket}
+
+  # A player destroyed during interception loses that SOL course rather
+  # than remaining indefinitely trapped in a tactical hold. This server-only
+  # failure path is authorized by the map's real destroyed ship state.
+  def handle_info({:entity_destroyed,
+                   %{entity: %{kind: :player, player_id: player_id}} = payload},
+                  %{assigns: %{current_player_id: player_id}} = socket) do
+    case World.solar_snapshot(socket.assigns.world_session_id) do
+      {:ok, %{tactical_encounter: %{id: encounter_id}}} ->
+        _ = World.solar_finish_tactical(
+          socket.assigns.world_session_id, encounter_id, :defeat)
+      _ -> :ok
+    end
+    :ok = push(socket, "entity_destroyed", payload)
+    {:noreply, socket}
+  end
+
+  # The NPC death event comes from MapServer AFTER authoritative damage
+  # and removal. Victory is verified against that map before the held SOL
+  # voyage can resume; a forged client event cannot award a win.
+  def handle_info({:entity_destroyed, %{entity: %{kind: :npc}} = payload}, socket) do
+    case World.solar_snapshot(socket.assigns.world_session_id) do
+      {:ok, %{tactical_encounter: %{id: encounter_id}}} ->
+        _ = World.solar_finish_tactical(
+          socket.assigns.world_session_id, encounter_id, :victory)
+      _ -> :ok
+    end
+
+    :ok = push(socket, "entity_destroyed", payload)
+    {:noreply, socket}
+  end
 
   def handle_info({event, payload}, socket)
       when event in [

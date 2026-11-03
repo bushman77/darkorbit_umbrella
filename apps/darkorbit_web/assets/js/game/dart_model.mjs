@@ -5,6 +5,8 @@
 //
 // Coordinates are Three.js ship-local: -Z nose, +Y up, +Z engines.
 export const DART_MODEL_ID = "dart"
+export const isDartModelId = id => id === DART_MODEL_ID ||
+  (typeof id === "string" && /^solar-dart-[1-9][0-9]*$/.test(id))
 
 export const DART_HULL_POINTS = Object.freeze([
   [ 0.00,  0.02, -2.45], // nose

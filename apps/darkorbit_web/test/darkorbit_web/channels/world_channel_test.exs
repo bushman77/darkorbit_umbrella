@@ -174,6 +174,59 @@ defmodule DarkorbitWeb.WorldChannelTest do
   end
 
 
+  test "a hostile SOL contact enters authenticated tactical combat and can retreat" do
+    account = verified_player_account_fixture()
+    server = Module.concat(SessionManager, Core.Universe.Navigation)
+    original_state = :sys.get_state(server)
+
+    :sys.replace_state(server, fn state ->
+      fleet = Core.Universe.Traffic.seed()
+      hostile = Map.update!(fleet, "traffic:sol:vesper-02",
+        &%{&1 | disposition: :hostile})
+      %{state | traffic: hostile, encountered: %{},
+        procedural_contact_chance: 0.0,
+        voyages: Map.delete(state.voyages, account.id)}
+    end)
+    on_exit(fn -> :sys.replace_state(server, fn _ -> original_state end) end)
+
+    {:ok, socket} = authenticated_socket(account)
+    {:ok, _response, joined} =
+      subscribe_and_join(socket, WorldChannel, "world:1-1")
+
+    ref = push(joined, "solar_enter_encounter",
+      %{"encounter_id" => "client-forged"})
+    assert_reply ref, :error, %{reason: "no_pending_encounter"}
+
+    ref = push(joined, "solar_set_course", %{"body_id" => "venus"})
+    assert_reply ref, :ok, %{navigation: %{status: :traveling}}
+    for _ <- 1..85, do: assert(:ok = Core.Universe.Navigation.tick(server))
+    assert {:ok, %{pending_encounter: %{id: encounter_id},
+                   cruise_paused: true}} =
+      Core.Universe.Navigation.snapshot(server, account.id)
+
+    ref = push(joined, "solar_enter_encounter", %{"encounter_id" => "forged"})
+    assert_reply ref, :error, %{reason: "encounter_mismatch"}
+
+    ref = push(joined, "solar_enter_encounter", %{"encounter_id" => encounter_id})
+    assert_reply ref, :ok, %{navigation: %{tactical_encounter: %{id: ^encounter_id}},
+                             enemy: %{kind: :npc, id: npc_id}}
+    assert_push "npc_spawned", %{id: ^npc_id}
+
+    ref = push(joined, "solar_resolve_encounter",
+      %{"encounter_id" => encounter_id, "choice" => "continue"})
+    assert_reply ref, :error, %{reason: "tactical_encounter_active"}
+
+    ref = push(joined, "solar_retreat_encounter", %{"encounter_id" => "forged"})
+    assert_reply ref, :error, %{reason: "encounter_mismatch"}
+
+    ref = push(joined, "solar_retreat_encounter", %{"encounter_id" => encounter_id})
+    assert_reply ref, :ok, %{navigation: %{tactical_encounter: nil,
+      pending_encounter: nil, cruise_paused: false}}
+    assert {:ok, map} = World.snapshot("1-1")
+    refute Enum.any?(map.entities, &(&1.id == npc_id))
+    leave_and_wait(joined)
+  end
+
   test "encounter decision is bound to the pilot session and cannot be forged" do
     account = verified_player_account_fixture()
     server = Module.concat(SessionManager, Core.Universe.Navigation)

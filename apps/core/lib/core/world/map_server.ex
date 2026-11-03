@@ -21,6 +21,7 @@ defmodule Core.World.MapServer do
   alias Core.World.Orientation
   alias Core.World.PlanetaryCollision
   alias Core.World.PlanetaryProximity
+  alias Core.World.Position
   alias Core.World.Session
 
   def child_spec(opts) do
@@ -140,6 +141,24 @@ defmodule Core.World.MapServer do
   def start_encounter(registry, map_id, npc_type_id) when is_binary(npc_type_id),
     do: call_map(registry, map_id, {:start_encounter, npc_type_id})
 
+  @doc "Spawn an encounter NPC for the authenticated pilot in their current map."
+  @spec start_solar_tactical(atom(), String.t(), pos_integer(), term(), String.t(), String.t()) ::
+          {:ok, map()} | {:error, term()}
+  def start_solar_tactical(registry, map_id, session_id, player_id, encounter_id, call_sign)
+      when is_integer(player_id) and is_binary(encounter_id) and is_binary(call_sign) do
+    call_map(registry, map_id,
+      {:start_solar_tactical, session_id, player_id, encounter_id, call_sign})
+  end
+
+  @doc "Server-authorized victory verification or safe retreat."
+  @spec finish_solar_tactical(atom(), String.t(), pos_integer(), term(), String.t(), atom()) ::
+          :ok | {:error, term()}
+  def finish_solar_tactical(registry, map_id, session_id, player_id, encounter_id, outcome)
+      when outcome in [:victory, :retreat, :defeat] do
+    call_map(registry, map_id,
+      {:finish_solar_tactical, session_id, player_id, encounter_id, outcome})
+  end
+
   @spec available?(atom(), String.t()) :: boolean()
   def available?(registry, map_id) do
     Registry.lookup(registry, {:world_map, map_id}) != []
@@ -171,6 +190,7 @@ defmodule Core.World.MapServer do
         do: spawn_npcs(npc_definitions, tick_ms), else: %{}),
       npc_definitions: npc_definitions,
       respawns: %{},
+      solar_tactical: %{},
       auto_respawn?: Keyword.get(opts, :auto_respawn?, false),
       event_sink: Keyword.fetch!(opts, :event_sink),
       tick: 0,
@@ -244,7 +264,7 @@ defmodule Core.World.MapServer do
           {id, entity}
         end
       end)
-    cleared = %{state | npcs: %{}, respawns: %{}, entities: entities}
+    cleared = %{state | npcs: %{}, respawns: %{}, solar_tactical: %{}, entities: entities}
     Enum.each(state.npcs, fn {_id, npc} ->
       broadcast(cleared, :entity_left, public_entity(npc))
     end)
@@ -265,6 +285,101 @@ defmodule Core.World.MapServer do
     else
       :error -> {:reply, {:error, :unknown_npc_type}, state}
       [] -> {:reply, {:error, :no_spawn_position}, state}
+    end
+  end
+
+  def handle_call(
+        {:start_solar_tactical, session_id, player_id, encounter_id, call_sign},
+        _from, state
+      ) do
+    with {:ok, ship} <- authorized_entity(state, session_id, player_id),
+         :ok <- living_attacker(ship),
+         false <- Map.has_key?(state.solar_tactical, player_id),
+         {:ok, base} <- NPCCatalog.fetch("dart", NPCCatalog.all()),
+         {:ok, spawn} <- solar_tactical_position(state.definition, ship) do
+      type_id = "solar-dart-" <> Integer.to_string(player_id)
+      definition = %{base |
+        id: type_id,
+        display_name: call_sign,
+        spawn: %{base.spawn | map_id: state.definition.id, positions: [spawn],
+          patrol_radius: 180.0}}
+      npc = NPCEntity.spawn(definition, 0, state.tick_ms)
+
+      if Map.has_key?(state.npcs, npc.id) do
+        {:reply, {:error, :encounter_active}, state}
+      else
+        updated = %{state |
+          npcs: Map.put(state.npcs, npc.id, npc),
+          npc_definitions: Map.put(state.npc_definitions, type_id, definition),
+          solar_tactical: Map.put(state.solar_tactical, player_id,
+            %{encounter_id: encounter_id, npc_id: npc.id, type_id: type_id})
+        }
+        broadcast(updated, :npc_spawned, public_entity(npc))
+        {:reply, {:ok, public_entity(npc)}, updated}
+      end
+    else
+      true -> {:reply, {:error, :encounter_active}, state}
+      error -> {:reply, error, state}
+    end
+  end
+
+  def handle_call(
+        {:finish_solar_tactical, session_id, player_id, encounter_id, outcome},
+        _from, state
+      ) do
+    with {:ok, ship} <- authorized_entity(state, session_id, player_id),
+         {:ok, ongoing} <- Map.fetch(state.solar_tactical, player_id),
+         true <- ongoing.encounter_id == encounter_id do
+      present = Map.get(state.npcs, ongoing.npc_id)
+
+      cond do
+        outcome == :victory and present != nil ->
+          {:reply, {:error, :enemy_still_active}, state}
+
+        outcome == :retreat and not Combat.alive?(ship) ->
+          {:reply, {:error, :attacker_destroyed}, state}
+
+        outcome == :defeat and Combat.alive?(ship) ->
+          {:reply, {:error, :pilot_still_alive}, state}
+
+        true ->
+          # Retreat must clear stale target locks for every pilot that may
+          # have targeted this now-removed encounter NPC.
+          {entities, cleared} =
+            Enum.reduce(state.entities, {%{}, []}, fn {id, entity}, {acc, refs} ->
+              if entity.target_id == ongoing.npc_id or
+                   entity.engaged_target_id == ongoing.npc_id do
+                revised = %{entity | target_id: nil, engaged_target_id: nil}
+                {Map.put(acc, id, revised), [entity | refs]}
+              else
+                {Map.put(acc, id, entity), refs}
+              end
+            end)
+
+          updated = %{state |
+            entities: entities,
+            npcs: Map.delete(state.npcs, ongoing.npc_id),
+            npc_definitions: Map.delete(state.npc_definitions, ongoing.type_id),
+            solar_tactical: Map.delete(state.solar_tactical, player_id)
+          }
+          if present, do: broadcast(updated, :entity_left, public_entity(present))
+
+          Enum.each(cleared, fn entity ->
+            if entity.target_id != nil do
+              broadcast(updated, :target_cleared, %{
+                player_id: entity.id, target_id: nil, tick: state.tick})
+            end
+            if entity.engaged_target_id != nil do
+              broadcast(updated, :combat_disengaged,
+                disengagement_payload(entity, :target_removed, state.tick))
+            end
+          end)
+          {:reply, :ok, updated}
+      end
+    else
+      :error -> {:reply, {:error, :no_tactical_encounter}, state}
+      false -> {:reply, {:error, :encounter_mismatch}, state}
+      error -> {:reply, error, state}
     end
   end
 
@@ -672,7 +787,8 @@ defmodule Core.World.MapServer do
         definition = Map.fetch!(state.npc_definitions, npc.npc_type_id)
 
         {decided_npc, new_actions} =
-          AI.step(npc, Map.values(entities), definition, state.definition, next_tick)
+          AI.step(npc, tactical_targets(state, npc, entities),
+            definition, state.definition, next_tick)
 
         moved_npc = advance_entity(decided_npc, decided_npc.speed * distance_factor)
         npc_events = npc_events(npc, moved_npc)
@@ -847,7 +963,9 @@ defmodule Core.World.MapServer do
   defp destroy_npc(state, npc, attacker_id, attack_payload) do
     # An encounter ends on destruction. Legacy combat regression fixtures
     # alone opt into the automatic respawn behavior.
-    due_tick = if state.auto_respawn?, do: state.tick + npc.respawn_delay_ticks, else: nil
+    due_tick =
+      if state.auto_respawn? and not String.starts_with?(npc.npc_type_id, "solar-dart-"),
+        do: state.tick + npc.respawn_delay_ticks, else: nil
     respawns =
       if is_integer(due_tick) do
         Map.put(state.respawns, npc.id,
@@ -1083,6 +1201,69 @@ defmodule Core.World.MapServer do
     else
       state_events
     end
+  end
+
+  # Dynamic tactical opponents pursue only the authenticated owner; the
+  # current orbital map may also contain unrelated multiplayer ships.
+  defp tactical_targets(state, npc, entities) do
+    owner_id = Enum.find_value(state.solar_tactical, fn {id, encounter} ->
+      if encounter.npc_id == npc.id, do: id
+    end)
+
+    case owner_id do
+      nil -> Map.values(entities)
+      id ->
+        case Map.fetch(entities, id) do
+          {:ok, owner} -> [owner]
+          :error -> []
+        end
+    end
+  end
+
+  # Spawn an opponent in front of the pilot where possible. On planetary
+  # maps the server rejects positions inside the physical collision exclusion,
+  # so a tactical encounter never conceals an invisible fatal planet.
+  defp solar_tactical_position(definition, %Entity{} = ship) do
+    direction = Orientation.forward(ship.orientation)
+    {dx, dy} = {direction.x, direction.y}
+    ship_pos = ship.position
+
+    offsets = [
+      {dx * 520.0, dy * 520.0},
+      {-dy * 520.0, dx * 520.0},
+      {-dx * 520.0, -dy * 520.0}
+    ]
+
+    candidate =
+      Enum.find_value(offsets, fn {x, y} ->
+        position = %Position{
+          x: ship_pos.x + x,
+          y: ship_pos.y + y,
+          z: ship_pos.z + direction.z * 520.0
+        }
+
+        if safe_tactical_spawn?(definition, position), do: position
+      end)
+
+    if candidate, do: {:ok, candidate}, else: {:error, :no_spawn_position}
+  end
+
+  defp safe_tactical_spawn?(definition, %Position{} = position) do
+    within_map? = match?({:ok, _}, Movement.destination(definition, position))
+
+    clear_of_planet? =
+      case definition.planet do
+        %{center: center, exclusion_radius: exclusion} ->
+          dx = position.x - center.x
+          dy = position.y - center.y
+          dz = position.z - center.z
+          dx * dx + dy * dy + dz * dz > (exclusion + 150.0) * (exclusion + 150.0)
+
+        _ ->
+          true
+      end
+
+    within_map? and clear_of_planet?
   end
 
   defp authorized_entity(state, session_id, entity_id) do

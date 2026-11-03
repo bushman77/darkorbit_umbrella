@@ -941,3 +941,30 @@ body:has(#helmet-client) {
 .helmet-encounter-card [data-helmet-encounter-kind] { font: 700 clamp(.55rem, 1vw, .75rem) ui-monospace, monospace; color: #fcd34d; }
 .helmet-encounter-instruction { font-size: clamp(.6rem, .9vw, .78rem); color: #b3eaf2; }
 #helmet-encounter[hidden] { display: none !important; }
+
+/* Interplanetary encounter decision options: hail, enter combat, ignore. */
+.solar-encounter-modal [data-encounter-action][hidden] { display: none !important; }
+@media (min-width: 650px) {
+  .solar-encounter-actions { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+.solar-tactical-panel {
+  position: absolute;
+  z-index: 84;
+  top: 5rem;
+  right: 1.25rem;
+  width: min(19rem, calc(100vw - 2rem));
+  display: grid;
+  gap: .65rem;
+  padding: .8rem 1rem;
+  border: 1px solid rgb(251 113 133 / .65);
+  border-radius: .8rem;
+  color: #f8fafc;
+  background: rgb(2 6 23 / .94);
+  box-shadow: 0 15px 34px #0009;
+  font: 650 .75rem ui-monospace, monospace;
+}
+.solar-tactical-panel strong { font-size: 1rem; color: #fecdd3; }
+.solar-tactical-panel [data-solar-tactical-message] {
+  line-height: 1.35; font-size: .7rem; color: #fcd6d9;
+}
+.solar-tactical-panel[hidden] { display: none !important; }

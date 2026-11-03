@@ -27,13 +27,14 @@
         <p class="solar-encounter-hold">INTERPLANETARY CRUISE PAUSED</p>
         <h2 id="solar-encounter-title" data-encounter-title>Unidentified vessel</h2>
         <p data-encounter-distance class="solar-encounter-distance">Acquiring contact</p>
-        <p class="solar-encounter-description">Hail this contact, or continue your original course.</p>
+        <p class="solar-encounter-description">Hail this contact, engage in combat, or continue your course.</p>
         <p data-encounter-message role="status" aria-live="polite" class="solar-encounter-message">Choose how to proceed.</p>
         <div class="solar-encounter-actions">
           <button type="button" data-encounter-action="hail" class="nav-button nav-primary">Hail vessel</button>
+          <button type="button" data-encounter-action="engage" class="nav-button nav-danger" hidden>Engage / Enter combat</button>
           <button type="button" data-encounter-action="continue" class="nav-button">Ignore / Resume course</button>
         </div>
-        <p class="solar-encounter-note">Your ship is held at this location. Other traffic continues. Tactical combat and interception are future features.</p>
+        <p class="solar-encounter-note">Your SOL course is held while you decide. Entering combat launches a tactical opponent; retreat or victory resumes your original journey.</p>
       </div>
     </div>
     <div class="solar-encounter-eye solar-encounter-eye-right" aria-hidden="true">
@@ -42,15 +43,27 @@
         <p class="solar-encounter-hold">INTERPLANETARY CRUISE PAUSED</p>
         <h2 data-encounter-title>Unidentified vessel</h2>
         <p data-encounter-distance class="solar-encounter-distance">Acquiring contact</p>
-        <p class="solar-encounter-description">Hail this contact, or continue your original course.</p>
+        <p class="solar-encounter-description">Hail this contact, engage in combat, or continue your course.</p>
         <p data-encounter-message class="solar-encounter-message">Choose how to proceed.</p>
         <div class="solar-encounter-actions">
           <button type="button" data-encounter-action="hail" tabindex="-1" class="nav-button nav-primary">Hail vessel</button>
+          <button type="button" data-encounter-action="engage" tabindex="-1" class="nav-button nav-danger" hidden>Engage / Enter combat</button>
           <button type="button" data-encounter-action="continue" tabindex="-1" class="nav-button">Ignore / Resume course</button>
         </div>
-        <p class="solar-encounter-note">Your ship is held at this location. Other traffic continues. Tactical combat and interception are future features.</p>
+        <p class="solar-encounter-note">Your SOL course is held while you decide. Entering combat launches a tactical opponent; retreat or victory resumes your original journey.</p>
       </div>
     </div>
+  </section>
+
+  <%!-- Tactical combat uses the ordinary cockpit and server-owned map NPC;
+       only this pilot's SOL cruise is held while the fight continues. --%>
+  <section id="solar-tactical-panel" hidden class="solar-tactical-panel"
+    aria-label="Active tactical interception">
+    <p class="solar-encounter-kicker">TACTICAL INTERCEPTION ACTIVE</p>
+    <strong data-solar-tactical-name>Hostile vessel</strong>
+    <p data-solar-tactical-message>Destroy the hostile or retreat to continue your SOL course.</p>
+    <button type="button" class="nav-button nav-danger"
+      data-solar-tactical-retreat>Retreat / Resume course</button>
   </section>
 
   <p id="planetary-view-status" hidden

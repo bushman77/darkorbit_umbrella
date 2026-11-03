@@ -58,6 +58,22 @@ defmodule Core.Universe.Navigation do
     GenServer.call(server, {:resolve_encounter, player_id, encounter_id, choice})
   end
 
+  @doc "Enter the existing held hostile/patrol contact's tactical cockpit."
+  @spec enter_tactical(GenServer.server(), pos_integer(), String.t()) ::
+          {:ok, map()} | {:error, atom()}
+  def enter_tactical(server, player_id, encounter_id)
+      when is_integer(player_id) and player_id > 0 do
+    GenServer.call(server, {:enter_tactical, player_id, encounter_id})
+  end
+
+  @doc "Finish or roll back a server-authorized tactical encounter."
+  @spec finish_tactical(GenServer.server(), pos_integer(), String.t(), atom()) ::
+          {:ok, map()} | {:error, atom()}
+  def finish_tactical(server, player_id, encounter_id, outcome)
+      when is_integer(player_id) and player_id > 0 do
+    GenServer.call(server, {:finish_tactical, player_id, encounter_id, outcome})
+  end
+
   @doc "Hail an in-range contact; identity and position come from the server."
   @spec hail(GenServer.server(), pos_integer(), term()) :: {:ok, map()} | {:error, atom()}
   def hail(server, player_id, contact_id)
@@ -129,6 +145,7 @@ defmodule Core.Universe.Navigation do
           distance_travelled_km: 0.0,
           status: :traveling,
           pending_encounter: nil,
+          tactical_encounter: nil,
           elapsed_ms: 0,
           duration_ms: duration_ms
         }
@@ -175,8 +192,71 @@ defmodule Core.Universe.Navigation do
       choice != :continue ->
         {:reply, {:error, :invalid_encounter_choice}, state}
 
+      voyage.tactical_encounter != nil ->
+        {:reply, {:error, :tactical_encounter_active}, state}
+
       true ->
         updated = %{voyage | pending_encounter: nil}
+        state = put_voyage(state, player_id, updated)
+        broadcast(state, player_id, updated)
+        {:reply, {:ok, public(updated, state, player_id)}, state}
+    end
+  end
+
+  def handle_call({:enter_tactical, player_id, encounter_id}, _from, state) do
+    {voyage, state} = ensure_player(state, player_id)
+
+    cond do
+      voyage.status != :traveling or voyage.pending_encounter == nil ->
+        {:reply, {:error, :no_pending_encounter}, state}
+
+      not is_binary(encounter_id) or voyage.pending_encounter.id != encounter_id ->
+        {:reply, {:error, :encounter_mismatch}, state}
+
+      voyage.tactical_encounter != nil ->
+        {:reply, {:error, :tactical_encounter_active}, state}
+
+      voyage.pending_encounter.classification not in [:hostile_contact, :patrol_attention] ->
+        {:reply, {:error, :not_a_combat_encounter}, state}
+
+      true ->
+        # Retain pending_encounter as the authoritative suspended decision.
+        # The UI shows the combat cockpit instead of the modal during combat.
+        tactical = %{id: encounter_id, contact_id: voyage.pending_encounter.contact_id,
+          call_sign: voyage.pending_encounter.call_sign}
+        updated = %{voyage | tactical_encounter: tactical}
+        state = put_voyage(state, player_id, updated)
+        broadcast(state, player_id, updated)
+        {:reply, {:ok, public(updated, state, player_id)}, state}
+    end
+  end
+
+  def handle_call({:finish_tactical, player_id, encounter_id, outcome}, _from, state) do
+    {voyage, state} = ensure_player(state, player_id)
+
+    cond do
+      not is_map(voyage.tactical_encounter) ->
+        {:reply, {:error, :no_tactical_encounter}, state}
+
+      voyage.tactical_encounter.id != encounter_id ->
+        {:reply, {:error, :encounter_mismatch}, state}
+
+      outcome not in [:rollback, :victory, :retreat, :defeat] ->
+        {:reply, {:error, :invalid_encounter_outcome}, state}
+
+      true ->
+        # Victory/retreat resume the interrupted SOL route. Defeat cancels
+        # it and returns the navigator to the origin staging region; the
+        # destroyed local ship is respawned by the ordinary reconnect path.
+        updated =
+          case outcome do
+            :rollback -> %{voyage | tactical_encounter: nil}
+            :defeat ->
+              %{idle(voyage.location_id) |
+                arrival_origin_id: voyage.arrival_origin_id,
+                voyage_number: voyage.voyage_number}
+            _ -> %{voyage | tactical_encounter: nil, pending_encounter: nil}
+          end
         state = put_voyage(state, player_id, updated)
         broadcast(state, player_id, updated)
         {:reply, {:ok, public(updated, state, player_id)}, state}
@@ -228,6 +308,7 @@ defmodule Core.Universe.Navigation do
       origin_position_km: position_km, position_km: position_km,
       destination_position_km: nil,
       pending_encounter: nil,
+      tactical_encounter: nil,
       cruise_speed_km_s: 0.0,
       travel_distance_km: 0.0, distance_travelled_km: 0.0,
       elapsed_ms: 0, duration_ms: 0}
@@ -306,7 +387,11 @@ defmodule Core.Universe.Navigation do
       contacts: Traffic.contacts(traffic, voyage.position_km),
       encounter: EncounterDirector.evaluate(traffic, voyage, reputations_for(state, player_id)),
       cruise_paused: voyage.pending_encounter != nil,
-      planetary_view: PlanetaryView.describe(voyage),
+      # Tactical combat currently takes place in the pilot's existing
+      # orbital map. Show that map's ACTUAL planet and collision geometry,
+      # not the approaching destination (which would be misleading).
+      planetary_view: PlanetaryView.describe(
+        if(voyage.tactical_encounter, do: %{voyage | status: :idle}, else: voyage)),
       territory: %{
         status: jurisdiction.status,
         faction_ids: Enum.map(jurisdiction.claims, & &1.faction_id)

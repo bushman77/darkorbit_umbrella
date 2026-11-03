@@ -8,8 +8,6 @@ defmodule DarkorbitWeb.HelmetChannel do
   alias Darkorbit.{Helmets, World}
   alias DarkorbitWeb.{HelmetManager, HelmetNetwork}
 
-  @map_id "1-1"
-
   @impl true
   def join("helmet:control:" <> id, _params,
            %{assigns: %{socket_role: :pilot, current_player_id: player_id}} = socket) do
@@ -111,25 +109,51 @@ defmodule DarkorbitWeb.HelmetChannel do
 
   @impl true
   def handle_info({:helmet_mode, :combat}, socket) do
-    unless socket.assigns.helmet_active do
-      :ok = World.subscribe(@map_id)
-      # The viewer receives only its own encounter status, not pilot commands.
-      :ok = World.subscribe("sol")
-    end
+    # Helmet mirrors the player's actual current planet map, not the legacy
+    # Sector 1-1 test fixture. Tactical encounters share the current orbital
+    # map, so every authenticated headset sees the same real opponent.
+    case World.region_for_player(socket.assigns.helmet_player_id) do
+      {:ok, %{map_id: map_id}} ->
+        previous = socket.assigns[:helmet_map_id]
 
-    push(socket, "helmet_mode", %{mode: "combat"})
-    case World.snapshot(@map_id) do
-      {:ok, map} ->
-        push(socket, "helmet_snapshot",
-          %{map: map, player_id: socket.assigns.helmet_player_id})
-      {:error, _} -> push(socket, "helmet_error", %{reason: "world_unavailable"})
+        if socket.assigns.helmet_active and previous != nil and previous != map_id do
+          Phoenix.PubSub.unsubscribe(Darkorbit.PubSub,
+            Darkorbit.World.PubSub.topic(previous))
+        end
+
+        if not socket.assigns.helmet_active or previous != map_id do
+          :ok = World.subscribe(map_id)
+        end
+
+        unless socket.assigns.helmet_active do
+          :ok = World.subscribe("sol")
+        end
+
+        push(socket, "helmet_mode", %{mode: "combat"})
+
+        case World.snapshot(map_id) do
+          {:ok, map} ->
+            push(socket, "helmet_snapshot",
+              %{map: map, player_id: socket.assigns.helmet_player_id})
+          {:error, _} ->
+            push(socket, "helmet_error", %{reason: "world_unavailable"})
+        end
+
+        {:noreply, socket |> assign(:helmet_active, true)
+                          |> assign(:helmet_map_id, map_id)}
+
+      {:error, reason} ->
+        push(socket, "helmet_error", %{reason: inspect(reason)})
+        {:noreply, socket}
     end
-    {:noreply, assign(socket, :helmet_active, true)}
   end
 
   def handle_info({:helmet_mode, :standby}, socket) do
     if socket.assigns.helmet_active do
-      Phoenix.PubSub.unsubscribe(Darkorbit.PubSub, Darkorbit.World.PubSub.topic(@map_id))
+      if socket.assigns[:helmet_map_id] do
+        Phoenix.PubSub.unsubscribe(Darkorbit.PubSub,
+          Darkorbit.World.PubSub.topic(socket.assigns.helmet_map_id))
+      end
       Phoenix.PubSub.unsubscribe(Darkorbit.PubSub, Darkorbit.World.PubSub.topic("sol"))
     end
     push(socket, "helmet_mode", %{mode: "standby"})
@@ -192,6 +216,9 @@ defmodule DarkorbitWeb.HelmetChannel do
 
   # Unrelated process messages must never tear down a registered HMD.
   def handle_info(_message, socket), do: {:noreply, socket}
+
+  defp helmet_encounter(%{tactical_encounter: tactical}) when is_map(tactical),
+    do: %{paused: false, encounter: nil}
 
   defp helmet_encounter(%{pending_encounter: encounter}) when is_map(encounter) do
     %{paused: true, encounter: Map.take(encounter,

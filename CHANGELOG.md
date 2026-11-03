@@ -513,3 +513,28 @@
 - Added collision-of-trajectories and lifecycle regressions and extended
   channel arrival test for multiple decisions. Tactical fights remain
   unimplemented; no Mix execution available in the editing environment.
+
+
+
+### Enter real 3D combat from a hostile SOL encounter (2026-11-03)
+
+- Added a server-validated **Engage / Enter combat** action for hostile
+  and patrol-attention close passes. Neutral contacts remain unchanged.
+- Instantiated one Dart-class local opponent per pilot encounter, named
+  for the contacted vessel, with validated map-space spawn near the ship.
+- During tactical combat only, unlock conventional cockpit controls,
+  preserve frozen SOL travel progress, and keep the current real planet
+  visible to avoid concealing collision hazards.
+- Verified-map-victory and explicit retreat both resume the original
+  interplanetary route. Retreat cleans stale target locks.
+- Paired HMD now subscribes to pilot's real planetary map and remains
+  display-only.
+- Added core world and Phoenix channel tests. The tactical scene currently
+  reuses the existing orbital region (not isolated mid-space). Tests and
+  physical headset acceptance await running on the user's workstation.
+
+- On server-confirmed pilot defeat, canceled the held SOL voyage and
+  cleaned the NPC so the player can reconnect at their departure planet.
+  Added authorization regression tests for defeated ships.
+- Reused the original swept-wing Dart model for unique tactical NPC IDs
+  and limited an encounter NPC's auto-targeting to its owner.
