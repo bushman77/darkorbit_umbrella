@@ -60,8 +60,11 @@ defmodule Core.World.FlightDynamics do
       # under the keyboard braking profile. Only neutral axes are snapped;
       # keyboard-held axes continue under the established controls.
       angular_velocity =
-        if Map.get(entity.rotation_input, :mouse_steering, false) and
-             not mouse_steering? do
+        if mouse_steering? or Map.get(entity.rotation_input, :mouse_steering, false) do
+          # Mouse steering is a rate command, not inertial ship rotation.
+          # Apply a zero axis immediately when the command is received, not
+          # one simulation tick later. Nonzero keyboard overrides remain
+          # active and keyboard-only flight keeps its inertial braking.
           entity.angular_velocity
           |> maybe_stop_mouse_axis(:yaw, yaw)
           |> maybe_stop_mouse_axis(:pitch, pitch)
