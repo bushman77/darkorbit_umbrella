@@ -506,6 +506,30 @@ current SOL location ID. Full physical region transfers, actual
 orbital geometry and persistent region ownership must be built
 before connecting the Atlas to simulated space.
 
+## Player-independent strategic traffic and neutral contacts (2026-11-03)
+
+`Core.Universe.Traffic` is a deterministic server-side state machine
+advanced by the existing `Core.Universe.Navigation` GenServer clock.
+A stable independent freighter (`traffic:sol:meridian-01`) makes the
+Earth → Mars industrial machinery delivery, docks for 45 seconds and
+returns carrying refined minerals. Travel is defined in compressed
+SOL game-km, independent of local Sector 1-1 XYZ flight coordinates.
+
+Player voyages do **not** own, create or tick the freighter. Each
+navigation snapshot derives its current nearby sensor contacts using
+authoritative pilot and traffic positions (2M game-km provisional radius).
+The Phoenix channel only forwards a player's SOL snapshots to that
+same authenticated pilot; `solar_hail` validates the active world session,
+the existing contact ID and range before revealing a neutral radio
+response and cargo. Atlas displays this under SENSOR TRAFFIC.
+The freighter remains on course after hailing and never automatically
+materializes a tactical enemy.
+
+This first milestone is runtime-persistent only. A full server restart
+resets the seeded route. Real persistence, safe physical encounters,
+player/NPC co-location, tactical enter/exit transitions, trade inventory
+and NPC-v-NPC consequences remain upcoming development slices.
+
 ## Distinct conventional and sublight cruise regimes (2026-11-02)
 
 `Core.Universe.Sol` supplies a static gameplay geometry in `game km`:
