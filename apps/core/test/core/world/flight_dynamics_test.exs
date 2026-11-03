@@ -5,6 +5,7 @@ defmodule Core.World.FlightDynamicsTest do
   alias Core.World.FlightDynamics
   alias Core.World.MapDefinition
   alias Core.World.Orientation
+  alias Core.World.PlanetaryCollision
   alias Core.World.Position
 
   defp ship do
@@ -17,7 +18,7 @@ defmodule Core.World.FlightDynamicsTest do
     }
   end
 
-  test "orbital regions stop ships at a real-radius planetary safety boundary" do
+  test "flight dynamics preserves travel segments for fatal swept collision resolution" do
     map = Core.Universe.OrbitalEntry.planet_maps()
       |> Enum.find(&(&1.id == "sol:venus"))
     planet = map.planet
@@ -31,15 +32,15 @@ defmodule Core.World.FlightDynamicsTest do
       cruise_speed: 30.0
     }
 
-    stopped = FlightDynamics.step(approaching, map, 0.1, 1)
-    assert_in_delta stopped.position.x, centre.x + boundary, 1.0e-7
-    assert_in_delta stopped.position.y, centre.y, 1.0e-7
-    assert stopped.velocity == %{x: 0.0, y: 0.0, z: 0.0}
-    assert stopped.cruise_speed == 0.0
-
-    again = FlightDynamics.step(stopped, map, 0.1, 2)
-    assert_in_delta again.position.x, centre.x + boundary, 1.0e-7
-    assert again.velocity == %{x: 0.0, y: 0.0, z: 0.0}
+    moved = FlightDynamics.step(approaching, map, 0.1, 1)
+    # The old silent safety clamp must not swallow a fatal collision.
+    assert moved.position.x < centre.x + boundary
+    assert moved.velocity.x < 0.0
+    assert {:crashed, dead} = PlanetaryCollision.resolve(approaching, moved, map)
+    assert dead.status == :destroyed
+    assert dead.hull == 0
+    assert_in_delta dead.position.x, centre.x + boundary, 1.0e-7
+    assert dead.velocity == %{x: 0.0, y: 0.0, z: 0.0}
   end
 
   test "planetary radius restrictions never apply to old combat fixtures" do
