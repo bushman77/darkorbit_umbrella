@@ -39,6 +39,7 @@ export function encounterRenderSpec(navigation) {
       y: r.z / magnitude * distance,
       z: -forward / magnitude * distance,
     },
-    scale: 2.2,
+    // Purely visual magnification as separation closes; never a hit box.
+    scale: 1.5 + 3.2 * (1 - encounter.distance_km / 650_000),
   }
 }
