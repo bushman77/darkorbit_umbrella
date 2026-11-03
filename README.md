@@ -384,6 +384,38 @@ a separate local tactical flight view. We can connect it later to
 the server's solar navigation region as new planetary local sectors
 and an encounter director are built.
 
+### Living universe V1 — scheduled neutral traffic (2026-11-03)
+
+**Meridian-01** is the first persistent *runtime* civilian vessel in SOL.
+`Core.Universe.Traffic` assigns it a stable ID, independent faction, a
+scheduled Earth → Mars machinery delivery, a 45-second dock visit, and a
+return Mars → Earth voyage carrying refined minerals. The freighter
+advances on the same authoritative one-second system clock as player
+voyages **even without any connected player**. A player cannot spawn,
+redirect or stop it by joining a session or opening the Atlas.
+
+`Core.Universe.Navigation` derives contacts from Euclidean distances in
+compressed system **game-km**, with a provisional 2,000,000 game-km
+sensor radius. Contact snapshots are pilot-position-specific; the
+`WorldChannel` forwards those snapshots only to the authenticated pilot.
+The Atlas's **SENSOR TRAFFIC** panel lists in-range non-hostile vessels
+and provides **Hail freighter**. Hailing revalidates sensor range on
+the server and returns its purpose and cargo manifest, without altering
+the route. Unknown/out-of-range hails are rejected. No browser-supplied
+player ID or ship coordinates are trusted.
+
+This is **not** a tactical encounter spawn and not yet a trade inventory
+exchange. It does not create a `Core.NPC.Entity`, engage combat, pause
+interplanetary travel or move a ship into Sector 1-1. Strategic vessel
+identity/route continuity survives player disconnects **within the same
+server process**; a full server restart currently resets this seeded
+freighter. Next: durable world snapshots, shared tactical encounter
+handoffs and consequences from piracy, rescue and trade.
+
+Tests: `mix test apps/core/test/core/universe/traffic_test.exs
+apps/core/test/core/universe/navigation_test.exs
+apps/core/test/core/world/world_test.exs` (from umbrella root).
+
 ### Interplanetary cruise V2 — real-time sublight travel (2026-11-02)
 
 The game now implements two **mutually exclusive propulsion regimes**:
