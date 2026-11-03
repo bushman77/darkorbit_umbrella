@@ -32,16 +32,19 @@ export class FlightControls {
     this.lastRollWheelAt = -Infinity
     this.wheelRollDirection = 0
     this.wheelRollUntil = -Infinity
+    this.mouseAxes = {yaw: 0, pitch: 0}
+    this.mouseDirty = false
+    this.lastMouseEmit = -Infinity
   }
 
   axes() {
     const axis = (positive, negative) =>
       Number(this.pressed.has(positive)) - Number(this.pressed.has(negative))
     return {
-      yaw: axis("KeyD", "KeyA"),
-      pitch: this.pressed.has("KeyW") && this.pressed.has("KeyS")
+      yaw: axis("KeyD", "KeyA") || this.mouseAxes.yaw,
+      pitch: (this.pressed.has("KeyW") && this.pressed.has("KeyS")
         ? (this.lastPitchKey === "KeyS" ? -1 : 1)
-        : axis("KeyW", "KeyS"),
+        : axis("KeyW", "KeyS")) || this.mouseAxes.pitch,
       // Keyboard roll wins if Q/E is held. Ctrl+wheel provides a short pulse
       // that springs back to neutral; it never latches a permanent roll.
       roll: axis("KeyE", "KeyQ") ||
@@ -56,6 +59,31 @@ export class FlightControls {
   emit() {
     this.lastEmit = this.now()
     this.send(this.payload())
+  }
+
+  setMouseSteering({yaw = 0, pitch = 0} = {}) {
+    if (!this.active()) return false
+    const clamp = value => Math.max(-1, Math.min(1, Number.isFinite(value) ? value : 0))
+    yaw = clamp(yaw)
+    pitch = clamp(pitch)
+    if (this.mouseAxes.yaw === yaw && this.mouseAxes.pitch === pitch) return false
+    this.mouseAxes = {yaw, pitch}
+    this.mouseDirty = true
+    const now = this.now()
+    if (now - this.lastMouseEmit >= 50) {
+      this.emit()
+      this.lastMouseEmit = now
+      this.mouseDirty = false
+    }
+    return true
+  }
+
+  clearMouseSteering({silent = false} = {}) {
+    const changed = this.mouseAxes.yaw !== 0 || this.mouseAxes.pitch !== 0
+    this.mouseAxes = {yaw: 0, pitch: 0}
+    this.mouseDirty = false
+    if (changed && !silent) this.emit()
+    return changed
   }
 
   throttleDirection() {
@@ -150,9 +178,11 @@ export class FlightControls {
 
     if (event.code === "KeyF") {
       event.preventDefault()
-      let changed = this.wheelRollDirection !== 0
+      let changed = this.wheelRollDirection !== 0 ||
+        this.mouseAxes.yaw !== 0 || this.mouseAxes.pitch !== 0
       for (const code of ROTATION_KEYS) changed = this.pressed.delete(code) || changed
       this.clearWheelRoll()
+      this.clearMouseSteering({silent: true})
       if (changed) {
         this.lastPitchKey = null
         this.emit()
@@ -195,10 +225,12 @@ export class FlightControls {
   }
 
   release({silent = false} = {}) {
-    if (!this.pressed.size && !this.wheelRollDirection) return
+    if (!this.pressed.size && !this.wheelRollDirection &&
+        this.mouseAxes.yaw === 0 && this.mouseAxes.pitch === 0) return
     this.pressed.clear()
     this.lastPitchKey = null
     this.clearWheelRoll()
+    this.clearMouseSteering({silent: true})
     if (!silent) this.emit()
   }
 
@@ -209,10 +241,16 @@ export class FlightControls {
     this.lastPitchKey = null
     this.wheelAccumulated = 0
     this.clearWheelRoll()
+    this.clearMouseSteering({silent: true})
   }
 
   heartbeat(time) {
     if (!this.active()) return
+    if (this.mouseDirty && time - this.lastMouseEmit >= 50) {
+      this.emit()
+      this.lastMouseEmit = time
+      this.mouseDirty = false
+    }
     // Always send a neutral roll intention when the wheel impulse expires,
     // even if no keyboard button is held. Otherwise the server could keep
     // rolling until its own input-expiry watchdog trips.
@@ -220,7 +258,8 @@ export class FlightControls {
       this.clearWheelRoll()
       this.emit()
     }
-    if (!this.pressed.size && !this.wheelRollDirection) return
+    if (!this.pressed.size && !this.wheelRollDirection &&
+        this.mouseAxes.yaw === 0 && this.mouseAxes.pitch === 0) return
     // =/- ramp the signed throttle while held, independent of OS key repeats.
     if (this.throttleDirection() !== 0) this.stepThrottle(this.throttleDirection(), time)
     if (time - this.lastEmit > 300) this.emit()
