@@ -6,9 +6,9 @@ defmodule Core.Universe.Navigation do
   Earth as a new pilot's start location, and real-time sublight interplanetary
   cruise through compressed game-scale system coordinates.
   Navigation and map-space combat are separate: no AU values are mapped into
-  Sector 1-1 coordinates. Strategic civilian traffic is simulated even when
-  no player is connected; overlapping sensors expose observational contacts
-  and authenticated hails, but do not yet instantiate tactical 3D NPCs.
+  Sector 1-1 coordinates. Strategic traffic runs continuously even when no player is connected;
+  close passes produce observational, hailable cockpit flybys with genuine
+  server-owned relative positions, but not tactical combat NPC instances.
 
   Voyages and traffic persist within the supervised server runtime and
   advance independently of player sessions. Database persistence across
@@ -20,6 +20,7 @@ defmodule Core.Universe.Navigation do
 
   alias Core.Universe.Sol
   alias Core.Universe.PlanetaryView
+  alias Core.Universe.Encounters
   alias Core.Universe.Traffic
   alias Core.Universe.Territory
   alias Core.World.EventSink
@@ -70,6 +71,7 @@ defmodule Core.Universe.Navigation do
     state = %{
       voyages: %{},
       traffic: Keyword.get(opts, :traffic, Traffic.seed()),
+      encountered: %{},
       tick_ms: tick_ms,
       auto_tick?: Keyword.get(opts, :auto_tick, true),
       event_sink: Keyword.fetch!(opts, :event_sink)
@@ -200,6 +202,7 @@ defmodule Core.Universe.Navigation do
                 voyage.origin_position_km, voyage.destination_position_km, fraction)}
           end
         current = put_voyage(current, player_id, updated)
+        current = announce_encounter(current, player_id, updated)
         broadcast(current, player_id, updated)
         current
 
@@ -233,12 +236,34 @@ defmodule Core.Universe.Navigation do
       progress: progress,
       remaining_ms: remaining_ms,
       contacts: Traffic.contacts(traffic, voyage.position_km),
+      encounter: Encounters.nearest(traffic, voyage),
       planetary_view: PlanetaryView.describe(voyage),
       territory: %{
         status: jurisdiction.status,
         faction_ids: Enum.map(jurisdiction.claims, & &1.faction_id)
       }
     })
+  end
+
+  # A real traffic vessel can pass multiple pilots. The flyby is published
+  # only on a pilot's first proximity crossing for that vessel/voyage;
+  # repeated SOL snapshots still carry its current relative position.
+  defp announce_encounter(state, player_id, voyage) do
+    case Encounters.nearest(state.traffic, voyage) do
+      nil -> state
+      encounter ->
+        seen = Map.get(state.encountered, player_id, MapSet.new())
+        if MapSet.member?(seen, encounter.id) do
+          state
+        else
+          EventSink.dispatch(state.event_sink, "sol", :solar_encounter_started, %{
+            player_id: player_id,
+            encounter: encounter
+          })
+          %{state | encountered: Map.put(state.encountered, player_id,
+            MapSet.put(seen, encounter.id))}
+        end
+    end
   end
 
   defp broadcast(state, player_id, voyage) do
