@@ -16,6 +16,8 @@ defmodule Core.Universe.NavigationTest do
     assert {:ok, state} = Navigation.snapshot(server, 11)
     assert state.system_id == "sol"
     assert state.location_id == "earth"
+    assert state.arrival_origin_id == nil
+    assert state.voyage_number == 0
     assert state.status == :idle
     assert state.destination_id == nil
     assert state.progress == 0.0
@@ -43,6 +45,7 @@ defmodule Core.Universe.NavigationTest do
     assert {:ok, starting} = Navigation.snapshot(server, 22)
     assert {:ok, underway} = Navigation.set_course(server, 11, "mars")
     assert underway.origin_id == "earth"
+    assert underway.voyage_number == 1
     assert underway.destination_id == "mars"
     assert underway.status == :traveling
     assert underway.remaining_ms > 0
@@ -63,6 +66,8 @@ defmodule Core.Universe.NavigationTest do
     for _ <- 1..ceil(underway.duration_ms / 1_000), do: :ok = Navigation.tick(server)
     assert {:ok, arrived} = Navigation.snapshot(server, 11)
     assert arrived.location_id == "mars"
+    assert arrived.arrival_origin_id == "earth"
+    assert arrived.voyage_number == 1
     assert arrived.status == :idle
     assert arrived.propulsion_mode == :conventional
     assert arrived.destination_id == nil
@@ -72,7 +77,7 @@ defmodule Core.Universe.NavigationTest do
     assert waiting.location_id == starting.location_id
     assert waiting.position_km == starting.position_km
     assert waiting.status == :idle
-    assert {:ok, %{destination_id: "pluto"}} =
+    assert {:ok, %{destination_id: "pluto", voyage_number: 2}} =
       Navigation.set_course(server, 11, "pluto")
   end
 
