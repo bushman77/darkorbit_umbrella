@@ -22,7 +22,8 @@ through the existing Three.js StereoSpaceView (no video stream).
    automatically. If the browser blocks fullscreen, the page offers a windowed
    fallback. The stereo display stays black in Atlas/standby.
 6. If the two headset images do not fuse comfortably, open **Lens alignment
-   settings** before entering VR. Adjust the center gap and eye separation.
+   settings** before entering VR. Adjust the signed center alignment and
+   eye separation. Negative center alignment pulls the two images inward.
    Values are remembered on the phone and SBS uses separate, nonoverlapping
    eye viewports. Exiting fullscreen returns to the setup controls.
 
@@ -66,10 +67,11 @@ worn. Only one device is registered per pilot in the initial release.
 In laptop **cockpit** mode, once the paired Galaxy S21 reports that it is
 actually rendering SBS, use the following keyboard shortcuts:
 
-- **F5:** decrease the black center gap by 2 pixels.
-- **Ctrl+F5:** increase the center gap by 2 pixels.
-- **F6:** decrease eye separation (IPD) by 1 mm.
-- **Ctrl+F6:** increase eye separation (IPD) by 1 mm.
+- **Left Arrow (←):** move the two eye images closer together, 2 pixels
+  of total center alignment per press.
+- **Right Arrow (→):** move the images farther apart, 2 pixels per press.
+- **F6:** decrease simulated eye separation (IPD) by 1 mm.
+- **Ctrl+F6:** increase simulated eye separation (IPD) by 1 mm.
 
 The laptop sends a constrained command through the authenticated
 `helmet:control:<pilot-id>` channel. `HelmetManager` permits the command only
@@ -78,11 +80,19 @@ in cockpit/combat mode with a connected, actively rendering phone, and the
 immediately, persists its own gap/IPD settings in localStorage, and reports
 the actual values back to the laptop. The cockpit panel shows those values.
 
-Commands are ignored while the Solar Atlas or a typing field is open, and
-holding a key does not auto-repeat adjustments. Some browsers reserve F5
-and Ctrl+F5 for reload and may not deliver the keydown event to the page.
-If that happens, use the four **Gap −/+** and **IPD −/+** buttons on the
-in-cockpit HMD calibration panel. No QR re-pairing is necessary.
+Commands are ignored while the Solar Atlas or a typing field is open.
+Holding Left/Right repeats adjustments at a controlled rate rather than
+flooding Phoenix. F5 is no longer mapped. The cockpit also has **Closer/Farther**
+and **IPD −/+** buttons as alternatives. No QR re-pairing is necessary.
+
+Center alignment accepts -160px to +80px. Positive values reserve a black
+center gap; at zero the two rendering regions meet without overlap. Negative
+values move the left-eye image optically inward/right and the right-eye image
+inward/left by shifting each projection matrix within its own half. This
+allows closer visual alignment even after the black gap reaches zero while
+preserving separate, non-overlapping framebuffers. The lens separation
+(40–85 mm) remains a distinct calibration. Make incremental changes to avoid
+eyestrain or double vision.
 
 ## Running on the laptop
 
