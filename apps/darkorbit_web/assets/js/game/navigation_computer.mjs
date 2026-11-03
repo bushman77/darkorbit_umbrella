@@ -32,6 +32,7 @@ export class NavigationComputer {
   constructor({root, getEntities, getSelfId, getBoundaries, isConnected, engage, halt,
     solarSetCourse = (_id, done) => done(false, null, "unavailable"),
     solarCancelCourse = done => done(false, null, "unavailable"),
+    solarHail = (_id, done) => done(false, null, "unavailable"),
     onOpen, onClose}) {
     this.root = root
     this.getEntities = getEntities
@@ -42,6 +43,7 @@ export class NavigationComputer {
     this.halt = halt
     this.solarSetCourse = solarSetCourse
     this.solarCancelCourse = solarCancelCourse
+    this.solarHail = solarHail
     this.onOpen = onOpen
     this.onClose = onClose
     this.draft = []
@@ -65,6 +67,10 @@ export class NavigationComputer {
       () => this.engageSolarCourse())
     this.root.querySelector("#nav-solar-cancel")?.addEventListener("click",
       () => this.cancelSolarCourse())
+    this.root.querySelector("#nav-traffic-contacts")?.addEventListener("click", event => {
+      const id = event.target?.closest?.("[data-traffic-hail]")?.dataset.trafficHail
+      if (id) this.hailTraffic(id)
+    })
     this.root.querySelector("#nav-view-system")?.addEventListener("click",
       () => this.setView("system"))
     this.root.querySelector("#nav-view-sector")?.addEventListener("click",
@@ -218,6 +224,51 @@ export class NavigationComputer {
     })
   }
 
+  hailTraffic(id) {
+    if (!this.isConnected()) return
+    const status = this.root.querySelector("#nav-traffic-comms")
+    if (status) status.textContent = "Opening civilian frequency…"
+    this.solarHail(id, (ok, communication, reason) => {
+      if (!status) return
+      if (!ok) {
+        status.textContent = `Hail unavailable: ${reason || "contact lost"}`
+        return
+      }
+      const manifest = Object.entries(communication.cargo || {})
+        .map(([item, count]) => `${item.replaceAll("_", " ")}: ${count}`)
+        .join(", ")
+      status.textContent = `${communication.call_sign}: ${communication.message}\nCargo: ${manifest}`
+    })
+  }
+
+  renderTrafficContacts() {
+    const root = this.root.querySelector("#nav-traffic-contacts")
+    if (!root) return
+    const contacts = this.solarNavigation?.contacts || []
+    root.replaceChildren()
+    if (!contacts.length) {
+      root.textContent = "No vessels currently in sensor range."
+      return
+    }
+    for (const contact of contacts) {
+      const item = document.createElement("div")
+      item.className = "rounded border border-cyan-500/25 bg-slate-900/80 p-2"
+      const title = document.createElement("p")
+      title.className = "font-semibold text-cyan-100"
+      title.textContent = `${contact.call_sign} · ${contact.disposition.toUpperCase()}`
+      const detail = document.createElement("p")
+      detail.className = "mt-1 text-slate-300"
+      detail.textContent = `${contact.origin_id} → ${contact.destination_id} · ${contact.state.replaceAll("_", " ")} · ${Math.round(contact.distance_km).toLocaleString("en-US")} game km`
+      const button = document.createElement("button")
+      button.type = "button"
+      button.className = "nav-button mt-2"
+      button.dataset.trafficHail = contact.id
+      button.textContent = "Hail freighter"
+      item.append(title, detail, button)
+      root.appendChild(item)
+    }
+  }
+
   renderSolarNavigation() {
     const nav=this.solarNavigation
     const name=id=>findSolarBody(id)?.name || "Unknown"
@@ -263,6 +314,7 @@ export class NavigationComputer {
     }
     const abort=this.root.querySelector("#nav-solar-cancel")
     if(abort)abort.disabled=this.solarPending||!connected||!traveling
+    this.renderTrafficContacts()
   }
 
   renderSolarView() {
