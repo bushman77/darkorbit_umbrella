@@ -8,9 +8,8 @@ defmodule Core.World.PlanetaryCollisionTest do
   alias Core.Universe.OrbitalEntry
 
   @center %{x: 200_000.0, y: 200_000.0, z: 0.0}
-  @radius 6_536.0
 
-  defp pos(x, y \ 0.0, z \ 0.0) do
+  defp pos(x, y \\ 0.0, z \\ 0.0) do
     %Position{x: @center.x + x, y: @center.y + y, z: z}
   end
 
@@ -67,8 +66,7 @@ defmodule Core.World.PlanetaryCollisionTest do
     assert destroyed.route_waypoints == []
     assert destroyed.target_id == nil
     assert destroyed.engaged_target_id == nil
-    assert destroyed.angular_velocity == %{x: 0.0, y: 0.0, z: 0.0} or
-      destroyed.angular_velocity == %{yaw: 0.0, pitch: 0.0, roll: 0.0}
+    assert destroyed.angular_velocity == %{yaw: 0.0, pitch: 0.0, roll: 0.0}
     assert {:ok, ^destroyed} =
       PlanetaryCollision.resolve(destroyed, destroyed, orbital)
   end
