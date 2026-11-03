@@ -79,7 +79,7 @@ defmodule DarkorbitWeb.HelmetChannel do
 
   def handle_in("alignment_state", %{"eye_gap_px" => gap, "eye_sep_mm" => separation},
                 %{assigns: %{helmet_role: :viewer}} = socket)
-      when is_integer(gap) and gap in 0..80 and
+      when is_integer(gap) and gap in -160..80 and
            is_integer(separation) and separation in 40..85 do
     case HelmetManager.report_alignment(self(), gap, separation) do
       :ok -> {:reply, {:ok, %{}}, socket}
