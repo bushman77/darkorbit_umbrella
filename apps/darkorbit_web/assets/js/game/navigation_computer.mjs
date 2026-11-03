@@ -139,6 +139,30 @@ export class NavigationComputer {
     return this.getEntities().get(this.getSelfId())
   }
 
+  setRegion(name, mapId) {
+    // This is a server-provided local tactical region, not a new SOL route.
+    this.regionName = name || "Sector 1-1"
+    this.regionMapId = mapId || "1-1"
+    this.draft = []
+    const regionTab = this.root.querySelector("#nav-view-sector")
+    if (regionTab) regionTab.textContent = this.regionName
+    const caption = this.root.querySelector("#nav-sector-view .nav-map-caption span")
+    if (caption) caption.textContent = this.regionName.toUpperCase() + " // XY PROJECTION"
+    const bounds = this.getBoundaries()
+    for (const [id, min, max] of [
+      ["#nav-x", 0, bounds.width],
+      ["#nav-y", 0, bounds.height],
+      ["#nav-z", bounds.altitude_min ?? -3000, bounds.altitude_max ?? 3000],
+    ]) {
+      const input = this.root.querySelector(id)
+      if (input) {
+        input.min = String(min)
+        input.max = String(max)
+      }
+    }
+    this.setView(this.view)
+  }
+
   setView(view) {
     if(view!=="system"&&view!=="sector")return
     this.view=view
@@ -150,7 +174,7 @@ export class NavigationComputer {
     this.root.querySelector("#nav-view-system").classList.toggle("is-active",system)
     this.root.querySelector("#nav-view-sector").classList.toggle("is-active",!system)
     this.root.querySelector("#nav-title").textContent=system?
-      "Solar System Atlas":"Sector 1-1 Navigation"
+      "Solar System Atlas":(this.regionName || "Sector 1-1") + " Navigation"
     this.root.querySelector("#nav-subtitle").textContent=system?
       "One star system · Sun, eight planets and Pluto · select a world to inspect" :
       "Local XY tactical chart · plot waypoints with independent Z altitude"
