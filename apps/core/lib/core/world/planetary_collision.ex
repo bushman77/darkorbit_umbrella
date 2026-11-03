@@ -13,6 +13,7 @@ defmodule Core.World.PlanetaryCollision do
   alias Core.World.Position
 
   @zero_vector %{x: 0.0, y: 0.0, z: 0.0}
+  @zero_rotation %{yaw: 0.0, pitch: 0.0, roll: 0.0}
 
   @spec resolve(Entity.t(), Entity.t(), MapDefinition.t()) ::
           {:ok, Entity.t()} | {:crashed, Entity.t()}
@@ -45,7 +46,7 @@ defmodule Core.World.PlanetaryCollision do
            cruise_speed: 0.0,
            velocity: @zero_vector,
            rotation_input: %{yaw: 0.0, pitch: 0.0, roll: 0.0},
-           angular_velocity: @zero_vector,
+           angular_velocity: @zero_rotation,
            target_id: nil,
            engaged_target_id: nil}}
     end
