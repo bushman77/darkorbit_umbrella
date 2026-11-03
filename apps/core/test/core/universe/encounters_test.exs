@@ -44,6 +44,25 @@ defmodule Core.Universe.EncountersTest do
       encounter.distance_km, 1.0e-5
   end
 
+  test "Earth-to-Mars also meets a distinct survey vessel mid-route" do
+    elapsed_ms = 162_000
+    traffic = Traffic.advance(Traffic.seed(), elapsed_ms)
+    progress = elapsed_ms / 1_000 * Sol.cruise_speed_km_s() /
+      Sol.cruise_distance_km("earth", "mars")
+    assert %{contact_id: "traffic:sol:wayfinder-04", kind: :survey_vessel,
+             call_sign: "Wayfinder-04", purpose: :scientific_survey} =
+      Encounters.nearest(traffic, voyage("mars", progress))
+  end
+
+  test "a later departure does not force a scripted courier at the same time" do
+    elapsed_ms = 109_000
+    progress = elapsed_ms / 1_000 * Sol.cruise_speed_km_s() /
+      Sol.cruise_distance_km("earth", "venus")
+    # Traffic clock has already run for two minutes before the pilot leaves.
+    traffic = Traffic.advance(Traffic.seed(), elapsed_ms + 120_000)
+    assert Encounters.nearest(traffic, voyage("venus", progress)) == nil
+  end
+
   test "close passes require an actual moving contact and mid-route position" do
     ships = Traffic.seed()
     assert Encounters.nearest(ships, voyage("venus", 0.0)) == nil
