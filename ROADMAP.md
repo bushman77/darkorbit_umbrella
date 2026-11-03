@@ -430,3 +430,20 @@ validation remain deferred.
 - [ ] Add escalating proximity/collision alerts and gravitational effects.
 - [ ] Implement controlled respawn or rescue/recovery workflow for pilots.
 - [ ] Enable consistent collision behavior in Earth's migrated orbital map.
+
+
+### Planetary proximity warning V1 (2026-11-03)
+
+- [x] Server-owned CAUTION (1.55× lethal radius) and CRITICAL
+  (1.20× lethal radius) proximity bands for all eight orbital maps.
+- [x] Publish one event per zone change, including retreat to safety,
+  without emitting a warning every 100ms simulation tick.
+- [x] Include current per-pilot 3D collision clearance and warning level
+  in world snapshots for late join/reconnect recovery.
+- [x] Add amber/red cockpit alerts and corresponding stereoscopic in-world
+  HUD warnings; hide the flat warning in SBS.
+- [x] Test thresholds, 3D altitude, transition suppression,
+  in-range join snapshots and complete caution→critical→clear flight.
+- [ ] Add optional configurable warning audio.
+- [ ] Add recovery/respawn mechanics, planetary approach autopilot
+  protections and realistic atmospheric/orbital physics.
