@@ -498,3 +498,55 @@ physics-based acceleration/deceleration, true orbital ephemerides, planetary
 interception, interdiction/encounters, or database persistence across game
 server restarts. The V2 abort command still returns to the departure region
 until we introduce a playable deep-space local frame.
+
+
+### Planetary orbital regions V2 — directional arrival and shared maps (2026-11-03)
+
+**All SOL destinations now have a planetary cockpit view and an arrival
+region.** After a voyage completes, the server uses the previous SOL region,
+destination and voyage identity to compute a direction-dependent orbital
+entry point. The ship appears on the **side of the destination planet it
+approached from**, at a safe radial offset, with its nose facing the planet.
+A small deterministic offset per pilot/voyage reduces overlapping spawns.
+
+`Core.Universe.OrbitalEntry` assigns a separate, server-supervised
+`MapServer` to Mercury, Venus, Mars, Jupiter, Saturn, Uranus, Neptune and
+Pluto (`sol:<body>`). Their local maps are each 400,000 × 400,000 units,
+with a ±200,000 vertical range, and use **provisional local kilometres**,
+not SOL's compressed cruise game-kilometres. Players sharing a planetary
+region share its map; pilots at *different* planets cannot see or target
+each other across maps. Earth remains on legacy Sector `1-1` for the
+existing combat/channel fixtures.
+
+The new orbital maps carry the corresponding planet's real mean radius
+and a 1.08×-radius server-owned safety boundary. Manual flight stops
+there instead of passing through the planet. The cockpit planet is
+positioned toward the map's authoritative planet centre, and its
+apparent size updates as the ship's distance changes. This is a
+planetary-relative tactical **staging** system: no orbital gravity,
+terrain, docking, atmospheric entry, or surface landings yet.
+
+`DarkorbitWeb.WorldChannel` enforces the server-resolved region on
+join, publishes SOL navigation to a dedicated shared topic, and pushes
+`world_region_changed` when the voyage arrives. The browser leaves
+its old channel, re-enters the destination region and refreshes its
+sector chart. A client cannot choose an arbitrary map or spawn.
+The four old noninteractive test asteroids are removed; the starfield
+now follows the camera in the much larger orbital maps.
+
+**Compatibility:** the first login at Earth retains the original
+`(1000,1000)` test-spawn pose; arrival at Earth *from another world*
+uses the direction-based entry. Earth's smaller map does not yet have
+the real-radius collision geometry enabled. Full server restarts still
+reset the in-memory SOL voyage and orbital entry; pilot hull/ship state
+is also not yet carried durably across region changes. Do not mistake
+the new safe orbital regions for physically simulated orbits.
+
+**Verification** from the umbrella root:
+```sh
+cd apps/core
+mix test test/core/universe/orbital_entry_test.exs test/core/universe/navigation_test.exs test/core/world/flight_dynamics_test.exs test/core/world/world_test.exs
+cd ../..
+npm test --prefix apps/darkorbit_web/assets
+mix test apps/darkorbit_web/test/darkorbit_web/channels/world_channel_test.exs
+```
