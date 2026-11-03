@@ -17,6 +17,43 @@ defmodule Core.World.FlightDynamicsTest do
     }
   end
 
+  test "orbital regions stop ships at a real-radius planetary safety boundary" do
+    map = Core.Universe.OrbitalEntry.planet_maps()
+      |> Enum.find(&(&1.id == "sol:venus"))
+    planet = map.planet
+    boundary = planet.exclusion_radius
+    centre = planet.center
+
+    approaching = %{ship() |
+      position: %Position{x: centre.x + boundary + 3.0, y: centre.y, z: centre.z},
+      flight_mode: :newtonian,
+      velocity: %{x: -100.0, y: 0.0, z: 0.0},
+      cruise_speed: 30.0
+    }
+
+    stopped = FlightDynamics.step(approaching, map, 0.1, 1)
+    assert_in_delta stopped.position.x, centre.x + boundary, 1.0e-7
+    assert_in_delta stopped.position.y, centre.y, 1.0e-7
+    assert stopped.velocity == %{x: 0.0, y: 0.0, z: 0.0}
+    assert stopped.cruise_speed == 0.0
+
+    again = FlightDynamics.step(stopped, map, 0.1, 2)
+    assert_in_delta again.position.x, centre.x + boundary, 1.0e-7
+    assert again.velocity == %{x: 0.0, y: 0.0, z: 0.0}
+  end
+
+  test "planetary radius restrictions never apply to old combat fixtures" do
+    map = MapDefinition.starting_map()
+    assert map.planet == nil
+    approaching = %{ship() |
+      position: %Position{x: 1000.0, y: 1000.0},
+      flight_mode: :newtonian,
+      velocity: %{x: 100.0, y: 0.0, z: 0.0}
+    }
+    advanced = FlightDynamics.step(approaching, map, 0.1, 1)
+    assert advanced.position.x > 1000.0
+  end
+
   test "after rolling 90 degrees, pitch follows ship-local right axis" do
     map = MapDefinition.starting_map()
     rolled = %{ship() | orientation: Orientation.from_angles(%{
