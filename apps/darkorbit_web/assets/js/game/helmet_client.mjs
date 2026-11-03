@@ -157,7 +157,7 @@ export class HelmetClient {
       if (response.status === 409) {
         this.message("The laptop already has a paired helmet, but this browser has no valid saved credential. Choose Forget headset in the laptop Atlas, then scan the new QR once.")
       } else if (response.status === 410) {
-        this.message("That QR invitation is no longer active. Keep the Atlas HMD panel open, generate a fresh QR, and scan again.")
+        this.message("This QR invitation was already consumed or the Atlas panel closed. If the laptop shows PAIRED but this phone has no saved credential, choose Forget headset once, then scan a fresh QR with the panel open.")
       } else {
         this.message("Helmet registration failed (" + response.status + "). Check the Phoenix server log.")
       }
