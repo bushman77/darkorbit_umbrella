@@ -13,6 +13,25 @@ defmodule Core.Universe.SolTest do
     assert :error == Sol.fetch(nil)
   end
 
+  test "every navigable planetary body has one canonical positive physical radius" do
+    planets = Sol.planets()
+    assert length(planets) == 9
+    assert Enum.uniq(Enum.map(planets, & &1.id)) == Enum.map(planets, & &1.id)
+
+    for %{id: id, radius_km: expected} <- planets do
+      assert is_float(expected)
+      assert expected > 0
+      assert {:ok, radius} = Sol.planet_radius_km(id)
+      assert_in_delta radius, expected, 1.0e-9
+      assert {:ok, ^radius} = Core.Universe.PlanetaryView.radius_km(id)
+    end
+
+    assert {:ok, 6_371.0} = Sol.planet_radius_km("earth")
+    assert {:ok, 6_051.8} = Sol.planet_radius_km("venus")
+    assert :error = Sol.planet_radius_km("sun")
+    assert :error = Sol.planet_radius_km("unknown")
+  end
+
   test "sublight cruise covers compressed game distances in several real minutes" do
     assert Sol.cruise_speed_km_s() < Sol.light_speed_km_s()
     assert Sol.cruise_speed_km_s() > 0
