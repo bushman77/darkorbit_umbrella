@@ -50,6 +50,7 @@ defmodule Core.Universe.Encounters do
       contact_id: contact.id,
       call_sign: contact.call_sign,
       kind: contact.kind,
+      faction_id: contact.faction_id,
       disposition: contact.disposition,
       purpose: contact.purpose,
       origin_id: contact.origin_id,

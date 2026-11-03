@@ -28,34 +28,34 @@ defmodule Core.Universe.Traffic do
   def seed do
     routes = [
       # Preserve the original freighter and its published cargo/route.
-      {"meridian-01", "Meridian-01", :commercial_freighter, :neutral,
+      {"meridian-01", "Meridian-01", :commercial_freighter, :neutral, "independent",
        "earth", "mars", 0.0, :scheduled_delivery,
        %{"industrial_machinery" => 120}, %{"refined_minerals" => 85}},
       # Begins > 2M game-km from Earth, but is catchable mid Earth→Venus.
-      {"vesper-02", "Vesper-02", :courier, :neutral,
+      {"vesper-02", "Vesper-02", :courier, :neutral, "independent",
        "earth", "venus", 0.22, :express_delivery,
        %{"medical_supplies" => 48}, %{"civilian_mail" => 120}},
-      {"wayfinder-04", "Wayfinder-04", :survey_vessel, :neutral,
+      {"wayfinder-04", "Wayfinder-04", :survey_vessel, :neutral, "independent",
        "earth", "mars", 0.22, :scientific_survey,
        %{"survey_equipment" => 25}, %{"rock_samples" => 18}},
-      {"sentinel-07", "Sentinel-07", :patrol, :neutral,
+      {"sentinel-07", "Sentinel-07", :patrol, :neutral, "venus",
        "venus", "mercury", 0.40, :sector_patrol,
        %{"patrol_supplies" => 40}, %{"patrol_supplies" => 40}},
-      {"aurora-12", "Aurora-12", :commercial_freighter, :neutral,
+      {"aurora-12", "Aurora-12", :commercial_freighter, :neutral, "independent",
        "mars", "jupiter", 0.43, :scheduled_delivery,
        %{"spare_parts" => 72}, %{"rare_ores" => 26}},
-      {"sable-18", "Sable-18", :independent_trader, :neutral,
+      {"sable-18", "Sable-18", :independent_trader, :neutral, "independent",
        "jupiter", "saturn", 0.37, :trade_route,
        %{"hydrogen_cells" => 65}, %{"research_data" => 21}}
     ]
 
     Map.new(routes, fn
-      {suffix, name, kind, disposition, from, to, progress, purpose, outbound, inbound} ->
+      {suffix, name, kind, disposition, faction_id, from, to, progress, purpose, outbound, inbound} ->
         vessel = %{
           id: "traffic:sol:" <> suffix,
           call_sign: name,
           kind: kind,
-          faction_id: "independent",
+          faction_id: faction_id,
           disposition: disposition,
           purpose: purpose,
           state: :in_transit,
@@ -102,6 +102,7 @@ defmodule Core.Universe.Traffic do
           id: vessel.id,
           call_sign: vessel.call_sign,
           kind: vessel.kind,
+          faction_id: vessel.faction_id,
           disposition: vessel.disposition,
           origin_id: vessel.origin_id,
           destination_id: vessel.destination_id,
@@ -128,13 +129,14 @@ defmodule Core.Universe.Traffic do
           {:ok, %{
             id: vessel.id,
             call_sign: vessel.call_sign,
+            faction_id: vessel.faction_id,
             disposition: vessel.disposition,
             origin_id: vessel.origin_id,
             destination_id: vessel.destination_id,
             purpose: vessel.purpose,
             state: vessel.state,
             cargo: vessel.cargo,
-            message: vessel.call_sign <> ", independent service. " <>
+            message: vessel.call_sign <> ", " <> vessel.faction_id <> " service. " <>
               "Operating " <> Atom.to_string(vessel.purpose) <>
               " between " <> vessel.origin_id <> " and " <> vessel.destination_id <>
               ". No assistance requested."

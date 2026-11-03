@@ -739,3 +739,43 @@ mix test apps/darkorbit_web/test/darkorbit_web/channels/world_channel_test.exs
 npm test --prefix apps/darkorbit_web/assets
 mix assets.build
 ```
+
+### EncounterDirector V1 — server-owned contact policy (2026-11-03)
+
+`Core.Universe.EncounterDirector` now classifies real close-pass contacts as
+`:neutral_flyby`, `:patrol_attention` or `:hostile_contact`. The director
+reuses the existing traffic/encounter geometry; it never spawns vessels or
+interferes with cruise. Patrol attention requires a faction-owned patrol
+within its own Zone of Control and server-provided standing <= -25.
+Sentinel-07 is explicitly a Venus patrol; the other five scheduled vessels
+remain independent and neutral.
+
+The navigation GenServer attaches classification to pilot-specific encounter
+snapshots and the one-time `solar_encounter_started` event. The regular 3D
+cockpit panel distinguishes non-hostile, patrol-attention and hostile
+contacts without implying actual inspection or combat. All sightings are
+still strategic flybys; SBS uses the existing flyby visualization.
+
+**Boundaries:** The player reputation map is a server-side integration
+fixture, not yet a durable faction-standing ledger. Existing seed traffic
+remains non-hostile by default. No tactical encounter creation, forced
+interception, combat consequences, new client commands, or database state
+are introduced. A separate shared tactical handoff is still required.
+
+Regression tests added for zone/standing boundaries, hostile precedence,
+non-spawning semantics and a hostile per-pilot navigation event. Existing
+courier, survey, travel and client tests remain applicable. Automated test
+execution and manual cockpit verification were **not performed** in this
+editing environment (Elixir/Mix runtime unavailable).
+
+To verify from the umbrella root:
+
+```sh
+mix test apps/core/test/core/universe/encounter_director_test.exs \
+  apps/core/test/core/universe/encounters_test.exs \
+  apps/core/test/core/universe/navigation_test.exs \
+  apps/core/test/core/universe/traffic_test.exs
+mix test apps/darkorbit_web/test/darkorbit_web/channels/world_channel_test.exs
+npm test --prefix apps/darkorbit_web/assets
+mix precommit
+```

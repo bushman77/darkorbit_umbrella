@@ -487,3 +487,18 @@ validation remain deferred.
 - [ ] Add lawful/hostile dispositions, distress requests, NPC-v-NPC
   conflicts, escorts, weapons and consequence/reputation systems.
 - [ ] Persist traffic schedules and pilot encounter state across restarts.
+ 
+### EncounterDirector V1 — server-owned classification (2026-11-03)
+
+- [x] Classify already-observed strategic contacts as neutral flyby,
+  patrol attention or hostile contact, with no NPC spawning.
+- [x] Bind faction-owned Venus patrol to ZOC and provisional server-only
+  standing threshold; leave missing standing neutral.
+- [x] Emit pilot-specific classified encounter snapshots/events without
+  stopping cruise; label classifications in the normal cockpit panel.
+- [x] Add unit and navigation event regressions for classification.
+- [ ] Integrate durable player-faction reputation and lawful NPC disposition
+  changes; default traffic remains non-hostile.
+- [ ] Add shared tactical encounter instances, voluntary/forced interception
+  and route-safe resumption; policy labels do not start combat.
+- [ ] Run Mix/JS suites and manually verify 3D + SBS UI in a live browser.

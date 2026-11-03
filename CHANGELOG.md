@@ -430,3 +430,20 @@
   ETA; cockpit indicates that flight controls are locked during transit.
 - Added V2 regression tests for sample travel times, concurrent voyages,
   sublight position interpolation and propulsion-mode exclusivity.
+ 
+### EncounterDirector classification without tactical handoff (2026-11-03)
+
+- Added `Core.Universe.EncounterDirector` for classification of genuine
+  sensor-derived SOL close passes using NPC disposition, owning faction,
+  Zone of Control and server-provided faction standing.
+- Identified Sentinel-07 as a Venus patrol; preserved all six existing
+  routes, schedules, cargo and player-independent movement.
+- Returned encounter classification in private per-pilot navigation
+  snapshots and one-time events; retained existing strategic flyby mode
+  and continuous interplanetary cruise.
+- Updated ordinary cockpit encounter text for neutral flyby, patrol
+  attention and hostile contact; no combat/inspection promise.
+- Added deterministic director tests and a hostile navigation regression.
+- Test execution: not run here (Elixir/Mix unavailable); live browser
+  verification remains outstanding. No faction reputation persistence,
+  tactical instances, interception, random spawns or NPC combat added.

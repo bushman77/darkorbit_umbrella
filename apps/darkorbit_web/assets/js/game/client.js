@@ -577,9 +577,13 @@ class SpaceClient {
       }
       const output = this.root.querySelector("#solar-encounter-message")
       if (output) {
-        output.textContent = nextId
-          ? "Non-hostile traffic flyby. Cruise continues. Hail to identify its mission."
-          : ""
+        output.textContent = !nextId
+          ? ""
+          : encounter?.classification === "hostile_contact"
+            ? "Hostile traffic detected. Cruise continues; tactical interception is not yet available."
+            : encounter?.classification === "patrol_attention"
+              ? "Faction patrol attention. Cruise continues; inspection is not yet active."
+              : "Non-hostile traffic flyby. Cruise continues. Hail to identify its mission."
       }
     }
     this.solarEncounter = nextId ? encounter : null
@@ -597,8 +601,13 @@ class SpaceClient {
     if (title) title.textContent = String(encounter.call_sign || "Unidentified vessel") +
       " · " + String(encounter.kind || "vessel").replaceAll("_", " ")
     if (range && Number.isFinite(encounter.distance_km)) {
+      const status = encounter.classification === "hostile_contact"
+        ? "HOSTILE CONTACT"
+        : encounter.classification === "patrol_attention"
+          ? "PATROL ATTENTION"
+          : "NON-HOSTILE"
       range.textContent = Math.round(encounter.distance_km).toLocaleString("en-US") +
-        " game km · NON-HOSTILE · " +
+        " game km · " + status + " · " +
         String(encounter.origin_id || "?") + " → " +
         String(encounter.destination_id || "?")
     }

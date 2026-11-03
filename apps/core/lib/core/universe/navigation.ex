@@ -20,7 +20,7 @@ defmodule Core.Universe.Navigation do
 
   alias Core.Universe.Sol
   alias Core.Universe.PlanetaryView
-  alias Core.Universe.Encounters
+  alias Core.Universe.EncounterDirector
   alias Core.Universe.Traffic
   alias Core.Universe.Territory
   alias Core.World.EventSink
@@ -72,6 +72,9 @@ defmodule Core.Universe.Navigation do
       voyages: %{},
       traffic: Keyword.get(opts, :traffic, Traffic.seed()),
       encountered: %{},
+      # Server-owned reputation fixtures until the faction ledger is connected.
+      # Never supplied by Phoenix client payloads or exposed in public snapshots.
+      pilot_reputations: Keyword.get(opts, :pilot_reputations, %{}),
       tick_ms: tick_ms,
       auto_tick?: Keyword.get(opts, :auto_tick, true),
       event_sink: Keyword.fetch!(opts, :event_sink)
@@ -82,7 +85,7 @@ defmodule Core.Universe.Navigation do
   @impl true
   def handle_call({:snapshot, player_id}, _from, state) do
     {voyage, state} = ensure_player(state, player_id)
-    {:reply, {:ok, public(voyage, state.traffic)}, state}
+    {:reply, {:ok, public(voyage, state, player_id)}, state}
   end
 
   def handle_call({:set_course, player_id, destination_id}, _from, state) do
@@ -118,7 +121,7 @@ defmodule Core.Universe.Navigation do
         }
         state = put_voyage(state, player_id, updated)
         broadcast(state, player_id, updated)
-        {:reply, {:ok, public(updated, state.traffic)}, state}
+        {:reply, {:ok, public(updated, state, player_id)}, state}
     end
   end
 
@@ -136,7 +139,7 @@ defmodule Core.Universe.Navigation do
         voyage_number: voyage.voyage_number}
       state = put_voyage(state, player_id, updated)
       broadcast(state, player_id, updated)
-      {:reply, {:ok, public(updated, state.traffic)}, state}
+      {:reply, {:ok, public(updated, state, player_id)}, state}
     end
   end
 
@@ -218,7 +221,8 @@ defmodule Core.Universe.Navigation do
     end)
   end
 
-  defp public(voyage, traffic) do
+  defp public(voyage, state, player_id) do
+    traffic = state.traffic
     {progress, remaining_ms} =
       if voyage.status == :traveling and voyage.travel_distance_km > 0 do
         remaining_km = max(0.0, voyage.travel_distance_km - voyage.distance_travelled_km)
@@ -236,7 +240,7 @@ defmodule Core.Universe.Navigation do
       progress: progress,
       remaining_ms: remaining_ms,
       contacts: Traffic.contacts(traffic, voyage.position_km),
-      encounter: Encounters.nearest(traffic, voyage),
+      encounter: EncounterDirector.evaluate(traffic, voyage, reputations_for(state, player_id)),
       planetary_view: PlanetaryView.describe(voyage),
       territory: %{
         status: jurisdiction.status,
@@ -245,11 +249,15 @@ defmodule Core.Universe.Navigation do
     })
   end
 
+  defp reputations_for(state, player_id) do
+    Map.get(state.pilot_reputations, player_id, %{})
+  end
+
   # A real traffic vessel can pass multiple pilots. The flyby is published
   # only on a pilot's first proximity crossing for that vessel/voyage;
   # repeated SOL snapshots still carry its current relative position.
   defp announce_encounter(state, player_id, voyage) do
-    case Encounters.nearest(state.traffic, voyage) do
+    case EncounterDirector.evaluate(state.traffic, voyage, reputations_for(state, player_id)) do
       nil -> state
       encounter ->
         seen = Map.get(state.encountered, player_id, MapSet.new())
@@ -269,7 +277,7 @@ defmodule Core.Universe.Navigation do
   defp broadcast(state, player_id, voyage) do
     EventSink.dispatch(state.event_sink, "sol", :solar_navigation_updated, %{
       player_id: player_id,
-      navigation: public(voyage, state.traffic)
+      navigation: public(voyage, state, player_id)
     })
   end
 

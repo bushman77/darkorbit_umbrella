@@ -172,6 +172,40 @@ defmodule Core.Universe.NavigationTest do
     assert {:ok, _still_in_sensor_range} = Navigation.hail(server, 910, vessel_id)
   end
 
+  test "director labels an authoritative hostile close pass without interrupting cruise" do
+    receiver = self()
+    name = :"#{__MODULE__}.Hostile#{System.unique_integer([:positive])}"
+    traffic =
+      Core.Universe.Traffic.seed()
+      |> Map.update!("traffic:sol:vesper-02", &%{&1 | disposition: :hostile})
+
+    start_supervised!(%{
+      id: name,
+      start: {Navigation, :start_link, [[
+        name: name, auto_tick: false, tick_ms: 1_000, traffic: traffic,
+        event_sink: fn map_id, event, payload ->
+          send(receiver, {map_id, event, payload})
+        end
+      ]]}
+    })
+
+    assert {:ok, _} = Navigation.set_course(name, 991, "venus")
+    for _ <- 1..109, do: assert(:ok = Navigation.tick(name))
+
+    assert {:ok, underway} = Navigation.snapshot(name, 991)
+    assert underway.status == :traveling
+    assert %{contact_id: "traffic:sol:vesper-02",
+             classification: :hostile_contact, mode: :strategic_flyby} =
+      underway.encounter
+    refute Map.has_key?(underway, :pilot_reputations)
+    assert_receive {"sol", :solar_encounter_started,
+      %{player_id: 991, encounter: %{classification: :hostile_contact}}}
+
+    assert {:ok, other} = Navigation.snapshot(name, 992)
+    assert other.status == :idle
+    assert other.encounter == nil
+  end
+
   test "simultaneous pilots advance the same one-second clock with different routes", %{server: server} do
     assert {:ok, mars} = Navigation.set_course(server, 101, "mars")
     assert {:ok, pluto} = Navigation.set_course(server, 202, "pluto")
