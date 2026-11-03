@@ -15,6 +15,7 @@ class Vector3 {
     this.z = z + q.w * tz + q.x * ty - q.y * tx
     return this
   }
+  lengthSq() { return this.x * this.x + this.y * this.y + this.z * this.z }
   normalize() { const d = Math.hypot(this.x, this.y, this.z); this.x /= d; this.y /= d; this.z /= d; return this }
   copy(v) { this.x = v.x; this.y = v.y; this.z = v.z; return this }
   addScaledVector(v, scale) { this.x += v.x * scale; this.y += v.y * scale; this.z += v.z * scale; return this }
@@ -100,6 +101,44 @@ test("planet stays at a fixed world bearing while its size grows and camera chan
     assert.equal(body.group.visible, false)
     body.dispose()
     assert.equal(scene.children.length, 0)
+  } finally {
+    globalThis.document = previous
+  }
+})
+
+
+test("Venus is drawn toward its server-owned centre, and grows as the ship approaches", () => {
+  const previous = globalThis.document
+  globalThis.document = {createElement: () => fakeCanvas()}
+  try {
+    const scene = new Group()
+    scene.remove = object => {scene.children = scene.children.filter(item => item !== object)}
+    const body = new PlanetaryBody(THREE, scene)
+    const radius = 6051.8
+    const centre = {x: 200_000, y: 200_000, z: 0}
+    const ownShip = {render: {x: 200_000 + radius * 1.861, y: 200_000, z: 0}}
+    const camera = {
+      position: new Vector3(ownShip.render.x * 0.06, 0, ownShip.render.y * 0.06),
+      quaternion: {x: 0, y: 0, z: 0, w: 1},
+    }
+    const navigation = snapshot("venus", 65)
+    navigation.planetary_view.planet_center = centre
+    const distant = body.update(navigation, camera, 0, ownShip)
+    assert.ok(body.anchor.x < -0.999)
+    assert.ok(Math.abs(body.anchor.z) < 0.001)
+    assert.ok(distant.angularDiameterDeg > 64.9)
+    assert.equal(body.group.visible, true)
+
+    // Moving toward the planet changes the apparent size; a camera turn
+    // alone cannot make the planet turn with the player like a HUD element.
+    ownShip.render.x = 200_000 + radius * 1.30
+    camera.position.x = ownShip.render.x * 0.06
+    camera.quaternion = {x: 0, y: 1, z: 0, w: 0}
+    const closer = body.update(navigation, camera, 1000, ownShip)
+    assert.ok(closer.angularDiameterDeg > distant.angularDiameterDeg)
+    assert.ok(body.group.scale.value > distant.sceneRadius)
+    assert.ok(body.anchor.x < -0.999)
+    assert.equal(scene.children.length, 1)
   } finally {
     globalThis.document = previous
   }
