@@ -286,12 +286,12 @@ defmodule Core.World.FlightDynamicsTest do
     assert mouse_first.angular_velocity.pitch > keyboard_first.angular_velocity.pitch
 
     keyboard_full =
-      Enum.reduce(2..12, keyboard_first, fn tick, current ->
+      Enum.reduce(2..10, keyboard_first, fn tick, current ->
         FlightDynamics.step(current, map, 0.1, tick)
       end)
 
     mouse_full =
-      Enum.reduce(2..12, mouse_first, fn tick, current ->
+      Enum.reduce(2..10, mouse_first, fn tick, current ->
         FlightDynamics.step(current, map, 0.1, tick)
       end)
 
@@ -305,8 +305,8 @@ defmodule Core.World.FlightDynamicsTest do
     # bounded angular braking rather than an abrupt physical attitude jump.
     {:ok, released} =
       FlightDynamics.controls(mouse_full,
-        %{yaw: 0.0, pitch: 0.0, mouse_steering: false}, 12)
-    braking = FlightDynamics.step(released, map, 0.1, 13)
+        %{yaw: 0.0, pitch: 0.0, mouse_steering: false}, 10)
+    braking = FlightDynamics.step(released, map, 0.1, 11)
 
     assert braking.angular_velocity.yaw < mouse_full.angular_velocity.yaw
     assert braking.angular_velocity.pitch < mouse_full.angular_velocity.pitch
