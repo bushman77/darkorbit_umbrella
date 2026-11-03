@@ -36,10 +36,10 @@ defmodule DarkorbitWeb.HelmetChannelTest do
     assert {:error, %{reason: "map_not_found"}} =
       subscribe_and_join(helmet_socket, WorldChannel, "world:1-1")
 
-    {:ok, %{mode: :standby}, viewer} =
+    {:ok, %{mode: :standby, calibration: nil}, viewer} =
       subscribe_and_join(helmet_socket, HelmetChannel, "helmet:viewer")
 
-    assert {:ok, %{player_id: id}} = Helmets.authenticate(credential)
+    assert {:ok, %{player_id: id, id: device_id}} = Helmets.authenticate(credential)
     assert id == account.id
     assert %{paired: true, connected: true, mode: :standby} =
       HelmetManager.status(account.id)
@@ -95,6 +95,20 @@ defmodule DarkorbitWeb.HelmetChannelTest do
     assert_reply ref, :ok
     assert %{alignment: %{eye_gap_px: -60}} = HelmetManager.status(account.id)
 
+    # Status messages are not writes; the phone saves a debounced snapshot.
+    assert nil == Helmets.calibration(device_id)
+    ref = push(viewer, "save_alignment", %{"eye_gap_px" => -60, "eye_sep_mm" => 64})
+    assert_reply ref, :ok, %{eye_gap_px: -60, eye_sep_mm: 64}
+    assert %{eye_gap_px: -60, eye_sep_mm: 64} = Helmets.calibration(device_id)
+
+    # A pilot/controller cannot spoof phone settings, and bad device values
+    # never enter the database.
+    ref = push(control, "save_alignment", %{"eye_gap_px" => 22, "eye_sep_mm" => 72})
+    assert_reply ref, :error, %{reason: "read_only_or_invalid_command"}
+    ref = push(viewer, "save_alignment", %{"eye_gap_px" => -161, "eye_sep_mm" => 64})
+    assert_reply ref, :error, %{reason: "read_only_or_invalid_command"}
+    assert %{eye_gap_px: -60, eye_sep_mm: 64} = Helmets.calibration(device_id)
+
     ref = push(viewer, "alignment_state", %{"eye_gap_px" => -161, "eye_sep_mm" => 64})
     assert_reply ref, :error, %{reason: "read_only_or_invalid_command"}
 
@@ -116,7 +130,9 @@ defmodule DarkorbitWeb.HelmetChannelTest do
     {:ok, remembered} = connect(UserSocket, %{"helmet_token" => credential})
     assert {:error, %{reason: "map_not_found"}} =
       subscribe_and_join(remembered, WorldChannel, "world:1-1")
-    {:ok, _, again} = subscribe_and_join(remembered, HelmetChannel, "helmet:viewer")
+    {:ok, %{calibration: restored}, again} =
+      subscribe_and_join(remembered, HelmetChannel, "helmet:viewer")
+    assert restored == %{eye_gap_px: -60, eye_sep_mm: 64}
 
     ref = push(control, "forget", %{})
     assert_reply ref, :ok
