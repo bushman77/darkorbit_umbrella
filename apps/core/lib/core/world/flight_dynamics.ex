@@ -22,6 +22,12 @@ defmodule Core.World.FlightDynamics do
     pitch: %{speed: 38.0, acceleration: 80.0, braking: 135.0},
     roll: %{speed: 56.0, acceleration: 110.0, braking: 165.0}
   }
+  # Captured mouse-look uses a faster *server-bounded* rotational response.
+  # The legacy keyboard rate profile remains unchanged when mouse-look is off.
+  @mouse_turn_limits %{
+    yaw: %{speed: 100.0, acceleration: 280.0, braking: 360.0},
+    pitch: %{speed: 88.0, acceleration: 240.0, braking: 320.0}
+  }
   @input_expiry_ticks 10
 
   @spec controls(Entity.t(), map(), non_neg_integer()) ::
@@ -32,9 +38,11 @@ defmodule Core.World.FlightDynamics do
     pitch = get(input, "pitch", 0.0)
     roll = get(input, "roll", 0.0)
     mode = get(input, "mode", entity.flight_mode)
+    mouse_steering? = get(input, "mouse_steering", false)
 
     if valid_axis?(throttle) and valid_axis?(yaw) and valid_axis?(pitch) and
-         valid_axis?(roll) and mode in [:cruise, :newtonian, "cruise", "newtonian"] do
+         valid_axis?(roll) and is_boolean(mouse_steering?) and
+         mode in [:cruise, :newtonian, "cruise", "newtonian"] do
       mode = if mode in [:newtonian, "newtonian"], do: :newtonian, else: :cruise
 
       # A pilot switching from Newtonian to Cruise keeps the component of
@@ -53,7 +61,8 @@ defmodule Core.World.FlightDynamics do
          entity
          | throttle: throttle * 1.0,
            cruise_speed: cruise_speed,
-           rotation_input: %{yaw: yaw * 1.0, pitch: pitch * 1.0, roll: roll * 1.0},
+           rotation_input: %{yaw: yaw * 1.0, pitch: pitch * 1.0, roll: roll * 1.0,
+                             mouse_steering: mouse_steering?},
            flight_mode: mode,
            control_tick: tick,
            destination: nil,
@@ -82,8 +91,13 @@ defmodule Core.World.FlightDynamics do
     {attitude, angular_velocity} =
       Enum.reduce([:yaw, :pitch, :roll], {%{}, %{}}, fn axis, {angles, rates} ->
         old_rate = Map.fetch!(entity.angular_velocity, axis)
+        limits =
+          if Map.get(input, :mouse_steering, false) and axis in [:yaw, :pitch],
+            do: Map.fetch!(@mouse_turn_limits, axis),
+            else: Map.fetch!(@turn_limits, axis)
+
         next_rate = advance_angular_rate(old_rate, Map.fetch!(input, axis),
-                                         Map.fetch!(@turn_limits, axis), dt)
+                                         limits, dt)
         angle = wrap_angle(Map.fetch!(entity.attitude, axis) +
                            (old_rate + next_rate) * 0.5 * dt)
 
