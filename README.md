@@ -112,12 +112,19 @@ After updating this branch, rebuild web assets and hard-refresh the browser.
 ### Fly the ship manually (experimental SBS branch)
 
 The flight layout is **W/S pitch up/down**, **A/D turn left/right**,
-**Q/E roll left/right**, **= accelerate**, and **- decelerate**.
-Holding the throttle keys ramps in 10% steps; signed throttle can cross
-zero into reverse. **Ctrl+E** switches Cruise (assisted velocity) and
-Newtonian (momentum-preserving thrust). **F** releases held attitude
-controls. The flight HUD shows heading, pitch, roll and speed.
-**M** opens the navigation atlas for optional XYZ autopilot routes.
+**Q/E roll left/right**, and the **mouse wheel for target throttle**.
+Wheel up increases signed throttle by 5% per notch; wheel down decreases it,
+passing through neutral into reverse. The setting remains at the chosen
+level when you stop scrolling. `=/-` remain keyboard throttle alternatives.
+Only scrolling over the active cockpit flight viewport changes throttle;
+scrolling in the Atlas or over other controls retains its normal meaning.
+
+**Ctrl+E** switches between **assisted Cruise Flight**, where the server
+smoothly accelerates toward your requested speed and brakes when you dial
+throttle down, and **Newtonian Flight**, where neutral thrust preserves
+existing momentum. **F** releases held attitude controls. The flight HUD
+shows heading, pitch, roll, commanded throttle and actual velocity.
+**M** opens the navigation Atlas for optional XYZ autopilot routes.
 
 See [SBS flight and navigation notes](docs/sbs-3d.md).
 
@@ -137,7 +144,8 @@ If that grep does not match, the compiled JS is still outdated or the
 build failed. Do not diagnose pitch controls in Firefox until the bundle
 contains the current mapping. Restart Phoenix and hard-refresh the tab.
 The current flight input source uses W/S for pitch, A/D for yaw, Q/E for
-roll and =/- for signed throttle; X is intentionally unassigned.
+roll, mouse wheel for signed throttle, and =/- as keyboard fallbacks;
+X is intentionally unassigned.
 
 ### Smooth turning and rolling (SBS)
 
@@ -158,8 +166,9 @@ follows its live heading. See [thrust alignment notes](docs/sbs-3d.md).
 
 ### Space Rogue-style manual red lasers (SBS)
 
-In the 3D or stereo cockpit, **Space** fires the currently ready X1
-laser along the *ship's present nose direction*. Holding Space fires
+In the 3D or stereo cockpit, **holding right mouse button (RMB)** fires
+the currently ready X1 laser along the *ship's present nose direction*.
+Holding RMB fires
 additional shots only when the server-owned cooldown allows them.
 Shots that miss still draw a visible bright red laser beam and consume
 the same cooldown. An enemy must actually intersect the forward laser
@@ -184,13 +193,13 @@ The 3D/SBS client slerps the quaternion between server snapshots.
 
 ### Twin wing-mounted red lasers
 
-Manual Space fire now launches two simultaneous, genuine 3D rays from
+Manual RMB fire now launches two simultaneous, genuine 3D rays from
 physically symmetric wing emitters. The muzzles belong to the ship's
 server-owned quaternion orientation, so yaw, pitch and roll move the
 mounts with the craft. Each ray can hit or miss independently; NPCs
 within range receive server-authoritative shield/hull damage, and
 collisions are replicated to all clients as paired impact endpoints.
-A single Space activation uses one cooldown and the original total
+A single RMB activation uses one cooldown and the original total
 damage budget: double hits on the same NPC do not double the damage.
 Existing lock-on automatic laser fire also renders both wing beams.
 Bright red impact flashes indicate confirmed hits; no-target shots
@@ -207,7 +216,7 @@ Every server-confirmed shot shows a visible **HIT N/2** or **MISS**
 status for 1.6 seconds, with negative shield/hull damage on hits.
 The reticle briefly changes green on hit and red on miss. The red
 beams persist for 0.55 seconds with enhanced collision flashes.
-A selected target is *not* automatically hit by manual Space fire:
+A selected target is *not* automatically hit by manual RMB fire:
 the player's nose and the two authoritative rays still determine hits.
 
 ### Sector 1-1 starter Dart (2026-11-02)
