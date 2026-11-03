@@ -28,8 +28,9 @@ test("a passing civilian ahead of the route appears ahead in both cockpit eyes",
 
 test("SOL route-relative bearing distinguishes behind, left, and up", () => {
   assert.equal(encounterRenderSpec(voyage({x: -900, y: 0, z: 0}, 900)).position.z, 90)
-  assert.ok(encounterRenderSpec(voyage({x: 0, y: -900, z: 0}, 900)).position.x < 0)
-  assert.ok(encounterRenderSpec(voyage({x: 0, y: 900, z: 0}, 900)).position.x > 0)
+  // With eastbound cruise, -SOL-Y is the camera's right-hand side.
+  assert.ok(encounterRenderSpec(voyage({x: 0, y: -900, z: 0}, 900)).position.x > 0)
+  assert.ok(encounterRenderSpec(voyage({x: 0, y: 900, z: 0}, 900)).position.x < 0)
   assert.ok(encounterRenderSpec(voyage({x: 0, y: 0, z: 900}, 900)).position.y > 0)
 })
 
