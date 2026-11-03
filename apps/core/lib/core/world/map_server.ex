@@ -41,8 +41,8 @@ defmodule Core.World.MapServer do
 
   @spec join(atom(), String.t(), Session.t(), Stats.t() | map()) ::
           {:ok, map()} | {:error, term()}
-  def join(registry, map_id, %Session{} = session, stats) do
-    call_map(registry, map_id, {:join, session, stats})
+  def join(registry, map_id, %Session{} = session, stats, entry \\ nil) do
+    call_map(registry, map_id, {:join, session, stats, entry})
   end
 
   @spec leave(atom(), String.t(), pos_integer(), term()) :: :ok | {:error, term()}
@@ -180,7 +180,10 @@ defmodule Core.World.MapServer do
   end
 
   @impl true
-  def handle_call({:join, session, stats}, _from, state) do
+  def handle_call({:join, session, stats}, from, state),
+    do: handle_call({:join, session, stats, nil}, from, state)
+
+  def handle_call({:join, session, stats, entry}, _from, state) do
     cond do
       Map.has_key?(state.entities, session.entity_id) or
           Map.has_key?(state.npcs, session.entity_id) ->
@@ -189,15 +192,23 @@ defmodule Core.World.MapServer do
       not valid_stats?(stats) ->
         {:reply, {:error, :invalid_ship_stats}, state}
 
+      not valid_join_entry?(state.definition, entry) ->
+        {:reply, {:error, :invalid_spawn}, state}
+
       true ->
         weapon = Combat.player_weapon(stats, state.tick_ms)
+        position = if entry, do: entry.position, else: state.definition.spawn
+        attitude = if entry, do: entry.attitude,
+          else: %{yaw: 0.0, pitch: 0.0, roll: 0.0}
 
         entity = %Entity{
           id: session.entity_id,
           kind: :player,
           player_id: session.player_id,
           session_id: session.id,
-          position: state.definition.spawn,
+          position: position,
+          attitude: attitude,
+          orientation: Orientation.from_angles(attitude),
           destination: nil,
           speed: stats.speed,
           hull: stats.hit_points,
@@ -1067,6 +1078,18 @@ defmodule Core.World.MapServer do
       raise ArgumentError, "invalid world map definition: #{inspect(definition)}"
     end
   end
+
+  defp valid_join_entry?(_definition, nil), do: true
+
+  defp valid_join_entry?(definition,
+          %{position: position, attitude: %{yaw: yaw, pitch: pitch, roll: roll}})
+       when is_number(yaw) and is_number(pitch) and is_number(roll) do
+    Enum.all?([yaw, pitch, roll], fn angle ->
+      abs(angle) < 10.0 and angle == angle
+    end) and match?({:ok, _}, Movement.destination(definition, position))
+  end
+
+  defp valid_join_entry?(_definition, _entry), do: false
 
   defp public_state(state) do
     entities =
