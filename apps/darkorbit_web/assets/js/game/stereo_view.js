@@ -1,5 +1,6 @@
 import * as THREE from "three"
 import {pointerNdc, toScene, toWorld} from "./stereo_math.mjs"
+import {stereoViewports} from "./stereo_viewport.mjs"
 import {cockpitHudFit, HUD_GEOMETRY} from "./stereo_layout.mjs"
 import {flightBasis, degrees} from "./flight_basis.mjs"
 import {orientationTelemetry} from "./orientation_interpolation.mjs"
@@ -64,6 +65,7 @@ export class StereoSpaceView {
     this.camera = new THREE.PerspectiveCamera(70, 1, 0.1, 3000)
     this.stereo = new THREE.StereoCamera()
     this.stereo.eyeSep = 0.064
+    this.eyeGapPx = 0
     this.mode = "3d"
     this.size = {width: 1, height: 1, dpr: 1}
     this.scene.add(this.camera)
@@ -175,6 +177,12 @@ export class StereoSpaceView {
     this.camera.add(framing)
   }
 
+  setHelmetAlignment({eyeGapPx = this.eyeGapPx, eyeSep = this.stereo.eyeSep} = {}) {
+    this.eyeGapPx = Math.min(80, Math.max(0, Math.round(Number(eyeGapPx) || 0)))
+    this.stereo.eyeSep = Math.min(0.09, Math.max(0.035, Number(eyeSep) || 0.064))
+    this.resize(this.size.width, this.size.height, this.size.dpr)
+  }
+
   setMode(mode) {
     this.mode = mode === "sbs" ? "sbs" : "3d"
     this.resize(this.size.width, this.size.height, this.size.dpr)
@@ -184,7 +192,10 @@ export class StereoSpaceView {
     this.size = {width: Math.max(1, width), height: Math.max(1, height), dpr: Math.min(1.5, dpr)}
     this.renderer.setPixelRatio(this.size.dpr)
     this.renderer.setSize(this.size.width, this.size.height, false)
-    this.camera.aspect = (this.mode === "sbs" ? this.size.width / 2 : this.size.width) / this.size.height
+    // StereoCamera.aspect is 1 by default; it takes this camera\'s per-eye
+    // aspect directly. Use the actual scissored viewport, including optical gap.
+    const layout = stereoViewports(this.size.width, this.size.height, this.eyeGapPx)
+    this.camera.aspect = this.mode === "sbs" ? layout.eyeAspect : this.size.width / this.size.height
     this.camera.updateProjectionMatrix()
     const fit = cockpitHudFit(this.camera.aspect, this.camera.fov)
     if (fit && this.hudPanel && this.dash) {
@@ -395,13 +406,16 @@ export class StereoSpaceView {
     this.stereo.update(this.camera)
     const {width, height} = this.size
     if (this.mode === "sbs") {
-      const half = width / 2
+      const {left, right} = stereoViewports(width, height, this.eyeGapPx)
+      // Clear the center strip instead of leaving stale pixels from a prior frame.
+      this.renderer.setScissorTest(false)
+      this.renderer.clear(true, true, true)
       this.renderer.setScissorTest(true)
-      this.renderer.setViewport(0, 0, half, height)
-      this.renderer.setScissor(0, 0, half, height)
+      this.renderer.setViewport(left.x, left.y, left.width, left.height)
+      this.renderer.setScissor(left.x, left.y, left.width, left.height)
       this.renderer.render(this.scene, this.stereo.cameraL)
-      this.renderer.setViewport(half, 0, width - half, height)
-      this.renderer.setScissor(half, 0, width - half, height)
+      this.renderer.setViewport(right.x, right.y, right.width, right.height)
+      this.renderer.setScissor(right.x, right.y, right.width, right.height)
       this.renderer.render(this.scene, this.stereo.cameraR)
       this.renderer.setScissorTest(false)
     } else {
