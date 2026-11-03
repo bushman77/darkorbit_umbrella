@@ -69,7 +69,7 @@ defmodule Core.Universe.OrbitalEntryTest do
       {:ok, origin_sol} = Sol.game_position_km(origin)
       expected_x = origin_sol.x - venus_sol.x
       expected_y = origin_sol.y - venus_sol.y
-      expected_length = :math.hypot(expected_x, expected_y)
+      expected_length = :math.sqrt(expected_x * expected_x + expected_y * expected_y)
       actual = entry.entry_direction
       cosine = actual.x * expected_x / expected_length +
         actual.y * expected_y / expected_length
