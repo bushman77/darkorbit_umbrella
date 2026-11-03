@@ -5,13 +5,13 @@ export const MOUSE_STEERING_DEFAULT_SENSITIVITY = 1
 
 const clamp = (value, low, high) => Math.min(high, Math.max(low, value))
 export const validMouseSensitivity = value => Number.isFinite(value) &&
-  value >= 0.4 && value <= 2.0
+  value >= 0.4 && value <= 6.0
 
 export function mouseSteeringAxes(movementX, movementY, sensitivity = 1) {
   const factor = validMouseSensitivity(sensitivity) ? sensitivity : 1
-  const yaw = clamp((Number(movementX) || 0) * factor / 22, -1, 1)
+  const yaw = clamp((Number(movementX) || 0) * factor / 11, -1, 1)
   // Browser Y increases downwards. Moving the mouse UP pitches nose UP.
-  const pitch = clamp(-(Number(movementY) || 0) * factor / 22, -1, 1)
+  const pitch = clamp(-(Number(movementY) || 0) * factor / 11, -1, 1)
   return {
     yaw: Math.abs(yaw) < 0.015 ? 0 : yaw,
     pitch: Math.abs(pitch) < 0.015 ? 0 : pitch,
