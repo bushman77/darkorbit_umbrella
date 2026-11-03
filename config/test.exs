@@ -46,3 +46,7 @@ config :phoenix_live_view,
 # Sort query params output of verified routes for robust url comparisons
 config :phoenix,
   sort_verified_routes_query_params: true
+
+# Preserve historic world:1-1 channel/combat fixtures only during tests.
+# The running game starts on the real collision-ready sol:earth region.
+config :darkorbit, :legacy_test_earth_sector, true
