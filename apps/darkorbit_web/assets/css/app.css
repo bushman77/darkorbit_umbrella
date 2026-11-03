@@ -867,3 +867,9 @@ body:has(#helmet-client) {
 [data-display-mode="sbs"] #planetary-proximity-warning {
   display: none !important;
 }
+
+/* Encounter labels for SBS are drawn on the stereo-correct cockpit instrument.
+   Hailing remains accessible from Solar Atlas, not a flat binocular overlay. */
+[data-display-mode="sbs"] #solar-encounter-panel {
+  display: none !important;
+}
