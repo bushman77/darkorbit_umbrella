@@ -232,7 +232,7 @@ test("wheel accumulates trackpad deltas, normalizes Firefox line events and clam
   assert.equal(flight.throttle, -1)
 })
 
-test("wheel never changes speed over Atlas, text fields, or modified gestures", () => {
+test("wheel never changes speed over Atlas, text fields, or unsupported modifiers", () => {
   let active = false
   const sent = []
   const flight = new FlightControls({send: data => sent.push(data), active: () => active})
@@ -241,7 +241,7 @@ test("wheel never changes speed over Atlas, text fields, or modified gestures", 
   for (const extras of [
     {target: {tagName: "INPUT"}},
     {target: {isContentEditable: true}},
-    {ctrlKey: true}, {metaKey: true}, {shiftKey: true},
+    {metaKey: true}, {shiftKey: true},
     {defaultPrevented: true}, {deltaY: Infinity},
   ]) {
     const event = wheel(-120, extras)
@@ -250,4 +250,87 @@ test("wheel never changes speed over Atlas, text fields, or modified gestures", 
   }
   assert.equal(flight.throttle, 0)
   assert.equal(sent.length, 0)
+})
+
+test("Ctrl+wheel up rolls right, Ctrl+wheel down rolls left, and throttle is unchanged", () => {
+  let time = 1000
+  const sent = []
+  const flight = new FlightControls({send: payload => sent.push(payload), now: () => time})
+  flight.wheel(wheel(-100))
+  const throttle = flight.throttle
+  const event = wheel(-100, {ctrlKey: true})
+  assert.equal(flight.wheel(event), true)
+  assert.equal(event.prevented, true)
+  assert.equal(flight.axes().roll, 1)
+  assert.equal(flight.throttle, throttle)
+  assert.equal(sent.at(-1).roll, 1)
+  assert.equal(sent.at(-1).throttle, throttle)
+
+  time += 100
+  assert.equal(flight.wheel(wheel(100, {ctrlKey: true})), true)
+  assert.equal(flight.axes().roll, -1)
+  assert.equal(flight.throttle, throttle)
+  assert.equal(sent.at(-1).roll, -1)
+})
+
+test("a single Ctrl+wheel notch rolls briefly, then emits zero with no key held", () => {
+  let time = 1000
+  const sent = []
+  const flight = new FlightControls({send: payload => sent.push(payload), now: () => time})
+  flight.wheel(wheel(-120, {ctrlKey: true}))
+  assert.equal(flight.axes().roll, 1)
+  assert.equal(flight.pressed.size, 0)
+
+  time += 100
+  flight.heartbeat(time)
+  assert.equal(flight.axes().roll, 1)
+  time += 500
+  flight.heartbeat(time)
+  assert.equal(flight.axes().roll, 0)
+  assert.equal(sent.at(-1).roll, 0)
+  assert.equal(flight.throttle, 0)
+})
+
+test("Ctrl+wheel respects Atlas and text controls and Q/E take priority", () => {
+  let time = 1000
+  let active = false
+  const sent = []
+  const flight = new FlightControls({
+    send: payload => sent.push(payload),
+    active: () => active,
+    now: () => time,
+  })
+  assert.equal(flight.wheel(wheel(-120, {ctrlKey: true})), false)
+  active = true
+  const typing = wheel(-120, {ctrlKey: true, target: {tagName: "INPUT"}})
+  assert.equal(flight.wheel(typing), false)
+  assert.equal(typing.prevented, undefined)
+  assert.equal(flight.wheel(wheel(-120, {ctrlKey: true, altKey: true})), false)
+  assert.equal(flight.wheel(wheel(-120, {ctrlKey: true, metaKey: true})), false)
+  assert.equal(sent.length, 0)
+
+  flight.wheel(wheel(-120, {ctrlKey: true}))
+  flight.keyDown(press("KeyQ"))
+  assert.equal(flight.axes().roll, -1)
+  flight.keyUp(press("KeyQ"))
+  assert.equal(flight.axes().roll, 1)
+  flight.release()
+  assert.equal(flight.axes().roll, 0)
+  assert.equal(sent.at(-1).roll, 0)
+})
+
+test("continuous Ctrl+wheel extends roll but never leaves it latched", () => {
+  let time = 1000
+  const sent = []
+  const flight = new FlightControls({send: payload => sent.push(payload), now: () => time})
+  for (let i = 0; i < 10; i++) {
+    flight.wheel(wheel(-120, {ctrlKey: true}))
+    time += 50
+  }
+  assert.ok(flight.wheelRollUntil - time <= 700)
+  assert.equal(flight.axes().roll, 1)
+  time += 800
+  flight.heartbeat(time)
+  assert.equal(flight.axes().roll, 0)
+  assert.equal(sent.at(-1).roll, 0)
 })
