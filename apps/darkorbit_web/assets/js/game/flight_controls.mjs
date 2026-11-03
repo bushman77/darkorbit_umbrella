@@ -1,8 +1,10 @@
-// Six-key flight attitude plus +/- throttle; signed setpoint in [-1, 1].
+// Six-key flight attitude plus mouse-wheel target throttle in [-1, 1].
 // The server owns orientation, position, velocity and thrust physics.
 const ROTATION_KEYS = new Set(["KeyW", "KeyS", "KeyA", "KeyD", "KeyQ", "KeyE"])
 const THROTTLE_KEYS = new Set(["Equal", "Minus", "NumpadAdd", "NumpadSubtract"])
 const THROTTLE_INTERVAL_MS = 120
+const WHEEL_THRESHOLD_PX = 80
+const WHEEL_STEP = 0.05
 
 const typing = target => Boolean(target?.isContentEditable ||
   ["INPUT", "TEXTAREA", "SELECT"].includes(target?.tagName))
@@ -20,6 +22,8 @@ export class FlightControls {
     this.mode = "cruise"
     this.lastEmit = -Infinity
     this.lastThrottleChange = -Infinity
+    this.wheelAccumulated = 0
+    this.lastWheelAt = -Infinity
   }
 
   axes() {
@@ -56,6 +60,36 @@ export class FlightControls {
     if (next === this.throttle) return false
     this.throttle = next
     this.emit()
+    return true
+  }
+
+  wheel(event) {
+    if (event.defaultPrevented || typing(event.target) || !this.active() ||
+        event.ctrlKey || event.altKey || event.metaKey || event.shiftKey ||
+        !Number.isFinite(event.deltaY) || event.deltaY === 0) return false
+
+    // Capture the wheel over the flight viewport, not while hovering panels
+    // or Atlas controls. Positive deltaY scrolls down => less forward thrust.
+    event.preventDefault()
+    const now = this.now()
+    const pixels = event.deltaY * (event.deltaMode === 1 ? 40 : event.deltaMode === 2 ? 800 : 1)
+    if (now - this.lastWheelAt > 250 || Math.sign(pixels) !== Math.sign(this.wheelAccumulated)) {
+      this.wheelAccumulated = 0
+    }
+    this.lastWheelAt = now
+    // Cap a single OS event to avoid a huge sudden throttle jump.
+    this.wheelAccumulated += Math.max(-240, Math.min(240, pixels))
+    const steps = Math.min(3, Math.floor(Math.abs(this.wheelAccumulated) / WHEEL_THRESHOLD_PX))
+    if (steps === 0) return true
+
+    const direction = -Math.sign(this.wheelAccumulated)
+    this.wheelAccumulated -= Math.sign(this.wheelAccumulated) * steps * WHEEL_THRESHOLD_PX
+    const next = Math.max(-1, Math.min(1,
+      Math.round((this.throttle + direction * WHEEL_STEP * steps) * 100) / 100))
+    if (next !== this.throttle) {
+      this.throttle = next
+      this.emit()
+    }
     return true
   }
 
@@ -125,6 +159,7 @@ export class FlightControls {
     this.throttle = 0
     this.pressed.clear()
     this.lastPitchKey = null
+    this.wheelAccumulated = 0
   }
 
   heartbeat(time) {
