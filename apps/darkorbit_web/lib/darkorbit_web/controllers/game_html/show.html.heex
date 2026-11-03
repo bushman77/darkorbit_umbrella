@@ -140,6 +140,29 @@
           <button id="helmet-forget" class="nav-button nav-danger" type="button">Forget headset</button>
         </div>
       </section>
+      <%!-- Pilot control preferences are client-side; never part of combat authority. --%>
+      <section aria-label="Cockpit control preferences"
+               class="mx-4 mb-4 rounded-xl border border-cyan-400/25 bg-slate-950/80 p-3 text-slate-200">
+        <div class="flex flex-wrap items-center gap-4">
+          <label class="flex cursor-pointer items-center gap-2 text-sm font-semibold text-cyan-100">
+            <input id="nav-mouse-steering" type="checkbox"
+                   class="size-4 accent-cyan-400" />
+            Enable mouse-look steering
+          </label>
+          <label for="nav-mouse-sensitivity" class="flex items-center gap-2 text-xs text-slate-300">
+            Sensitivity
+            <input id="nav-mouse-sensitivity" type="range" min="40" max="200"
+                   step="10" value="100" class="w-32 accent-cyan-400" />
+            <output id="nav-mouse-sensitivity-value" for="nav-mouse-sensitivity">1.0×</output>
+          </label>
+        </div>
+        <p class="mt-2 text-xs text-slate-400">
+          When enabled, return to the cockpit and click its background once to capture the mouse.
+          Move the mouse to pitch and yaw. Esc releases the cursor; M opens Atlas.
+          Keyboard steering, wheel throttle, Ctrl+wheel roll and right-click lasers remain available.
+        </p>
+      </section>
+
       <div class="atlas-view-tabs" role="tablist" aria-label="Atlas navigation level">
         <button id="nav-view-system" class="atlas-view-tab is-active" type="button"
           role="tab" aria-selected="true" aria-controls="nav-solar-view">
@@ -624,8 +647,13 @@
     </div>
   </div>
 
+  <p id="cockpit-mouse-steering-status" hidden aria-live="polite"
+     class="pointer-events-none absolute bottom-44 left-1/2 z-30 -translate-x-1/2 rounded-lg border border-cyan-400/30 bg-slate-950/85 px-3 py-2 text-center font-mono text-xs text-cyan-200">
+    MOUSE STEERING ENABLED · CLICK COCKPIT TO CAPTURE
+  </p>
+
   <div id="game-controls-hint" class="pointer-events-none absolute bottom-28 left-1/2 z-10 hidden -translate-x-1/2 rounded-xl border border-slate-700/70 bg-slate-950/70 px-3 py-2 text-[0.65rem] text-slate-400 backdrop-blur xl:block">
-    W/S pitch · A/D yaw · Ctrl+wheel roll (↑right / ↓left) · wheel throttle · Q/E roll backup · RMB laser · T target · Ctrl+E assisted/Newtonian · M atlas · V 3D/SBS
+    W/S pitch · A/D yaw · optional mouse-look (Atlas setting) · Ctrl+wheel roll · wheel throttle · Q/E roll · RMB laser · T target · M atlas
   </div>
 
   <div
