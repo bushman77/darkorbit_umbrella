@@ -519,8 +519,9 @@ Pluto (`sol:<body>`). Their local maps are each 400,000 × 400,000 units,
 with a ±200,000 vertical range, and use **provisional local kilometres**,
 not SOL's compressed cruise game-kilometres. Players sharing a planetary
 region share its map; pilots at *different* planets cannot see or target
-each other across maps. Earth remains on legacy Sector `1-1` for the
-existing combat/channel fixtures.
+each other across maps. Current gameplay now assigns Earth to the same
+real-radius orbital model as other planets (`sol:earth`). Legacy Sector
+`1-1` remains only for isolated combat/channel tests.
 
 The new orbital maps carry the corresponding planet's real mean radius
 and a 1.08×-radius server-owned safety boundary. Manual flight stops
@@ -538,13 +539,13 @@ sector chart. A client cannot choose an arbitrary map or spawn.
 The four old noninteractive test asteroids are removed; the starfield
 now follows the camera in the much larger orbital maps.
 
-**Compatibility:** the first login at Earth retains the original
-`(1000,1000)` test-spawn pose; arrival at Earth *from another world*
-uses the direction-based entry. Earth's smaller map does not yet have
-the real-radius collision geometry enabled. Full server restarts still
-reset the in-memory SOL voyage and orbital entry; pilot hull/ship state
-is also not yet carried durably across region changes. Do not mistake
-the new safe orbital regions for physically simulated orbits.
+**Compatibility:** the first live login at Earth now enters `sol:earth`
+with the same safe approach-scale spawn and fatal planet volume as Venus.
+The old `(1000,1000)` Sector `1-1` spawn persists only behind a
+`config/test.exs` fixture switch. Full server restarts still reset
+the in-memory SOL voyage and orbital entry; pilot hull/ship state is
+not yet carried durably across region changes. These are staged
+orbital regions, not gravitationally simulated orbits.
 
 **Verification** from the umbrella root:
 ```sh
@@ -558,7 +559,7 @@ mix test apps/darkorbit_web/test/darkorbit_web/channels/world_channel_test.exs
 ### Fatal planetary collisions V1 — hard approach limit (2026-11-03)
 
 Planet approach is now dangerous, as in the original game: **getting too
-close destroys the spacecraft**. Each non-Earth planetary region
+close destroys the spacecraft**. Every SOL planetary region (including Earth)
 uses its real mean radius with a provisional **8% collision buffer**.
 For Venus, the lethal boundary is approximately **6,536 km from its
 centre** (radius 6,051.8 km). The normal directional spawn remains
@@ -576,8 +577,8 @@ capture. No NPC receives kill credit from a planetary crash.
 
 **No automatic player respawn is implemented yet**, matching the
 existing destroyed-player behavior. Planet collisions are disabled
-for the legacy Earth `1-1` fixture until that map migrates to the
-real-radius planetary frame. This is a gameplay collision volume, not
+for the isolated legacy `1-1` test fixture; normal Earth gameplay
+uses `sol:earth` and the same collision rules as Venus. This is a gameplay collision volume, not
 atmospheric re-entry simulation, gravitational physics, or terrain.
 
 Run from the umbrella root:
@@ -620,7 +621,8 @@ reconnect and immediately see the correct warning. No client-side
 distance estimate can change gameplay or fabricate death.
 
 This milestone has no collision sound, gravity, rescue, or automatic
-respawn. Earth's original `1-1` test region still has no planet volume.
+respawn. The legacy `1-1` combat test fixture still has no planet volume;
+normal Earth gameplay does.
 
 Test from the umbrella root:
 
