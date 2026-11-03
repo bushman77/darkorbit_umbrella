@@ -917,6 +917,7 @@ defmodule Core.WorldTest do
     assert combat.cruise_paused
     assert enemy.display_name == held.pending_encounter.call_sign
     assert enemy.npc_type_id == "solar-scow-9735"
+    assert enemy.ship_class == "scow"
     assert enemy.max_hull == 210
     assert enemy.damage == 10
     assert enemy.speed == 105
@@ -979,6 +980,7 @@ defmodule Core.WorldTest do
     assert enemy.kind == :npc
     # Vesper-02 is a courier, so it remains a Scow even when hostile.
     assert enemy.npc_type_id == "solar-scow-9731"
+    assert enemy.ship_class == "scow"
     # The cockpit shows the physical current planetary region during combat;
     # the distant destination preview would conceal actual collision geometry.
     assert combat.planetary_view.body_id == "earth"

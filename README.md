@@ -1033,3 +1033,43 @@ combat stats and render selection for dynamically named Scow NPCs.
 Run Core World and Universe Traffic tests, Phoenix WorldChannel tests,
 Node assets tests, then assets build. The original source reference is
 the published 1989 Sunracer Owner's Guide, recognition guide p. 31.
+
+
+### Scow render continuity and future directional damage (2026-11-03)
+
+The SOL close-pass renderer previously always created a generic gray
+cylindrical vessel regardless of its `ship_class`, even though the
+tactical-instance renderer already recognized `solar-scow-*`. It now
+selects the actual Scow cargo mesh (or Dart fighter) using the validated
+server-owned `ship_class` in the contact payload. A held `pending_encounter`
+keeps that snapshot-derived visual available while the NPC continues on
+its independent shared traffic route. The strategic preview is still
+purely visual, never targetable or an extra tactical actor.
+
+The map server also publishes `ship_class` alongside `npc_type_id` in
+authoritative NPC snapshots. Both the laptop and read-only SBS headset
+consume this field and use an identical model resolver: the actual
+server-spawned type ID has priority, then the explicit class, otherwise
+the generic fallback. The cockpit target readout includes `SCOW` or
+`DART` so graphics verification is visible without browser devtools.
+Tests cover preview class-switch cleanup, pending contacts, model identity,
+and map snapshot class forwarding.
+
+**Historical hit locations:** In Space Rogue's original Sunracer Owner's
+Guide (combat p.12 and defenses p.16), damage can affect global hull armor
+or separately disable onboard components (engines, beam weapon, missile
+launcher, shields and ECM). Shields are **forward and aft hemispheres**:
+class #1 stops 1/2, #2 stops 3/4 and #3 stops 7/8 of suitable damage;
+lasers reduce effectiveness by a class, while particle beams bypass them.
+The Scow's recognition guide entry (p.31) lists **Aft-1** only.
+
+Our **current** Core.Combat.apply_damage remains an aggregate shield/hull
+model and has no fore/aft hit arcs or persistent component failures.
+The 3D model merely distinguishes Scow geometry; no directional damage
+mechanic is claimed by this graphics patch. Next: server-authoritative
+ship-relative fore/aft impact classification (including a stable NPC
+heading), directional shield protection, subsystem hit/damage state, ship
+performance penalties, and TAC indications. Visual hit flashes should use
+the *actual server-returned impact point*, not infer damage from UI pixels.
+
+Manual reference: https://cdn.steamstatic.com/steam/apps/569200/manuals/space_rogue_manual.pdf

@@ -1,4 +1,6 @@
 import {encounterRenderSpec} from "./encounter_visual.mjs"
+import {createDartModel} from "./dart_model.mjs"
+import {createScowModel} from "./scow_model.mjs"
 
 // Only a visual sensor contact. It cannot be targeted, shot, boarded or
 // collided with until a separate authoritative tactical handoff exists.
@@ -8,11 +10,15 @@ export class EncounterShipVisual {
     this.scene = scene
     this.group = null
     this.id = null
+    this.shipClass = null
   }
 
-  build() {
+  build(shipClass = null) {
     const T = this.T
+    if (shipClass === "scow") return createScowModel(T)
+    if (shipClass === "dart") return createDartModel(T)
     const g = new T.Group()
+    g.userData.modelId = "generic"
     const hullMaterial = new T.MeshStandardMaterial({
       color: 0xa4b8c7, metalness: 0.65, roughness: 0.38,
     })
@@ -41,17 +47,26 @@ export class EncounterShipVisual {
       if (this.group) this.group.visible = false
       return null
     }
+    if (this.group && this.shipClass !== spec.shipClass) {
+      this.dispose()
+    }
     if (!this.group) {
-      this.group = this.build()
+      this.group = this.build(spec.shipClass)
       this.scene.add(this.group)
     }
+    this.shipClass = spec.shipClass
     this.id = spec.id
     this.group.visible = true
     const offset = new this.T.Vector3(spec.position.x, spec.position.y, spec.position.z)
       .applyQuaternion(camera.quaternion)
     this.group.position.copy(camera.position).add(offset)
     this.group.quaternion.copy(camera.quaternion)
-    this.group.scale.setScalar(spec.scale)
+    // Original generic flyby placeholder was 12 scene units long;
+    // the new mesh classes use smaller design coordinates. Keep their
+    // apparent range/scale useful without changing actual target geometry.
+    const relativeScale = spec.shipClass === "scow" ? 1.7
+      : spec.shipClass === "dart" ? 1.9 : 1
+    this.group.scale.setScalar(spec.scale * relativeScale)
     return spec
   }
 
@@ -65,5 +80,6 @@ export class EncounterShipVisual {
     })
     this.group = null
     this.id = null
+    this.shipClass = null
   }
 }

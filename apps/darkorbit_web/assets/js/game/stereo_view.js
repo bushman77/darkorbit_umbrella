@@ -5,8 +5,9 @@ import {cockpitHudFit, HUD_GEOMETRY} from "./stereo_layout.mjs"
 import {flightBasis, degrees} from "./flight_basis.mjs"
 import {orientationTelemetry} from "./orientation_interpolation.mjs"
 import {targetRange, LASER_FEEDBACK_MS} from "./laser_feedback.mjs"
-import {createDartModel, isDartModelId, dartHeadingRotation} from "./dart_model.mjs"
-import {createScowModel, isScowModelId} from "./scow_model.mjs"
+import {createDartModel, dartHeadingRotation} from "./dart_model.mjs"
+import {createScowModel} from "./scow_model.mjs"
+import {npcVisualClass} from "./ship_model_selection.mjs"
 import {PlanetaryBody} from "./planetary_body.js"
 import {EncounterShipVisual} from "./encounter_ship.js"
 
@@ -26,9 +27,10 @@ function beam(a, b, radius, mat) {
   return mesh
 }
 
-function shipModel(npc, npcTypeId = null) {
-  if (npc && isDartModelId(npcTypeId)) return createDartModel(THREE)
-  if (npc && isScowModelId(npcTypeId)) return createScowModel(THREE)
+function shipModel(npc, npcTypeId = null, shipClass = null) {
+  const model = npc ? npcVisualClass(npcTypeId, shipClass) : "player"
+  if (model === "dart") return createDartModel(THREE)
+  if (model === "scow") return createScowModel(THREE)
   const root = new THREE.Group()
   const hull = new THREE.Mesh(
     npc ? new THREE.OctahedronGeometry(2, 0) : new THREE.ConeGeometry(1.65, 4.8, 4),
@@ -257,15 +259,17 @@ export class StereoSpaceView {
       active.add(entity.id)
       let node = this.nodes.get(entity.id)
       if (!node || node.userData.kind !== entity.kind ||
-          node.userData.npcTypeId !== (entity.npcTypeId || null)) {
+          node.userData.npcTypeId !== (entity.npcTypeId || null) ||
+          node.userData.shipClass !== (entity.shipClass || null)) {
         if (node) {
           this.scene.remove(node)
           disposeMesh(node)
         }
-        node = shipModel(entity.kind === "npc", entity.npcTypeId)
+        node = shipModel(entity.kind === "npc", entity.npcTypeId, entity.shipClass)
         node.userData.entityId = entity.id
         node.userData.kind = entity.kind
         node.userData.npcTypeId = entity.npcTypeId || null
+        node.userData.shipClass = entity.shipClass || null
         this.scene.add(node)
         this.nodes.set(entity.id, node)
       }
@@ -280,7 +284,7 @@ export class StereoSpaceView {
         const a = entity.renderAttitude || entity.attitude
         node.rotation.set(a.pitch, -a.yaw, a.roll, "YXZ")
       } else if (entity.kind === "npc" &&
-        (isDartModelId(entity.npcTypeId) || isScowModelId(entity.npcTypeId))) {
+        npcVisualClass(entity.npcTypeId, entity.shipClass) !== "generic") {
         node.rotation.y = dartHeadingRotation(entity.angle)
       } else {
         node.rotation.y = -entity.angle
@@ -375,7 +379,10 @@ export class StereoSpaceView {
       selected ? "#ffbe89" : "#7aa9cb"
     ctx.font = recent ? "bold 36px monospace" : "30px monospace"
     ctx.fillText(recent ? feedback.label :
-      selected ? "TARGET " + (selected.displayName || "HOSTILE").slice(0, 23) :
+      selected ? "TARGET " +
+        (npcVisualClass(selected.npcTypeId, selected.shipClass) === "generic"
+          ? "" : npcVisualClass(selected.npcTypeId, selected.shipClass).toUpperCase() + " ") +
+        (selected.displayName || "CONTACT").slice(0, 19) :
       "P/Y/R  " + Math.abs(degrees(rates.pitch)) + " / " +
       Math.abs(degrees(rates.yaw)) + " / " + Math.abs(degrees(rates.roll)) +
       " deg/s", 30, 194)

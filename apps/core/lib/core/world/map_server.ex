@@ -1449,6 +1449,7 @@ defmodule Core.World.MapServer do
       id: entity.id,
       kind: entity.kind,
       npc_type_id: entity.npc_type_id,
+      ship_class: npc_ship_class(entity.npc_type_id),
       display_name: entity.display_name,
       position: public_position(entity.position),
       position_3d: position_3d(entity.position),
@@ -1469,6 +1470,18 @@ defmodule Core.World.MapServer do
       status: entity.status
     }
   end
+
+  # Published NPC model class is authoritative server data, not guessed by
+  # each browser or phone based solely on a generated instance ID.
+  defp npc_ship_class(type_id) when is_binary(type_id) do
+    cond do
+      type_id == "scow" or String.starts_with?(type_id, "solar-scow-") -> "scow"
+      type_id == "dart" or String.starts_with?(type_id, "solar-dart-") -> "dart"
+      true -> nil
+    end
+  end
+
+  defp npc_ship_class(_type_id), do: nil
 
   defp public_position(nil), do: nil
 

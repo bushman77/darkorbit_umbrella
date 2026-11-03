@@ -623,3 +623,22 @@ validation remain deferred.
   than assuming every attacked Scow fights to destruction.
 - [ ] Implement larger Tanker merchants as a separate hull with stronger
   defenses; add salvage and transferred cargo after surrender/defeat.
+
+
+### Scow graphics verification and impact orientation (2026-11-03)
+
+- [x] Replace generic gray SOL close-pass preview with actual Scow
+  merchant mesh (Dart for fighter contacts) using shared model factory.
+- [x] Preserve Scow preview from `pending_encounter` during pilot hold.
+- [x] Publish an authoritative `ship_class` in tactical map NPC snapshots;
+  render identical class in laptop and paired SBS phone.
+- [x] Display selected NPC class in the cockpit target readout.
+- [x] Add model-switch, pending-contact and ship-class regression tests.
+- [ ] Run full JS/Elixir test suite and check actual headset graphics.
+- [ ] Track authoritative NPC heading and calculate front/aft impact arc
+  from server-side 3D weapon hit geometry, not browser-derived positions.
+- [ ] Replace pooled shields with forward/aft shields and original
+  class-based mitigation, including Scow Aft-1.
+- [ ] Add component damage (engines, beam, missiles, shields, ECM),
+  persistent system status, handling penalties and TAC presentation.
+- [ ] Separate cosmetic model hit markers from server-owned damage outcomes.

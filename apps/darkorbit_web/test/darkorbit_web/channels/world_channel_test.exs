@@ -221,6 +221,9 @@ defmodule DarkorbitWeb.WorldChannelTest do
       ship_class: "scow"}}, enemy: %{kind: :npc, id: npc_id,
                                     npc_type_id: npc_type_id}}
     assert String.starts_with?(npc_type_id, "solar-scow-")
+    assert {:ok, local_world} = World.snapshot("1-1")
+    assert %{ship_class: "scow", npc_type_id: ^npc_type_id} =
+      Enum.find(local_world.entities, &(&1.id == npc_id))
 
     assert {:ok, world} = World.snapshot("1-1")
     assert Enum.any?(world.entities, &(&1.id == npc_id))

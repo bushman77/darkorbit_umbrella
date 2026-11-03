@@ -567,3 +567,19 @@
 - Flight, surrender, jettison, reputation and loot behavior remain
   future work; this commit does not claim these are implemented.
 - Elixir suites and physical browser/HMD verification still pending.
+
+
+### Scow graphics and damage-model audit (2026-11-03)
+
+- Corrected missing Scow graphics in the strategic close-pass preview:
+  type-aware view now selects the actual new blue cargo model and
+  preserves it for a pending paused encounter.
+- Added the authoritative tactical NPC `ship_class` to world snapshots,
+  consumed by laptop and SBS headset with a shared type resolver.
+- Display selected ship class in the cockpit target HUD.
+- Added end-to-end model identity, classification and preview tests;
+  the code is not yet verified on a running HMD.
+- Audited original Space Rogue mechanics: fore/aft shield hemispheres,
+  global hull armor and disableable ship systems. Current pooled
+  shield/hull damage is unchanged; detailed impact behavior is a
+  future combat milestone, not part of the rendering fix.

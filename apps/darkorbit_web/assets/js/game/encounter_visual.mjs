@@ -4,7 +4,9 @@
 const validCoord = v => v && [v.x, v.y, v.z].every(Number.isFinite)
 
 export function encounterRenderSpec(navigation) {
-  const encounter = navigation?.encounter
+  // A pending decision retains the original authoritative contact metadata
+  // even after the independent traffic ship has moved beyond sensor range.
+  const encounter = navigation?.pending_encounter || navigation?.encounter
   if (navigation?.status !== "traveling" ||
       !encounter || encounter.mode !== "strategic_flyby" ||
       typeof encounter.id !== "string" ||
@@ -33,6 +35,8 @@ export function encounterRenderSpec(navigation) {
   return {
     id: encounter.id,
     callSign: typeof encounter.call_sign === "string" ? encounter.call_sign : "CONTACT",
+    shipClass: ["scow", "dart"].includes(encounter.ship_class)
+      ? encounter.ship_class : null,
     distanceKm: encounter.distance_km,
     position: {
       x: right / magnitude * distance,

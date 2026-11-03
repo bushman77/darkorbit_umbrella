@@ -45,3 +45,24 @@ test("visual size grows on approach, but only within server-provided encounter",
   assert.equal(encounterRenderSpec(voyage({x: NaN, y: 0, z: 0}, 2000)), null)
   assert.equal(encounterRenderSpec(voyage({x: 0, y: 0, z: 0}, 0)), null)
 })
+
+test("Scow strategic flyby classification survives a server-owned encounter hold", () => {
+  const navigation = voyage()
+  navigation.encounter.ship_class = "scow"
+  assert.equal(encounterRenderSpec(navigation).shipClass, "scow")
+
+  const pending = {...navigation, encounter: null, cruise_paused: true,
+    pending_encounter: navigation.encounter}
+  const spec = encounterRenderSpec(pending)
+  assert.equal(spec.id, navigation.pending_encounter.id)
+  assert.equal(spec.shipClass, "scow")
+  assert.equal(spec.position.z, -90)
+})
+
+test("only known ship classes select a dedicated visual model", () => {
+  const navigation = voyage()
+  navigation.encounter.ship_class = "dart"
+  assert.equal(encounterRenderSpec(navigation).shipClass, "dart")
+  navigation.encounter.ship_class = "client-forged"
+  assert.equal(encounterRenderSpec(navigation).shipClass, null)
+})
