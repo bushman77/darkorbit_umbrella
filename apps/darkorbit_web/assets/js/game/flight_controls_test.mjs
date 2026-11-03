@@ -171,3 +171,83 @@ test("F releases attitude controls without cancelling held throttle", () => {
   assert.ok(flight.throttle > throttleBefore)
   flight.keyUp(press("Equal"))
 })
+
+const wheel = (deltaY, extras = {}) => ({
+  deltaY, deltaMode: 0, defaultPrevented: false,
+  preventDefault() { this.prevented = true },
+  ...extras,
+})
+
+test("mouse wheel sets persistent 5% target throttle while server owns actual speed", () => {
+  let time = 1000
+  const sent = []
+  const flight = new FlightControls({send: data => sent.push(data), now: () => time})
+  const ahead = wheel(-100)
+  assert.equal(flight.wheel(ahead), true)
+  assert.equal(ahead.prevented, true)
+  assert.equal(flight.throttle, 0.05)
+  assert.equal(sent.at(-1).throttle, 0.05)
+
+  time += 300
+  flight.wheel(wheel(-100))
+  assert.equal(flight.throttle, 0.1)
+  assert.equal(flight.pressed.size, 0)
+
+  time += 300
+  flight.wheel(wheel(100))
+  assert.equal(flight.throttle, 0.05)
+  // Releasing the wheel changes nothing: throttle is a latched target.
+  flight.heartbeat(time + 1000)
+  assert.equal(flight.throttle, 0.05)
+})
+
+test("wheel accumulates trackpad deltas, normalizes Firefox line events and clamps", () => {
+  let time = 1000
+  const sent = []
+  const flight = new FlightControls({send: data => sent.push(data), now: () => time})
+  for (let i = 0; i < 7; i++) {
+    time += 10
+    flight.wheel(wheel(-10))
+  }
+  assert.equal(flight.throttle, 0)
+  flight.wheel(wheel(-10))
+  assert.equal(flight.throttle, 0.05)
+
+  time += 300
+  flight.wheel(wheel(-3, {deltaMode: 1}))
+  assert.equal(flight.throttle, 0.1)
+  time += 300
+  flight.wheel(wheel(-10_000))
+  assert.equal(flight.throttle, 0.25)
+
+  for (let i = 0; i < 40; i++) {
+    time += 300
+    flight.wheel(wheel(-120))
+  }
+  assert.equal(flight.throttle, 1)
+  for (let i = 0; i < 60; i++) {
+    time += 300
+    flight.wheel(wheel(120))
+  }
+  assert.equal(flight.throttle, -1)
+})
+
+test("wheel never changes speed over Atlas, text fields, or modified gestures", () => {
+  let active = false
+  const sent = []
+  const flight = new FlightControls({send: data => sent.push(data), active: () => active})
+  assert.equal(flight.wheel(wheel(-120)), false)
+  active = true
+  for (const extras of [
+    {target: {tagName: "INPUT"}},
+    {target: {isContentEditable: true}},
+    {ctrlKey: true}, {metaKey: true}, {shiftKey: true},
+    {defaultPrevented: true}, {deltaY: Infinity},
+  ]) {
+    const event = wheel(-120, extras)
+    assert.equal(flight.wheel(event), false)
+    assert.equal(event.prevented, undefined)
+  }
+  assert.equal(flight.throttle, 0)
+  assert.equal(sent.length, 0)
+})
