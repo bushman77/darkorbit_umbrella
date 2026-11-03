@@ -635,3 +635,48 @@ cd ../..
 npm test --prefix apps/darkorbit_web/assets
 mix assets.build
 ```
+
+### Unified planetary hazards for every SOL destination (2026-11-03)
+
+The planetary rules now cover **all nine navigable SOL bodies**, including
+Earth and dwarf planet Pluto. The single authoritative `Core.Universe.Sol`
+catalogue owns each body's mean physical radius. `Sol.planets/0` supplies
+`Core.Universe.OrbitalEntry.planet_maps/0` with **every registered body**;
+each gets a shared collision-ready `sol:<body>` region, an automatically
+safe, approach-direction-derived spawn, 1.08× fatal collision radius,
+1.20× critical and 1.55× caution zones relative to the fatal radius,
+and server-driven `:entity_destroyed` consequences. Current maps are
+400,000 local units wide; the generator enlarges maps for oversized future
+planetary radii.
+
+**Earth now uses `sol:earth` in live gameplay**, including the very first
+login; its planet moves in the cockpit as a real orbital-relative backdrop
+and it can destroy ships. `1-1` is retained solely as a legacy combat
+test fixture through `config/test.exs`'s
+`legacy_test_earth_sector` flag. The normal application configuration
+does not enable that exception.
+
+The cockpit's map-ID validator and procedural planet texture generator
+now accept well-formed future planet IDs without a client-code allowlist.
+A newly added SOL planet still requires registering its navigable orbit,
+radius and name in `Core.Universe.Sol`, and inclusion in any Atlas catalog
+used for selection, but **does not require new collision or warning code**.
+A completely different star system still needs its own system catalogue
+and cross-system routing; wormhole mechanics are not implemented.
+
+Targeted regression suite from the umbrella root:
+
+```sh
+cd apps/core
+mix test test/core/universe/sol_test.exs \
+  test/core/universe/orbital_entry_test.exs \
+  test/core/universe/planetary_view_test.exs \
+  test/core/world/all_planet_regions_integration_test.exs \
+  test/core/world/planetary_collision_test.exs \
+  test/core/world/planetary_proximity_test.exs \
+  test/core/world/planetary_impact_integration_test.exs
+cd ../..
+mix test apps/darkorbit_web/test/darkorbit_web/channels/world_channel_test.exs
+npm test --prefix apps/darkorbit_web/assets
+mix assets.build
+```
