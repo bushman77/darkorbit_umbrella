@@ -99,7 +99,12 @@ defmodule Core.World.FlightDynamics do
       entity.orientation || Orientation.from_angles(entity.attitude), delta
     )
     heading = Orientation.forward(orientation)
-    acceleration = max(24.0, entity.speed * 1.5) * dt
+    # Cruise is an assisted target-speed controller: the throttle selects a
+    # signed desired speed and the server integrates acceleration/braking over
+    # simulation ticks. Newtonian mode instead applies physical thrust.
+    cruise_acceleration = max(18.0, entity.speed * 0.75) * dt
+    cruise_braking = max(28.0, entity.speed * 1.2) * dt
+    thrust_acceleration = max(24.0, entity.speed * 1.5) * dt
     speed = entity.speed * 1.0
     {velocity, cruise_speed} =
       case entity.flight_mode do
@@ -109,7 +114,10 @@ defmodule Core.World.FlightDynamics do
           # with a stale world-space vector from before the pilot turned.
           # Smooth acceleration remains; only lateral drift is eliminated.
           target_speed = entity.throttle * speed
-          forward_speed = approach_scalar(entity.cruise_speed, target_speed, acceleration)
+          braking? = abs(target_speed) < abs(entity.cruise_speed) or
+                     entity.cruise_speed * target_speed < 0.0
+          max_change = if braking?, do: cruise_braking, else: cruise_acceleration
+          forward_speed = approach_scalar(entity.cruise_speed, target_speed, max_change)
           {scale(heading, forward_speed), forward_speed}
 
         :newtonian ->
@@ -117,7 +125,7 @@ defmodule Core.World.FlightDynamics do
           # New thrust still accelerates in the current nose direction.
           velocity =
             entity.velocity
-            |> add(scale(heading, entity.throttle * acceleration))
+            |> add(scale(heading, entity.throttle * thrust_acceleration))
             |> limit(speed * 1.5)
 
           {velocity, entity.cruise_speed}
