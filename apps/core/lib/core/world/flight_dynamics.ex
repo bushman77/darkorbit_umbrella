@@ -56,10 +56,24 @@ defmodule Core.World.FlightDynamics do
           entity.cruise_speed
         end
 
+      # Exiting mouse-look must not leave its high angular velocity coasting
+      # under the keyboard braking profile. Only neutral axes are snapped;
+      # keyboard-held axes continue under the established controls.
+      angular_velocity =
+        if Map.get(entity.rotation_input, :mouse_steering, false) and
+             not mouse_steering? do
+          entity.angular_velocity
+          |> maybe_stop_mouse_axis(:yaw, yaw)
+          |> maybe_stop_mouse_axis(:pitch, pitch)
+        else
+          entity.angular_velocity
+        end
+
       {:ok,
        %{
          entity
-         | throttle: throttle * 1.0,
+         | angular_velocity: angular_velocity,
+           throttle: throttle * 1.0,
            cruise_speed: cruise_speed,
            rotation_input: %{yaw: yaw * 1.0, pitch: pitch * 1.0, roll: roll * 1.0,
                              mouse_steering: mouse_steering?},
@@ -82,7 +96,8 @@ defmodule Core.World.FlightDynamics do
     input =
       if tick - entity.control_tick <= @input_expiry_ticks,
         do: entity.rotation_input,
-        else: %{yaw: 0.0, pitch: 0.0, roll: 0.0}
+        else: %{yaw: 0.0, pitch: 0.0, roll: 0.0,
+                mouse_steering: Map.get(entity.rotation_input, :mouse_steering, false)}
 
     # Integrate angular velocity as state: held keys ramp up to a safe
     # maximum, released keys brake to zero, and the reverse key brakes
@@ -90,14 +105,20 @@ defmodule Core.World.FlightDynamics do
     # even the first tick from jumping straight to the new angular rate.
     {attitude, angular_velocity} =
       Enum.reduce([:yaw, :pitch, :roll], {%{}, %{}}, fn axis, {angles, rates} ->
-        old_rate = Map.fetch!(entity.angular_velocity, axis)
+        mouse_axis? = Map.get(input, :mouse_steering, false) and axis in [:yaw, :pitch]
+        axis_input = Map.fetch!(input, axis)
+        # Mouse-look is direct angular control: when movement ends, stop
+        # turning on this server simulation tick without a braking tail.
+        old_rate =
+          if mouse_axis? and axis_input == 0.0,
+            do: 0.0,
+            else: Map.fetch!(entity.angular_velocity, axis)
+
         limits =
-          if Map.get(input, :mouse_steering, false) and axis in [:yaw, :pitch],
+          if mouse_axis?,
             do: Map.fetch!(@mouse_turn_limits, axis),
             else: Map.fetch!(@turn_limits, axis)
-
-        next_rate = advance_angular_rate(old_rate, Map.fetch!(input, axis),
-                                         limits, dt)
+        next_rate = advance_angular_rate(old_rate, axis_input, limits, dt)
         angle = wrap_angle(Map.fetch!(entity.attitude, axis) +
                            (old_rate + next_rate) * 0.5 * dt)
 
@@ -182,6 +203,12 @@ defmodule Core.World.FlightDynamics do
       z: :math.sin(pitch)
     }
   end
+
+  defp maybe_stop_mouse_axis(rates, axis, input) when input == 0.0 do
+    Map.put(rates, axis, 0.0)
+  end
+
+  defp maybe_stop_mouse_axis(rates, _axis, _input), do: rates
 
   defp advance_angular_rate(current, input, limits, dt) do
     desired = input * degrees_to_radians(limits.speed)
