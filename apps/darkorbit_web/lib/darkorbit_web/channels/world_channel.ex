@@ -6,7 +6,8 @@ defmodule DarkorbitWeb.WorldChannel do
   @starting_map "1-1"
 
   @impl true
-  def join("world:" <> map_id, _payload, socket) when map_id == @starting_map do
+  def join("world:" <> map_id, _payload,
+           %{assigns: %{socket_role: :pilot}} = socket) when map_id == @starting_map do
     player_id = socket.assigns.current_player_id
 
     with :ok <- World.subscribe(map_id),
