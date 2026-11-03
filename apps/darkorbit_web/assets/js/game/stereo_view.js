@@ -390,7 +390,7 @@ export class StereoSpaceView {
     ctx.fillStyle = range?.inRange === false ? "#ff9b96" : "#9fc7df"
     ctx.font = "bold 22px monospace"
     ctx.fillText(range ? range.label :
-      "LASER " + Math.round(own?.attackRange || 0) + "u  ·  SPACE FIRE  ·  T TARGET", 30, 234)
+      "LASER " + Math.round(own?.attackRange || 0) + "u  ·  RMB FIRE  ·  T TARGET", 30, 234)
     this.hudTexture.needsUpdate = true
   }
 
