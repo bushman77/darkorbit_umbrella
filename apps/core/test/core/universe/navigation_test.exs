@@ -76,6 +76,37 @@ defmodule Core.Universe.NavigationTest do
       Navigation.set_course(server, 11, "pluto")
   end
 
+  test "Venus approach projects an increasingly large real-radius planet without affecting flight", %{server: server} do
+    {:ok, earth} = Navigation.snapshot(server, 1_260)
+    assert earth.planetary_view.body_id == "earth"
+    assert earth.planetary_view.stage == :orbital_preview
+    assert earth.planetary_view.angular_diameter_deg == 65.0
+    assert earth.planetary_view.visual_only
+
+    {:ok, departure} = Navigation.set_course(server, 1_260, "venus")
+    assert departure.planetary_view.body_id == "venus"
+    assert departure.planetary_view.stage == :approach_preview
+    assert departure.planetary_view.angular_diameter_deg == 1.5
+    assert departure.position_km == departure.origin_position_km
+
+    midpoint = div(departure.duration_ms, 2_000)
+    for _ <- 1..midpoint, do: :ok = Navigation.tick(server)
+    {:ok, approaching} = Navigation.snapshot(server, 1_260)
+    assert approaching.planetary_view.angular_diameter_deg >
+      departure.planetary_view.angular_diameter_deg
+    assert approaching.planetary_view.angular_diameter_deg < 65.0
+    assert approaching.status == :traveling
+
+    for _ <- 1..ceil(departure.duration_ms / 1_000), do: :ok = Navigation.tick(server)
+    {:ok, arrived} = Navigation.snapshot(server, 1_260)
+    assert arrived.status == :idle
+    assert arrived.location_id == "venus"
+    assert arrived.planetary_view.body_id == "venus"
+    assert arrived.planetary_view.stage == :orbital_preview
+    assert arrived.planetary_view.angular_diameter_deg == 65.0
+    assert arrived.position_km == elem(Core.Universe.Sol.game_position_km("venus"), 1)
+  end
+
   test "contact identity and traffic progression persist across disconnected pilots", %{server: server} do
     assert {:ok, initial} = Navigation.snapshot(server, 11)
     assert [%{id: id, origin_id: "earth", destination_id: "mars"}] = initial.contacts
