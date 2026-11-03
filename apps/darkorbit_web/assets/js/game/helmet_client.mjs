@@ -4,10 +4,13 @@ import {visualLaserRays} from "./laser_burst.mjs"
 import {laserFeedback} from "./laser_feedback.mjs"
 import {helmetSocketParams} from "./helmet_auth.mjs"
 import {adjustedHelmetAlignment, HELMET_GAP_MIN, HELMET_GAP_MAX} from "./helmet_alignment.mjs"
+import {restoredHelmetCalibration} from "./helmet_calibration_restore.mjs"
 
 const STORAGE_KEY = "darkorbit:pilot_hmd_credential"
 const GAP_KEY = "darkorbit:pilot_hmd_eye_gap"
 const EYE_SEP_KEY = "darkorbit:pilot_hmd_eye_sep"
+const CALIBRATION_DIRTY_KEY = "darkorbit:pilot_hmd_calibration_unsynced"
+const CALIBRATION_SAVE_DELAY_MS = 350
 const key = value => String(value)
 
 // Display-only companion. Never joins WorldChannel or sends flight commands.
@@ -25,6 +28,9 @@ export class HelmetClient {
     this.windowed = false
     this.eyeGapPx = Math.max(HELMET_GAP_MIN, Math.min(HELMET_GAP_MAX, Number(localStorage.getItem(GAP_KEY) ?? 8)))
     this.eyeSepMm = Math.max(40, Math.min(85, Number(localStorage.getItem(EYE_SEP_KEY)) || 64))
+    this.calibrationRevision = 0
+    this.calibrationSaveTimer = null
+    this.calibrationSaveInFlight = false
     this.entities = new Map()
     this.selfId = null
     this.selectedTargetId = null
@@ -85,6 +91,7 @@ export class HelmetClient {
     })
     this.channel.on("helmet_error", ({reason}) => this.message(reason))
     this.channel.onError(() => {
+      this.calibrationSaveInFlight = false
       this.stop()
       this.message("Helmet link interrupted. Reconnecting…")
     })
@@ -101,10 +108,12 @@ export class HelmetClient {
       }
     })
     this.channel.join()
-      .receive("ok", ({mode, player_id}) => {
+      .receive("ok", ({mode, player_id, calibration}) => {
         this.selfId = key(player_id)
+        // Restore BEFORE starting the SBS frame loop; never flash a default
+        // separation in the headset when PostgreSQL already has a setting.
+        this.restoreServerCalibration(calibration)
         this.setMode(mode)
-        this.reportAlignment()
       })
       .receive("error", ({reason}) => {
         this.message("Helmet viewer connection refused: " + (reason || "unknown"))
@@ -124,7 +133,13 @@ export class HelmetClient {
         this.startRendering()
       }
     })
-    setInterval(() => this.report(this.running && this.frameCount > 0 && !document.hidden), 5000)
+    setInterval(() => {
+      this.report(this.running && this.frameCount > 0 && !document.hidden)
+      if (localStorage.getItem(CALIBRATION_DIRTY_KEY) === "1" &&
+          !this.calibrationSaveTimer && !this.calibrationSaveInFlight) {
+        this.scheduleCalibrationSave()
+      }
+    }, 5000)
   }
 
   async redeemPairingCode() {
@@ -214,13 +229,13 @@ export class HelmetClient {
 
     gap?.addEventListener("input", () => {
       this.eyeGapPx = Math.max(HELMET_GAP_MIN, Math.min(HELMET_GAP_MAX, Number(gap.value) || 0))
-      localStorage.setItem(GAP_KEY, String(this.eyeGapPx))
+      this.rememberCalibration()
       this.applyAlignment()
       this.reportAlignment()
     })
     sep?.addEventListener("input", () => {
       this.eyeSepMm = Math.max(40, Math.min(85, Number(sep.value) || 64))
-      localStorage.setItem(EYE_SEP_KEY, String(this.eyeSepMm))
+      this.rememberCalibration()
       this.applyAlignment()
       this.reportAlignment()
     })
@@ -272,8 +287,7 @@ export class HelmetClient {
 
     this.eyeGapPx = next.eyeGapPx
     this.eyeSepMm = next.eyeSepMm
-    localStorage.setItem(GAP_KEY, String(this.eyeGapPx))
-    localStorage.setItem(EYE_SEP_KEY, String(this.eyeSepMm))
+    this.rememberCalibration()
 
     const gap = this.root.querySelector("#helmet-eye-gap")
     const separation = this.root.querySelector("#helmet-eye-sep")
@@ -282,6 +296,89 @@ export class HelmetClient {
 
     this.applyAlignment()
     this.reportAlignment()
+  }
+
+  restoreServerCalibration(saved) {
+    const remote = saved && {
+      eyeGapPx: saved.eye_gap_px,
+      eyeSepMm: saved.eye_sep_mm,
+    }
+    const restored = restoredHelmetCalibration({
+      server: remote,
+      local: {eyeGapPx: this.eyeGapPx, eyeSepMm: this.eyeSepMm},
+      dirty: localStorage.getItem(CALIBRATION_DIRTY_KEY) === "1",
+    })
+
+    this.eyeGapPx = restored.calibration.eyeGapPx
+    this.eyeSepMm = restored.calibration.eyeSepMm
+    localStorage.setItem(GAP_KEY, String(this.eyeGapPx))
+    localStorage.setItem(EYE_SEP_KEY, String(this.eyeSepMm))
+
+    if (restored.needsSave) {
+      localStorage.setItem(CALIBRATION_DIRTY_KEY, "1")
+      this.calibrationRevision++
+      this.scheduleCalibrationSave()
+    } else {
+      localStorage.removeItem(CALIBRATION_DIRTY_KEY)
+    }
+
+    const gap = this.root.querySelector("#helmet-eye-gap")
+    const separation = this.root.querySelector("#helmet-eye-sep")
+    if (gap) gap.value = String(this.eyeGapPx)
+    if (separation) separation.value = String(this.eyeSepMm)
+    this.applyAlignment()
+    this.reportAlignment()
+  }
+
+  rememberCalibration() {
+    // Local storage updates synchronously on every keypress. A reload before
+    // PostgreSQL acknowledges still preserves the last adjustment on the phone.
+    localStorage.setItem(GAP_KEY, String(this.eyeGapPx))
+    localStorage.setItem(EYE_SEP_KEY, String(this.eyeSepMm))
+    localStorage.setItem(CALIBRATION_DIRTY_KEY, "1")
+    this.calibrationRevision++
+    this.scheduleCalibrationSave()
+  }
+
+  scheduleCalibrationSave() {
+    if (this.calibrationSaveTimer) clearTimeout(this.calibrationSaveTimer)
+    this.calibrationSaveTimer = setTimeout(() => {
+      this.calibrationSaveTimer = null
+      this.persistCalibration()
+    }, CALIBRATION_SAVE_DELAY_MS)
+  }
+
+  persistCalibration() {
+    if (this.calibrationSaveInFlight || this.channel?.state !== "joined" ||
+        localStorage.getItem(CALIBRATION_DIRTY_KEY) !== "1") return
+
+    this.calibrationSaveInFlight = true
+    const revision = this.calibrationRevision
+    const payload = {
+      eye_gap_px: Math.round(this.eyeGapPx),
+      eye_sep_mm: Math.round(this.eyeSepMm),
+    }
+
+    this.channel.push("save_alignment", payload, 5000)
+      .receive("ok", saved => {
+        this.calibrationSaveInFlight = false
+        if (revision === this.calibrationRevision &&
+            saved.eye_gap_px === payload.eye_gap_px &&
+            saved.eye_sep_mm === payload.eye_sep_mm) {
+          localStorage.removeItem(CALIBRATION_DIRTY_KEY)
+        } else {
+          // A newer adjustment was made during this write: save it next.
+          this.scheduleCalibrationSave()
+        }
+      })
+      .receive("error", () => {
+        // Retain local data. Retry after the channel reconnects or the
+        // periodic health report fires; never interrupt the VR display.
+        this.calibrationSaveInFlight = false
+      })
+      .receive("timeout", () => {
+        this.calibrationSaveInFlight = false
+      })
   }
 
   reportAlignment() {
