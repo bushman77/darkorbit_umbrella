@@ -6,8 +6,8 @@ defmodule Core.Universe.TrafficTest do
 
   test "a scheduled civilian freighter exists before any player arrives" do
     fleet = Traffic.seed()
-    assert map_size(fleet) == 1
-    [vessel] = Map.values(fleet)
+    assert map_size(fleet) == 6
+    vessel = Map.fetch!(fleet, "traffic:sol:meridian-01")
     assert vessel.id == "traffic:sol:meridian-01"
     assert vessel.kind == :commercial_freighter
     assert vessel.disposition == :neutral
@@ -19,12 +19,40 @@ defmodule Core.Universe.TrafficTest do
     assert vessel.position_km == elem(Sol.game_position_km("earth"), 1)
   end
 
+  test "six ships follow separate routes before any pilot creates an encounter" do
+    traffic = Traffic.seed()
+    assert map_size(traffic) == 6
+    assert Enum.uniq(Map.keys(traffic)) == Map.keys(traffic)
+
+    for vessel <- Map.values(traffic) do
+      assert vessel.state == :in_transit
+      assert vessel.duration_ms > 0
+      assert vessel.cruise_speed_km_s > 0
+      assert Sol.destination?(vessel.origin_id)
+      assert Sol.destination?(vessel.destination_id)
+      assert is_map(vessel.cargo)
+      refute vessel.origin_id == vessel.destination_id
+    end
+
+    vesper = Map.fetch!(traffic, "traffic:sol:vesper-02")
+    assert vesper.origin_id == "earth"
+    assert vesper.destination_id == "venus"
+    assert vesper.elapsed_ms > 0
+    assert vesper.purpose == :express_delivery
+    assert vesper.position_km != elem(Sol.game_position_km("earth"), 1)
+
+    # All vessels are real, persistent server entities, not flyby spawns.
+    moved = Traffic.advance(traffic, 90_000)
+    assert Map.keys(moved) == Map.keys(traffic)
+    assert moved["traffic:sol:vesper-02"].position_km != vesper.position_km
+  end
+
   test "movement does not require a player, encounter or a new ship spawn" do
     original = Traffic.seed()
-    [freighter] = Map.values(original)
+    freighter = Map.fetch!(original, "traffic:sol:meridian-01")
     moved = Traffic.advance(original, 30_000)
     assert Map.keys(moved) == Map.keys(original)
-    [moving] = Map.values(moved)
+    moving = Map.fetch!(moved, "traffic:sol:meridian-01")
     assert moving.id == freighter.id
     assert moving.voyage_number == 1
     assert moving.elapsed_ms == 30_000
@@ -34,15 +62,15 @@ defmodule Core.Universe.TrafficTest do
   end
 
   test "the same freighter docks and returns with a meaningful return cargo" do
-    [freighter] = Map.values(Traffic.seed())
+    freighter = Map.fetch!(Traffic.seed(), "traffic:sol:meridian-01")
     at_mars = Traffic.advance(Traffic.seed(), freighter.duration_ms)
-    [docked] = Map.values(at_mars)
+    docked = Map.fetch!(at_mars, "traffic:sol:meridian-01")
     assert docked.state == :docked
     assert docked.location_id == "mars"
     assert docked.position_km == elem(Sol.game_position_km("mars"), 1)
 
     returning = Traffic.advance(at_mars, 45_000)
-    [homebound] = Map.values(returning)
+    homebound = Map.fetch!(returning, "traffic:sol:meridian-01")
     assert homebound.id == freighter.id
     assert homebound.state == :in_transit
     assert homebound.origin_id == "mars"
@@ -51,7 +79,8 @@ defmodule Core.Universe.TrafficTest do
     assert homebound.voyage_number == 2
     assert homebound.elapsed_ms == 0
 
-    [earth] = Traffic.advance(returning, homebound.duration_ms) |> Map.values()
+    earth = Traffic.advance(returning, homebound.duration_ms)
+      |> Map.fetch!("traffic:sol:meridian-01")
     assert earth.state == :docked
     assert earth.location_id == "earth"
     assert earth.voyage_number == 2
