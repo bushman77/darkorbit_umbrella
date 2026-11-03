@@ -936,6 +936,108 @@ class SpaceClient {
     this.stereoView?.resize(rect.width, rect.height, dpr)
   }
 
+  setupMouseSteering() {
+    const toggle = this.root.querySelector("#nav-mouse-steering")
+    const slider = this.root.querySelector("#nav-mouse-sensitivity")
+    const output = this.root.querySelector("#nav-mouse-sensitivity-value")
+    if (toggle) toggle.checked = this.mouseSteeringEnabled
+    if (slider) slider.value = String(Math.round(this.mouseSteeringSensitivity * 100))
+    if (output) output.textContent = this.mouseSteeringSensitivity.toFixed(1) + "×"
+    slider?.addEventListener("input", () => {
+      const sensitivity = Number(slider.value) / 100
+      if (!validMouseSensitivity(sensitivity)) return
+      this.mouseSteeringSensitivity = sensitivity
+      this.mouseSteering.sensitivity = sensitivity
+      localStorage.setItem(this.mouseSensitivityKey, String(sensitivity))
+      if (output) output.textContent = sensitivity.toFixed(1) + "×"
+    })
+    toggle?.addEventListener("change", () => {
+      this.mouseSteeringEnabled = toggle.checked
+      localStorage.setItem(this.mouseSteeringKey, toggle.checked ? "1" : "0")
+      if (!toggle.checked) this.exitMouseSteering({silent: this.navComputer?.isOpen})
+      this.updateMouseSteeringStatus()
+    })
+
+    this.canvas.addEventListener("pointerdown", event => {
+      if (!this.mouseSteeringEnabled || event.button !== 0 ||
+          document.pointerLockElement === this.canvas ||
+          this.navComputer?.isOpen || this.inSystemCruise() ||
+          !this.flightControls.active()) return
+
+      // A direct cockpit click is required by the browser for pointer lock.
+      // Consume this FIRST click so it never selects a target accidentally.
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      this.canvas.focus({preventScroll: true})
+      if (!this.canvas.requestPointerLock) {
+        this.mouseSteeringMessage("Pointer lock unavailable; keyboard steering remains active.")
+        return
+      }
+      try {
+        const request = this.canvas.requestPointerLock()
+        request?.catch?.(() =>
+          this.mouseSteeringMessage("Mouse capture was denied. Click the cockpit to retry."))
+      } catch (_error) {
+        this.mouseSteeringMessage("Mouse capture unavailable; keyboard steering remains active.")
+      }
+    }, true)
+
+    document.addEventListener("mousemove", event => {
+      if (!this.mouseSteeringEnabled || document.pointerLockElement !== this.canvas ||
+          this.navComputer?.isOpen || this.inSystemCruise() ||
+          !this.flightControls.active()) return
+      const axes = this.mouseSteering.move(event.movementX, event.movementY)
+      this.flightControls.setMouseSteering(axes)
+    })
+    document.addEventListener("pointerlockchange", () => {
+      if (document.pointerLockElement !== this.canvas) {
+        this.mouseSteering.release()
+        // The Atlas and autopilot must never have manual commands injected
+        // by an asynchronous pointerlockchange callback.
+        this.flightControls.clearMouseSteering({
+          silent: Boolean(this.navComputer?.isOpen || this.inSystemCruise()),
+        })
+      }
+      this.updateMouseSteeringStatus()
+    })
+    document.addEventListener("pointerlockerror", () =>
+      this.mouseSteeringMessage("Mouse capture failed. Try clicking the cockpit again."))
+
+    // Escape first releases the cursor rather than accidentally disengaging
+    // combat; M still opens Atlas, which releases the mouse automatically.
+    window.addEventListener("keydown", event => {
+      if (event.code !== "Escape" || document.pointerLockElement !== this.canvas) return
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      this.exitMouseSteering()
+    }, true)
+    this.updateMouseSteeringStatus()
+  }
+
+  mouseSteeringMessage(message) {
+    const node = this.root.querySelector("#cockpit-mouse-steering-status")
+    if (!node || !this.mouseSteeringEnabled) return
+    node.hidden = false
+    node.textContent = message
+  }
+
+  updateMouseSteeringStatus() {
+    const node = this.root.querySelector("#cockpit-mouse-steering-status")
+    if (!node) return
+    node.hidden = !this.mouseSteeringEnabled || Boolean(this.navComputer?.isOpen)
+    if (node.hidden) return
+    node.textContent = document.pointerLockElement === this.canvas
+      ? "MOUSE STEERING ACTIVE · MOVE TO PITCH/YAW · ESC RELEASES"
+      : "MOUSE STEERING ENABLED · CLICK COCKPIT TO CAPTURE"
+  }
+
+  exitMouseSteering({silent = false} = {}) {
+    this.mouseSteering.release()
+    this.flightControls?.clearMouseSteering({silent})
+    if (document.pointerLockElement === this.canvas) document.exitPointerLock?.()
+    this.updateMouseSteeringStatus()
+  }
+
   handleHelmetAlignmentKey(event) {
     const intent = helmetAlignmentKeyIntent(event, {
       active: !this.navComputer?.isOpen && this.helmet?.canAdjustAlignment(),
