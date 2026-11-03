@@ -4,6 +4,8 @@
 const ROTATION_KEYS = new Set(["KeyW", "KeyS", "KeyA", "KeyD", "KeyQ", "KeyE"])
 const THROTTLE_KEYS = new Set(["Equal", "Minus", "NumpadAdd", "NumpadSubtract"])
 const THROTTLE_INTERVAL_MS = 120
+// Max 40 mouse updates/second; release bypasses this cap entirely.
+export const MOUSE_COMMAND_INTERVAL_MS = 25
 const WHEEL_THRESHOLD_PX = 80
 const WHEEL_STEP = 0.05
 const ROLL_PULSE_MS = 320
@@ -87,9 +89,9 @@ export class FlightControls {
     this.mouseDirty = true
     const now = this.now()
     // A neutral mouse release is safety-critical and must never sit behind
-    // the 50ms motion-update throttle. Send zero to Phoenix immediately.
+    // the motion-update throttle. Send neutral to Phoenix immediately.
     const stopping = yaw === 0 && pitch === 0
-    if (stopping || now - this.lastMouseEmit >= 50) {
+    if (stopping || now - this.lastMouseEmit >= MOUSE_COMMAND_INTERVAL_MS) {
       this.emit()
       this.lastMouseEmit = now
       this.mouseDirty = false
@@ -267,7 +269,7 @@ export class FlightControls {
 
   heartbeat(time) {
     if (!this.active()) return
-    if (this.mouseDirty && time - this.lastMouseEmit >= 50) {
+    if (this.mouseDirty && time - this.lastMouseEmit >= MOUSE_COMMAND_INTERVAL_MS) {
       this.emit()
       this.lastMouseEmit = time
       this.mouseDirty = false
