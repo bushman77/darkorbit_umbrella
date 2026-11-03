@@ -9,6 +9,9 @@ defmodule DarkorbitWeb.HelmetChannelTest do
   @endpoint DarkorbitWeb.Endpoint
 
   setup tags do
+    # Phoenix.ChannelTest links joined channels to the test process. Explicit
+    # leave/1 produces {:shutdown, :left}; trap it instead of killing ExUnit.
+    Process.flag(:trap_exit, true)
     Darkorbit.DataCase.setup_sandbox(tags)
     :ok
   end
