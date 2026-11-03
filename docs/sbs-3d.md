@@ -583,3 +583,45 @@ client's local world. Abort still restores the departure region as a
 temporary limitation. Later work should introduce actual spatial
 mid-course exits, safe approach zones, planetary sector registration and
 the drive encounter/interdiction model.
+
+
+## Planet-specific maps and approach-relative orbital entry (2026-11-03)
+
+`Core.Universe.OrbitalEntry` establishes one region-local map per
+destination planet. `sol:<planet>` maps for eight bodies have a
+400,000 × 400,000 ±200,000 coordinate volume; Earth keeps its older
+`1-1` combat fixture. These regional coordinates represent provisional
+planet-relative kilometres; they must not be equated with compressed
+`Sol.game_position_km` cruise coordinates.
+
+On travel completion `Core.Universe.Navigation` now records the
+`arrival_origin_id` and a `voyage_number`. The next map connection
+computes an outward arrival bearing from the **destination to its
+previous origin** in SOL, a radius-based safe offset and an inward-facing
+yaw; no client position is accepted. Each map is shared by all pilots
+in that region, and pilot staggering varies deterministically.
+`Core.World.MapServer.join` validates any server-derived position
+and heading before accepting the new entity.
+
+Navigation updates publish on `world:sol` (separate from map-specific
+entity events). Upon arrival `WorldChannel` signals
+`world_region_changed`, then the client leaves the previous channel
+and joins its new region. Joins to the wrong region return a server
+redirect. Chart XYZ bounds are refreshed using the new map snapshot.
+
+Planetary maps include a server-owned real-radius sphere plus a small
+exclusion buffer; `FlightDynamics` projects an encroaching vessel
+outside this boundary and stops its velocity. The 3D and SBS renderer
+keeps the planet in the direction of its real local map centre and
+scales its projected apparent diameter with ship radial distance.
+The four obsolete fly-through demo asteroids are gone. Because the
+sector has a much larger map, camera-relative stars replace the
+previous starfield fixed near the old world origin.
+
+**Remaining limitations:** no Kepler orbits, gravitational attraction,
+surface landing, proper atmospheric physics, resource stations or
+durable ship state handoff. Earth's old `1-1` fixture continues to use
+its small map and first-login spawn for regression compatibility;
+a *return* voyage to Earth does receive a direction-derived position.
+Server restarts reset in-memory voyages and destination metadata.
+
