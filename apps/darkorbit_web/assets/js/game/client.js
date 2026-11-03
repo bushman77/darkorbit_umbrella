@@ -16,6 +16,7 @@ import {CockpitWindowManager} from "./cockpit_window_manager.mjs"
 import {MinimapRenderer} from "./minimap_renderer.mjs"
 import {PointerNavigation} from "./pointer_navigation.mjs"
 import {StereoSpaceView} from "./stereo_view.js"
+import {HelmetControl} from "./helmet_control.mjs"
 import {NavigationComputer} from "./navigation_computer.mjs"
 import {FlightControls} from "./flight_controls.mjs"
 import {smoothAttitude} from "./attitude_interpolation.mjs"
@@ -111,11 +112,16 @@ class SpaceClient {
       solarSetCourse: (bodyId, done) => this.solarSetCourse(bodyId, done),
       solarCancelCourse: done => this.solarCancelCourse(done),
       onOpen: () => {
+        this.helmet?.setCombat(false)
         this.navigation?.cancel()
         this.flightControls.release({silent: true})
         this.spaceLaser?.release()
       },
-      onClose: () => this.canvas.focus({preventScroll: true}),
+      onClose: () => {
+        this.helmet?.closePanel()
+        this.helmet?.setCombat(true)
+        this.canvas.focus({preventScroll: true})
+      },
     }).start()
     this.root.querySelector("#nav-open")?.addEventListener("click", () => this.navComputer.open())
     window.addEventListener("keydown", event => this.navComputer.handleKey(event))
@@ -174,6 +180,12 @@ class SpaceClient {
     this.socket.onError(() => this.setConnection("Relay interrupted", "error"))
     this.socket.onClose(() => this.setConnection("Relay offline", "error"))
     this.socket.connect()
+    this.helmet = new HelmetControl({
+      root: this.root,
+      socket: this.socket,
+      playerId: this.root.dataset.layoutPlayerId,
+      combatActive: !this.navComputer.isOpen,
+    }).start()
 
     this.channel = this.socket.channel(`world:${this.mapId}`, {})
     this.channel.on("world_state", state => this.applyWorldState(state))
