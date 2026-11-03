@@ -23,6 +23,19 @@ defmodule DarkorbitWeb.HelmetManager do
   def viewer_offline(pid), do: GenServer.call(__MODULE__, {:viewer_offline, pid})
   def rendering(pid, active), do: GenServer.call(__MODULE__, {:rendering, pid, active})
 
+  # The laptop may adjust alignment only in an active cockpit session. The
+  # phone owns the calibrated values and persists them in its local storage.
+  def adjust_alignment(player_id, axis, direction)
+      when axis in [:gap, :eye_sep] and direction in [-1, 1] do
+    GenServer.call(__MODULE__, {:adjust_alignment, player_id, axis, direction})
+  end
+
+  def report_alignment(pid, gap_px, separation_mm)
+      when is_integer(gap_px) and gap_px in 0..80 and
+           is_integer(separation_mm) and separation_mm in 40..85 do
+    GenServer.call(__MODULE__, {:alignment_report, pid, gap_px, separation_mm})
+  end
+
   @impl true
   def init(_), do: {:ok, %{pending: %{}, modes: %{}, viewers: %{}}}
 
@@ -99,7 +112,7 @@ defmodule DarkorbitWeb.HelmetManager do
     case Helmets.device(player_id) do
       %{id: ^device_id} ->
         monitor = Process.monitor(pid)
-        viewer = %{player_id: player_id, monitor: monitor, rendering: false}
+        viewer = %{player_id: player_id, monitor: monitor, rendering: false, alignment: nil}
         next = %{state | viewers: Map.put(state.viewers, pid, viewer)}
         notify(next, player_id)
         {:reply, {:ok, Map.get(state.modes, player_id, :standby)}, next}
@@ -111,6 +124,39 @@ defmodule DarkorbitWeb.HelmetManager do
     {viewer, next} = remove_viewer(state, pid)
     if viewer, do: notify(next, viewer.player_id)
     {:reply, :ok, next}
+  end
+
+  def handle_call({:adjust_alignment, player_id, axis, direction}, _from, state) do
+    active? = Map.get(state.modes, player_id, :standby) == :combat
+    viewers =
+      for {pid, viewer} <- state.viewers,
+          viewer.player_id == player_id and viewer.rendering,
+          do: pid
+
+    cond do
+      not active? ->
+        {:reply, {:error, :not_in_cockpit}, state}
+
+      viewers == [] ->
+        {:reply, {:error, :helmet_not_rendering}, state}
+
+      true ->
+        Enum.each(viewers, &send(&1, {:helmet_alignment_adjust, axis, direction}))
+        {:reply, :ok, state}
+    end
+  end
+
+  def handle_call({:alignment_report, pid, gap_px, separation_mm}, _from, state) do
+    case Map.fetch(state.viewers, pid) do
+      {:ok, viewer} ->
+        updated = %{viewer | alignment: %{eye_gap_px: gap_px, eye_sep_mm: separation_mm}}
+        next = %{state | viewers: Map.put(state.viewers, pid, updated)}
+        notify(next, viewer.player_id)
+        {:reply, :ok, next}
+
+      :error ->
+        {:reply, {:error, :unknown_viewer}, state}
+    end
   end
 
   def handle_call({:rendering, pid, active}, _from, state) do
@@ -151,6 +197,7 @@ defmodule DarkorbitWeb.HelmetManager do
       device_name: if(device, do: device.device_name, else: nil),
       connected: viewers != [],
       rendering: Enum.any?(viewers, & &1.rendering),
+      alignment: Enum.find_value(viewers, & &1.alignment),
       mode: Map.get(state.modes, player_id, :standby),
       pairing: Map.has_key?(state.pending, player_id)
     }
