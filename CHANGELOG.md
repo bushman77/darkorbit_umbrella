@@ -583,3 +583,20 @@
   global hull armor and disableable ship systems. Current pooled
   shield/hull damage is unchanged; detailed impact behavior is a
   future combat milestone, not part of the rendering fix.
+
+
+### Course-driven Scow interception (2026-11-03)
+
+- Tactical Scows now inherit authenticated SOL origin and destination
+  instead of selecting the square `idle -> patrol` NPC pattern.
+- Added server-owned `Core.NPC.CruiseRoute` projection into a safe local
+  straight transit lane, avoiding planetary exclusion geometry.
+- Added distinct moving `:cruise` merchant behavior: neutral ships
+  do not chase; provoked ships can fire their turret while flying onward.
+- Serialized stable NPC bearing and course endpoints for both desktop
+  and paired SBS HMD renderers.
+- On crossing the lane's endpoint, automatically remove the Scow,
+  release target locks and resume the owner's held SOL voyage, including
+  disconnected viewers. Strategic SOL traffic continues independently.
+- Added route, AI, and end-to-end world regression tests. These tests
+  have not been executed in the editing environment.

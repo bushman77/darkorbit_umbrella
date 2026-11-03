@@ -531,6 +531,8 @@ class SpaceClient {
       existing.playerId = entity.player_id == null ? existing.playerId : entityKey(entity.player_id)
       existing.npcTypeId = entity.npc_type_id || existing.npcTypeId
       existing.shipClass = entity.ship_class || existing.shipClass
+      if (Number.isFinite(entity.angle)) existing.angle = entity.angle
+      existing.course = entity.course || existing.course
       existing.displayName = entity.display_name || existing.displayName
       existing.hull = entity.hull
       existing.maxHull = entity.max_hull
@@ -561,6 +563,8 @@ class SpaceClient {
         playerId: entity.player_id == null ? null : entityKey(entity.player_id),
         npcTypeId: entity.npc_type_id,
         shipClass: entity.ship_class || null,
+        angle: Number.isFinite(entity.angle) ? entity.angle : 0,
+        course: entity.course || null,
         displayName: entity.display_name,
         render: {...target},
         target,

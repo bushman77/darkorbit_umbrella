@@ -226,6 +226,12 @@ defmodule Core.Universe.Navigation do
         tactical = %{id: encounter_id, contact_id: voyage.pending_encounter.contact_id,
           call_sign: voyage.pending_encounter.call_sign,
           ship_class: Map.get(voyage.pending_encounter, :ship_class, "dart"),
+          # Both endpoints came from the shared SOL vessel when the close
+          # pass was detected. No client can submit or overwrite the route.
+          course: %{
+            origin_id: voyage.pending_encounter.origin_id,
+            destination_id: voyage.pending_encounter.destination_id
+          },
           classification: voyage.pending_encounter.classification}
         updated = %{voyage | tactical_encounter: tactical}
         state = put_voyage(state, player_id, updated)
@@ -244,11 +250,11 @@ defmodule Core.Universe.Navigation do
       voyage.tactical_encounter.id != encounter_id ->
         {:reply, {:error, :encounter_mismatch}, state}
 
-      outcome not in [:rollback, :victory, :retreat, :defeat] ->
+      outcome not in [:rollback, :victory, :retreat, :defeat, :escaped] ->
         {:reply, {:error, :invalid_encounter_outcome}, state}
 
       true ->
-        # Victory/retreat resume the interrupted SOL route. Defeat cancels
+        # Victory/retreat/ship escape resume the interrupted SOL route. Defeat cancels
         # it and returns the navigator to the origin staging region; the
         # destroyed local ship is respawned by the ordinary reconnect path.
         updated =

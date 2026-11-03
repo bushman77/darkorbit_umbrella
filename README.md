@@ -1073,3 +1073,60 @@ performance penalties, and TAC indications. Visual hit flashes should use
 the *actual server-returned impact point*, not infer damage from UI pixels.
 
 Manual reference: https://cdn.steamstatic.com/steam/apps/569200/manuals/space_rogue_manual.pdf
+
+
+### Tactical Scow transit follows its SOL destination (2026-11-03)
+
+Merchant and courier ships already carry server-owned, independent
+`origin_id`, `destination_id`, `position_km` and route progress in
+`Core.Universe.Traffic`. The initial tactical handoff incorrectly spawned
+each Scow into the generic `Core.NPC.AI` idle/patrol state: that old
+fixture visits four fixed offsets around its home position. As a result
+a trader with a real SOL destination flew in a square.
+
+The authoritative encounter snapshot now preserves the vessel's existing
+SOL origin and destination when the pilot selects Attack. The tactical
+map projects the SOL course's bearing onto a **6,000-local-unit straight
+transit lane**. The server chooses the lane, not the client. If following
+the bearing would cross a physical planet exclusion sphere or leave
+the local map, the route projects to the smallest safe tangent instead
+of driving the merchant through a planet. This tactical lane represents
+a local slice of the same ongoing cruise; SOL kilometers and orbital map
+coordinates are deliberately separate scales.
+
+Scows spawn in `:cruise`, retain a fixed tactical waypoint and course
+heading, and travel it at the already defined Scow tactical speed. A
+neutral Scow is not aggressive until hit. Once provoked, its turret may
+return fire when in range **while it keeps its course**, rather than
+turning into a pursuing Dart or choosing square patrol waypoints.
+Fighter NPCs retain their original pursuit and patrol logic. The map
+publishes server-side heading, ship class, and route endpoints in NPC
+snapshots; desktop and stereo HMD use the authoritative bearing.
+
+On reaching the local lane's end, the Scow **escapes**: the map removes
+the temporary combat NPC, releases stale targeting/engagement locks,
+and asks the SOL navigation server to resolve the held encounter as
+`:escaped`. The previously suspended pilot voyage resumes at exactly
+its held elapsed time. The escape transition originates from the
+authoritative map process, not an untrusted browser event, and can
+complete while the cockpit/headset is disconnected.
+
+This is intentionally a short mid-voyage **projection**, not a claim
+that the orbital tactical map and SOL coordinates are the same physical
+space. The shared strategic traffic ship continues its own course at
+its independent strategic speed. Follow-up work must integrate actual
+global ship destruction/surrender/cargo consequences, dedicated deep
+space combat arenas, and full merchant captain doctrines (flee, offer
+cargo, stand/fight) rather than leaving tactical outcomes as projections.
+
+Reference: 1989 Space Rogue gameplay has multiple NPC tactics including
+flee, stand, circle and ram; merchants can surrender cargo.
+https://www.lemon64.com/review/space-rogue/206
+https://cdn.steamstatic.com/steam/apps/569200/manuals/space_rogue_manual.pdf
+
+Tests to run: `mix test apps/core/test/core/npc/ai_test.exs`,
+`mix test apps/core/test/core/npc/cruise_route_test.exs`,
+`mix test apps/core/test/core/world/world_test.exs`,
+`mix test apps/darkorbit_web/test/darkorbit_web/channels/world_channel_test.exs`,
+`npm test --prefix apps/darkorbit_web/assets`, and `mix assets.build`.
+Full Mix/browser/HMD execution is still pending on the player's machine.

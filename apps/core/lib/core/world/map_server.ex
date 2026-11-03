@@ -10,7 +10,9 @@ defmodule Core.World.MapServer do
   alias Core.Combat.ActionCatalog
   alias Core.NPC.AI
   alias Core.NPC.Catalog, as: NPCCatalog
+  alias Core.NPC.CruiseRoute
   alias Core.NPC.Entity, as: NPCEntity
+  alias Core.Universe.Navigation, as: SolarNavigation
   alias Core.Ships.Stats
   alias Core.World.Course
   alias Core.World.Entity
@@ -142,15 +144,15 @@ defmodule Core.World.MapServer do
     do: call_map(registry, map_id, {:start_encounter, npc_type_id})
 
   @doc "Spawn an encounter NPC for the authenticated pilot in their current map."
-  @spec start_solar_tactical(atom(), String.t(), pos_integer(), term(), String.t(), String.t(), String.t(), boolean()) ::
+  @spec start_solar_tactical(atom(), String.t(), pos_integer(), term(), String.t(), String.t(), String.t(), boolean(), map()) ::
           {:ok, map()} | {:error, term()}
   def start_solar_tactical(registry, map_id, session_id, player_id, encounter_id,
-          call_sign, ship_class, aggressive?)
+          call_sign, ship_class, aggressive?, course)
       when is_integer(player_id) and is_binary(encounter_id) and is_binary(call_sign) and
-           is_binary(ship_class) and is_boolean(aggressive?) do
+           is_binary(ship_class) and is_boolean(aggressive?) and is_map(course) do
     call_map(registry, map_id,
       {:start_solar_tactical, session_id, player_id, encounter_id,
-       call_sign, ship_class, aggressive?})
+       call_sign, ship_class, aggressive?, course})
   end
 
   @doc "Server-authorized victory verification or safe retreat."
@@ -194,6 +196,7 @@ defmodule Core.World.MapServer do
       npc_definitions: npc_definitions,
       respawns: %{},
       solar_tactical: %{},
+      solar_navigation_server: Keyword.get(opts, :solar_navigation_server),
       auto_respawn?: Keyword.get(opts, :auto_respawn?, false),
       event_sink: Keyword.fetch!(opts, :event_sink),
       tick: 0,
@@ -293,7 +296,7 @@ defmodule Core.World.MapServer do
 
   def handle_call(
         {:start_solar_tactical, session_id, player_id, encounter_id,
-         call_sign, ship_class, aggressive?},
+         call_sign, ship_class, aggressive?, route},
         _from, state
       ) do
     with :ok <- validate_tactical_ship_class(ship_class),
@@ -301,7 +304,8 @@ defmodule Core.World.MapServer do
          :ok <- living_attacker(ship),
          false <- Map.has_key?(state.solar_tactical, player_id),
          {:ok, base} <- NPCCatalog.fetch(ship_class, NPCCatalog.all()),
-         {:ok, spawn} <- solar_tactical_position(state.definition, ship) do
+         {:ok, spawn} <- solar_tactical_position(state.definition, ship),
+         {:ok, cruise_course} <- tactical_course(ship_class, route, spawn, state.definition) do
       type_id = "solar-" <> ship_class <> "-" <> Integer.to_string(player_id)
       definition = %{base |
         id: type_id,
@@ -309,6 +313,14 @@ defmodule Core.World.MapServer do
         spawn: %{base.spawn | map_id: state.definition.id, positions: [spawn],
           patrol_radius: 180.0}}
       npc = NPCEntity.spawn(definition, 0, state.tick_ms)
+      npc =
+        if cruise_course do
+          %{npc | state: :cruise, destination: cruise_course.destination,
+            course: Map.take(cruise_course,
+              [:origin_id, :destination_id, :heading, :deflected?])}
+        else
+          npc
+        end
 
       if Map.has_key?(state.npcs, npc.id) do
         {:reply, {:error, :encounter_active}, state}
@@ -318,7 +330,7 @@ defmodule Core.World.MapServer do
           npc_definitions: Map.put(state.npc_definitions, type_id, definition),
           solar_tactical: Map.put(state.solar_tactical, player_id,
             %{encounter_id: encounter_id, npc_id: npc.id, type_id: type_id,
-              provoked?: aggressive?})
+              navigation_player_id: ship.player_id, provoked?: aggressive?})
         }
         broadcast(updated, :npc_spawned, public_entity(npc))
         {:reply, {:ok, public_entity(npc)}, updated}
@@ -786,11 +798,11 @@ defmodule Core.World.MapServer do
         current
       end)
 
-    {npcs, attack_actions, npc_events} =
+    {npcs, attack_actions, npc_events, finished_courses} =
       state.npcs
       |> Map.values()
       |> Enum.sort_by(& &1.id)
-      |> Enum.reduce({%{}, [], []}, fn npc, {npcs, actions, events} ->
+      |> Enum.reduce({%{}, [], [], []}, fn npc, {npcs, actions, events, finished} ->
         definition = Map.fetch!(state.npc_definitions, npc.npc_type_id)
 
         {decided_npc, new_actions} =
@@ -798,14 +810,23 @@ defmodule Core.World.MapServer do
             definition, state.definition, next_tick)
 
         moved_npc = advance_entity(decided_npc, decided_npc.speed * distance_factor)
-        npc_events = npc_events(npc, moved_npc)
 
-        {
-          Map.put(npcs, moved_npc.id, moved_npc),
-          actions ++
-            Enum.map(new_actions, fn {:attack, target_id} -> {moved_npc.id, target_id} end),
-          events ++ Enum.map(npc_events, &{&1, moved_npc.id})
-        }
+        if npc.state == :cruise and npc.destination != nil and
+             moved_npc.destination == nil do
+          # This Scow left the local interception lane. Do not spawn a new
+          # patrol waypoint or allow it to circle back to its pursuer.
+          {npcs, actions, events, [moved_npc | finished]}
+        else
+          changed = npc_events(npc, moved_npc)
+
+          {
+            Map.put(npcs, moved_npc.id, moved_npc),
+            actions ++
+              Enum.map(new_actions, fn {:attack, target_id} -> {moved_npc.id, target_id} end),
+            events ++ Enum.map(changed, &{&1, moved_npc.id}),
+            finished
+          }
+        end
       end)
 
     state = %{state | npcs: npcs}
@@ -820,8 +841,62 @@ defmodule Core.World.MapServer do
       end)
 
     state = state |> resolve_player_engagements() |> respawn_due_npcs()
+    state = complete_tactical_courses(state, Enum.reverse(finished_courses))
     broadcast(state, :world_state, public_state(state))
     state
+  end
+
+  defp complete_tactical_courses(state, ships) do
+    Enum.reduce(ships, state, fn npc, current ->
+      case Enum.find(current.solar_tactical, fn {_owner, held} ->
+             held.npc_id == npc.id
+           end) do
+        {owner_id, held} ->
+          {entities, cleared} =
+            Enum.reduce(current.entities, {%{}, []}, fn {id, ship}, {acc, releases} ->
+              if ship.target_id == npc.id or ship.engaged_target_id == npc.id do
+                updated = %{ship | target_id: nil, engaged_target_id: nil}
+                {Map.put(acc, id, updated), [ship | releases]}
+              else
+                {Map.put(acc, id, ship), releases}
+              end
+            end)
+
+          updated = %{current |
+            entities: entities,
+            solar_tactical: Map.delete(current.solar_tactical, owner_id),
+            npc_definitions: Map.delete(current.npc_definitions, held.type_id)}
+
+          broadcast(updated, :entity_left, public_entity(npc))
+
+          Enum.each(cleared, fn ship ->
+            if ship.target_id != nil do
+              broadcast(updated, :target_cleared,
+                %{player_id: ship.id, target_id: nil, tick: current.tick})
+            end
+            if ship.engaged_target_id != nil do
+              broadcast(updated, :combat_disengaged,
+                disengagement_payload(ship, :target_removed, current.tick))
+            end
+          end)
+
+          # Unlike relying on a browser/channel event, this must work even
+          # when the pilot loses Wi-Fi while the Scow crosses the lane.
+          case {current.solar_navigation_server, held.navigation_player_id} do
+            {server, player_id} when not is_nil(server) and
+                                     is_integer(player_id) and player_id > 0 ->
+              _ = SolarNavigation.finish_tactical(server, player_id, held.encounter_id, :escaped)
+
+            _ ->
+              :ok
+          end
+
+          updated
+
+        nil ->
+          current
+      end
+    end)
   end
 
   defp resolve_player_engagements(state) do
@@ -1212,6 +1287,12 @@ defmodule Core.World.MapServer do
     end
   end
 
+  defp tactical_course("scow", %{origin_id: from, destination_id: to}, spawn, map),
+    do: CruiseRoute.project(from, to, spawn, map)
+
+  defp tactical_course("dart", _route, _spawn, _map), do: {:ok, nil}
+  defp tactical_course(_class, _route, _spawn, _map), do: {:error, :invalid_cruise_route}
+
   defp validate_tactical_ship_class(class) when class in ["dart", "scow"], do: :ok
   defp validate_tactical_ship_class(_class), do: {:error, :invalid_ship_class}
 
@@ -1450,6 +1531,11 @@ defmodule Core.World.MapServer do
       kind: entity.kind,
       npc_type_id: entity.npc_type_id,
       ship_class: npc_ship_class(entity.npc_type_id),
+      # The strategic endpoints, tactical heading and local destination
+      # belong to the server. UI renderers never choose an NPC trajectory.
+      course: if(entity.course, do: Map.take(entity.course,
+        [:origin_id, :destination_id, :deflected?]), else: nil),
+      angle: npc_course_angle(entity),
       display_name: entity.display_name,
       position: public_position(entity.position),
       position_3d: position_3d(entity.position),
@@ -1473,6 +1559,14 @@ defmodule Core.World.MapServer do
 
   # Published NPC model class is authoritative server data, not guessed by
   # each browser or phone based solely on a generated instance ID.
+  defp npc_course_angle(%NPCEntity{course: %{heading: %{x: x, y: y}}}),
+    do: :math.atan2(y, x)
+
+  defp npc_course_angle(%NPCEntity{position: p, destination: d}) when not is_nil(d),
+    do: :math.atan2(d.y - p.y, d.x - p.x)
+
+  defp npc_course_angle(_npc), do: 0.0
+
   defp npc_ship_class(type_id) when is_binary(type_id) do
     cond do
       type_id == "scow" or String.starts_with?(type_id, "solar-scow-") -> "scow"

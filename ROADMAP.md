@@ -642,3 +642,23 @@ validation remain deferred.
 - [ ] Add component damage (engines, beam, missiles, shields, ECM),
   persistent system status, handling penalties and TAC presentation.
 - [ ] Separate cosmetic model hit markers from server-owned damage outcomes.
+
+
+### Merchant voyage-aligned tactical movement (2026-11-03)
+
+- [x] Stop using the four-corner legacy NPC patrol for merchant encounters.
+- [x] Carry the existing shared SOL origin/destination through the
+  authenticated encounter into the tactical map.
+- [x] Project a short straight merchant transit lane using its real
+  strategic bearing, deflecting only to avoid planet impacts/map edges.
+- [x] Keep neutral Scow flight moving while defensive turret fire uses
+  server-confirmed damage; do not make it chase the attacking pilot.
+- [x] Publish stable course heading to desktop and headset renderers.
+- [x] End combat on Scow lane exit, remove the local NPC, clear target locks,
+  and resume the owner's SOL voyage even after losing the client connection.
+- [x] Add pure route geometry and AI tests plus world-level escape tests.
+- [ ] Run Mix and asset tests, then verify moving Scow in laptop and headset.
+- [ ] Move combat to a genuine mid-space battle bubble tied continuously
+  to shared strategic ships; reconcile ship death, cargo, and encounters.
+- [ ] Add merchant captains' flee, surrender, defend, and radio responses,
+  informed by morale, player threat and ship damage.

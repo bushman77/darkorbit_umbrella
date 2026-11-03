@@ -918,6 +918,13 @@ defmodule Core.WorldTest do
     assert enemy.display_name == held.pending_encounter.call_sign
     assert enemy.npc_type_id == "solar-scow-9735"
     assert enemy.ship_class == "scow"
+    assert enemy.state == :cruise
+    assert enemy.destination_3d != nil
+    assert %{origin_id: "earth", destination_id: "venus"} =
+      combat.tactical_encounter.course |> Map.take([:origin_id, :destination_id])
+    # The current courier on Earth -> Venus has its own independent
+    # outbound course. The tactical Scow must use that, not our own route.
+    assert %{origin_id: "earth", destination_id: "venus"} = enemy.course
     assert enemy.max_hull == 210
     assert enemy.damage == 10
     assert enemy.speed == 105
@@ -947,6 +954,66 @@ defmodule Core.WorldTest do
     assert resumed.tactical_encounter == nil
     refute resumed.cruise_paused
     assert :sys.get_state(map_pid).solar_tactical == %{}
+  end
+
+  @tag no_initial_encounter: true, no_auto_respawn: true
+  test "a merchant Scow travels its existing course, leaves the encounter, and unpauses SOL",
+       context do
+    opts = context.world_options
+    {:ok, session} = World.connect(9_736, context.stats, opts)
+    assert {:ok, _} = World.solar_set_course(session.id, "venus", opts)
+    for _ <- 1..85, do: assert(:ok = SolarNavigation.tick(@solar_navigation_server))
+    {:ok, held} = World.solar_snapshot(session.id, opts)
+    encounter_id = held.pending_encounter.id
+    assert {:ok, %{enemy: enemy}} = World.solar_enter_tactical(session.id, encounter_id, opts)
+
+    [{map_pid, _}] = Registry.lookup(@registry, {:world_map, "1-1"})
+    assert enemy.state == :cruise
+    assert %{origin_id: "earth", destination_id: "venus"} = enemy.course
+    assert %{x: _, y: _, z: _} = enemy.destination_3d
+    initial = enemy.position_3d
+
+    assert {:ok, first} = World.tick("1-1", opts)
+    moved = Enum.find(first.entities, &(&1.id == enemy.id))
+    assert moved.state == :cruise
+    assert moved.course == enemy.course
+    assert moved.destination_3d == enemy.destination_3d
+    assert moved.angle == enemy.angle
+    assert moved.position_3d != initial
+
+    assert {:ok, _} = World.select_target(session.id, enemy.id, opts)
+
+    # Put the server-owned NPC near the end of its registered lane; the
+    # next deterministic world tick finishes it without 600 idle ticks.
+    :sys.replace_state(map_pid, fn map ->
+      scow = Map.fetch!(map.npcs, enemy.id)
+      %{heading: heading} = scow.course
+      near_end = %Core.World.Position{
+        x: scow.destination.x - heading.x * 2.0,
+        y: scow.destination.y - heading.y * 2.0,
+        z: scow.destination.z
+      }
+      %{map | npcs: Map.put(map.npcs, enemy.id,
+        %{scow | position: near_end})}
+    end)
+
+    assert {:ok, after_pass} = World.tick("1-1", opts)
+    refute Enum.any?(after_pass.entities, &(&1.id == enemy.id))
+    pilot = Enum.find(after_pass.entities, &(&1.id == session.entity_id))
+    assert pilot.target_id == nil
+    assert :sys.get_state(map_pid).solar_tactical == %{}
+
+    assert {:ok, resumed} = World.solar_snapshot(session.id, opts)
+    refute resumed.cruise_paused
+    assert resumed.tactical_encounter == nil
+    assert resumed.pending_encounter == nil
+    assert resumed.elapsed_ms == held.elapsed_ms
+
+    assert :ok = SolarNavigation.tick(@solar_navigation_server)
+    assert {:ok, moving} = World.solar_snapshot(session.id, opts)
+    assert moving.elapsed_ms == held.elapsed_ms + 1_000
+    assert {:error, :no_tactical_encounter} =
+      World.solar_finish_tactical(session.id, encounter_id, :victory, opts)
   end
 
   @tag no_initial_encounter: true, no_auto_respawn: true

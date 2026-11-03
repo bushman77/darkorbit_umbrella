@@ -42,6 +42,7 @@ defmodule Core.World.Supervisor do
            npc_catalog: npc_catalog,
            initial_npcs?: initial_npcs?,
            auto_respawn?: auto_respawn?,
+           solar_navigation_server: solar_navigation_server,
            auto_tick: auto_tick?},
           id: {:world_map, definition.id}
         )

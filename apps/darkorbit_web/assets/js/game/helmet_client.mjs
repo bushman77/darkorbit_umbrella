@@ -474,6 +474,7 @@ export class HelmetClient {
         kind: e.kind,
         npcTypeId: e.npc_type_id,
         shipClass: e.ship_class || null,
+        course: e.course || null,
         displayName: e.display_name,
         status: e.status,
         render: {...pos, z: pos.z || 0},
