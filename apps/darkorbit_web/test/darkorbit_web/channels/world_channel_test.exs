@@ -39,11 +39,11 @@ defmodule DarkorbitWeb.WorldChannelTest do
     assert :error = connect(UserSocket, %{"token" => token})
   end
 
-  test "authenticated pilot joins only map 1-1 and receives authoritative state" do
+  test "authenticated pilot is redirected to its actual orbital region" do
     account = verified_player_account_fixture()
     {:ok, socket} = authenticated_socket(account)
 
-    assert {:error, %{reason: "map_not_found"}} =
+    assert {:error, %{reason: "region_redirect", map_id: "1-1"}} =
              subscribe_and_join(socket, WorldChannel, "world:2-1")
 
     {:ok, response, joined_socket} =
@@ -72,6 +72,45 @@ defmodule DarkorbitWeb.WorldChannelTest do
     assert Enum.all?(Enum.drop(response.hotbar, 1), &is_nil(&1.action))
 
     leave_and_wait(joined_socket)
+  end
+
+  test "arriving at Venus switches to a shared planet map with an incoming entry pose" do
+    account = verified_player_account_fixture()
+    {:ok, socket} = authenticated_socket(account)
+    {:ok, _response, old_socket} =
+      subscribe_and_join(socket, WorldChannel, "world:1-1")
+
+    ref = push(old_socket, "solar_set_course", %{"body_id" => "venus"})
+    assert_reply ref, :ok, %{navigation: %{destination_id: "venus", status: :traveling,
+      duration_ms: duration_ms}}
+
+    server = Module.concat(SessionManager, Core.Universe.Navigation)
+    for _ <- 1..ceil(duration_ms / 1_000), do: :ok = Core.Universe.Navigation.tick(server)
+    assert_push "world_region_changed", %{map_id: "sol:venus"}
+    leave_and_wait(old_socket)
+
+    {:ok, next_socket} = authenticated_socket(account)
+    assert {:error, %{reason: "region_redirect", map_id: "sol:venus"}} =
+      subscribe_and_join(next_socket, WorldChannel, "world:1-1")
+
+    {:ok, venus_socket} = authenticated_socket(account)
+    {:ok, response, joined} =
+      subscribe_and_join(venus_socket, WorldChannel, "world:sol:venus")
+
+    assert response.map.map_id == "sol:venus"
+    assert response.map.planet_id == "venus"
+    assert response.map.boundaries == %{width: 400_000, height: 400_000}
+    assert response.solar_navigation.status == :idle
+    assert response.solar_navigation.arrival_origin_id == "earth"
+    assert response.solar_navigation.location_id == "venus"
+    assert response.solar_navigation.planetary_view.body_id == "venus"
+    ship = Enum.find(response.map.entities, &(&1.player_id == account.id))
+    {:ok, expected} = Core.Universe.OrbitalEntry.entry(
+      "earth", "venus", account.id, response.solar_navigation.voyage_number)
+    assert ship.position_3d == Map.from_struct(expected.position)
+    assert_in_delta ship.attitude.yaw, expected.attitude.yaw, 1.0e-9
+    assert Enum.count(response.map.entities, &(&1.kind == :npc)) == 0
+    leave_and_wait(joined)
   end
 
   test "SOL interplanetary courses are server-authorized and no NPC spawns on travel" do
