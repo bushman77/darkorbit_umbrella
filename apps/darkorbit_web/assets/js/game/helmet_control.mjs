@@ -101,8 +101,12 @@ export class HelmetControl {
   updateStatus(status = {}) {
     this.status = status
     const label = status.rendering ? "SBS ACTIVE" :
+      status.connected && status.mode === "combat" ? "CONNECTED / STARTING SBS" :
       status.connected ? "CONNECTED / STANDBY" :
       status.paired ? "PAIRED / OFFLINE" : "NOT PAIRED"
+    const cockpit = this.root.querySelector("#cockpit-helmet-status")
+    if (cockpit) cockpit.textContent = status.rendering ? "HMD SBS LIVE" :
+      status.connected ? "HMD CONNECTED" : status.paired ? "HMD PAIRED" : "HMD UNPAIRED"
     const indicator = this.root.querySelector("#nav-helmet-status")
     if (indicator) indicator.textContent = label
     const current = this.root.querySelector("#helmet-device-status")
