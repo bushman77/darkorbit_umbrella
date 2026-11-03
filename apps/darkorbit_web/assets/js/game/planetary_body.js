@@ -1,4 +1,4 @@
-import {planetaryRenderSpec, PLANET_APPEARANCE, generatePlanetPixels} from "./planetary_view.mjs"
+import {planetaryRenderSpec, planetAppearance, generatePlanetPixels} from "./planetary_view.mjs"
 import {toScene} from "./stereo_math.mjs"
 
 // A camera-relative *draw layer*, NOT a planet-sized scene or collision mesh.
@@ -51,7 +51,7 @@ export class PlanetaryBody {
     const atmosphere = new T.Mesh(
       new T.SphereGeometry(1.035, 64, 40),
       new T.MeshBasicMaterial({
-        color: PLANET_APPEARANCE[id].haze,
+        color: planetAppearance(id).haze,
         transparent: true,
         opacity: 0.22,
         side: T.BackSide,
@@ -108,7 +108,7 @@ export class PlanetaryBody {
       // In a planet-specific tactical region, each game unit represents a
       // provisional kilometre. Recalculate the planet's apparent diameter
       // as actual local ship movement changes its radial distance.
-      // Legacy Sector 1-1 (Earth) remains an isolated smaller-scale map.
+      // The legacy test sector is separate and never supplied as an orbital map.
       if (view.stage === "orbital_preview") {
         const separationKm = Math.hypot(
           center.x - localPosition.x,
