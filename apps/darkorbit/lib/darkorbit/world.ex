@@ -8,6 +8,9 @@ defmodule Darkorbit.World do
   """
 
   alias Core.World, as: Simulation
+  alias Core.Universe.Navigation, as: SolarNavigation
+  alias Core.Universe.OrbitalEntry
+  alias Core.World.SessionManager
   alias Core.World.MapDefinition
   alias Darkorbit.Accounts
   alias Darkorbit.Accounts.PlayerAccount
@@ -16,10 +19,32 @@ defmodule Darkorbit.World do
   alias Darkorbit.ShipStats
   alias Darkorbit.World.PubSub
 
-  @spec connect(pos_integer(), 1 | 2) :: {:ok, Core.World.Session.t()} | {:error, term()}
-  def connect(user_id, config_no \\ 1) do
-    with {:ok, stats} <- ShipStats.for_active_ship(user_id, config_no) do
-      Simulation.connect(user_id, stats)
+  @doc "Resolve an authenticated pilot's current planetary map and arrival pose."
+  @spec region_for_player(pos_integer()) :: {:ok, map()} | {:error, term()}
+  def region_for_player(user_id) when is_integer(user_id) and user_id > 0 do
+    server = Module.concat(SessionManager, SolarNavigation)
+
+    with {:ok, navigation} <- SolarNavigation.snapshot(server, user_id),
+         {:ok, entry} <- OrbitalEntry.entry(
+           navigation.arrival_origin_id, navigation.location_id,
+           user_id, navigation.voyage_number
+         ) do
+      {:ok, entry}
+    end
+  end
+
+  @spec connect(pos_integer(), 1 | 2, keyword()) ::
+          {:ok, Core.World.Session.t()} | {:error, term()}
+  def connect(user_id, config_no \\ 1, opts \\ []) do
+    with {:ok, stats} <- ShipStats.for_active_ship(user_id, config_no),
+         {:ok, entry} <- region_for_player(user_id) do
+      requested_map = Keyword.get(opts, :map_id, entry.map_id)
+
+      if requested_map == entry.map_id do
+        Simulation.connect(user_id, stats, map_id: requested_map, entry: entry)
+      else
+        {:error, :wrong_orbital_region}
+      end
     end
   end
 
