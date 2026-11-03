@@ -554,3 +554,38 @@ cd ../..
 npm test --prefix apps/darkorbit_web/assets
 mix test apps/darkorbit_web/test/darkorbit_web/channels/world_channel_test.exs
 ```
+
+### Fatal planetary collisions V1 — hard approach limit (2026-11-03)
+
+Planet approach is now dangerous, as in the original game: **getting too
+close destroys the spacecraft**. Each non-Earth planetary region
+uses its real mean radius with a provisional **8% collision buffer**.
+For Venus, the lethal boundary is approximately **6,536 km from its
+centre** (radius 6,051.8 km). The normal directional spawn remains
+farther away at about **1.861 planetary radii**.
+
+`Core.World.PlanetaryCollision` tests the **entire 3D movement segment**
+from the previous position to the next, preventing high-speed tunneling
+through a planet. `Core.World.MapServer` applies the same check to
+manual thrust and local plotted autopilot movement. A collision sets
+the ship to `:destroyed`, zeroes hull/shields and velocity, clears
+navigation and targeting and emits one `entity_destroyed` event
+containing `reason: :planetary_collision` and the planet ID. The
+cockpit displays a clear planetary-impact message and releases pointer
+capture. No NPC receives kill credit from a planetary crash.
+
+**No automatic player respawn is implemented yet**, matching the
+existing destroyed-player behavior. Planet collisions are disabled
+for the legacy Earth `1-1` fixture until that map migrates to the
+real-radius planetary frame. This is a gameplay collision volume, not
+atmospheric re-entry simulation, gravitational physics, or terrain.
+
+Run from the umbrella root:
+```sh
+cd apps/core
+mix test test/core/world/planetary_collision_test.exs \
+  test/core/world/planetary_impact_integration_test.exs \
+  test/core/world/flight_dynamics_test.exs
+cd ../..
+npm test --prefix apps/darkorbit_web/assets
+```
