@@ -90,6 +90,14 @@ defmodule DarkorbitWeb.HelmetChannelTest do
     ref = push(control, "adjust_alignment", %{"axis" => "gap", "direction" => 99})
     assert_reply ref, :error, %{reason: "read_only_or_invalid_command"}
 
+    # Negative alignment is a legal inward shift and remains phone-owned.
+    ref = push(viewer, "alignment_state", %{"eye_gap_px" => -60, "eye_sep_mm" => 64})
+    assert_reply ref, :ok
+    assert %{alignment: %{eye_gap_px: -60}} = HelmetManager.status(account.id)
+
+    ref = push(viewer, "alignment_state", %{"eye_gap_px" => -161, "eye_sep_mm" => 64})
+    assert_reply ref, :error, %{reason: "read_only_or_invalid_command"}
+
     ref = push(viewer, "alignment_state", %{"eye_gap_px" => 999, "eye_sep_mm" => 64})
     assert_reply ref, :error, %{reason: "read_only_or_invalid_command"}
 
