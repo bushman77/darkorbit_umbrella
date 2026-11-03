@@ -32,6 +32,9 @@ import {laserFeedback, LASER_FEEDBACK_MS} from "./laser_feedback.mjs"
 import {nextFlightMode, validFlightMode} from "./display_modes.mjs"
 import {cameraSettleSeconds} from "./camera_response.mjs"
 import {planetaryImpactMessage} from "./planetary_impact.mjs"
+import {
+  ownPlanetaryWarning, proximityEventWarning, planetaryWarningView,
+} from "./planetary_warning.mjs"
 import {validOrbitalMapId, shouldEnterOrbitalRegion} from "./orbital_regions.mjs"
 
 const clamp = (value, minimum, maximum) => Math.min(Math.max(value, minimum), maximum)
@@ -69,6 +72,8 @@ class SpaceClient {
     this.boundaries = {width: 20000, height: 12000}
     this.volume = {altitude_min: -3000, altitude_max: 3000}
     this.selfId = null
+    this.planetaryWarningLevel = "clear"
+    this.planetaryWarningPlanet = null
     this.player = null
     this.commandDestination = null
     this.selectedTargetId = null
@@ -257,6 +262,7 @@ class SpaceClient {
     channel.on("combat_disengaged", engagement => this.combatDisengaged(engagement))
     channel.on("laser_fired", attack => this.laserFired(attack))
     channel.on("entity_destroyed", destruction => this.entityDestroyed(destruction))
+    channel.on("planetary_proximity_changed", event => this.planetaryProximityChanged(event))
     channel.onError(() => {
       if (this.channel === channel) this.setConnection("Sector channel lost", "error")
     })
@@ -318,6 +324,7 @@ class SpaceClient {
     this.commandDestination = null
     this.entities.clear()
     this.beams = []
+    this.applyPlanetaryWarning(null, {announce: false})
     this.stereoView?.planetaryBody?.dispose()
     const previous = this.channel
     const enter = () => {
@@ -343,6 +350,7 @@ class SpaceClient {
 
     if(response.solar_navigation)this.applySolarNavigation(response.solar_navigation)
     for (const entity of response.map.entities) this.upsertEntity(entity, true)
+    this.applyPlanetaryWarning(ownPlanetaryWarning(response.map, this.selfId))
     this.syncOwnCombatState()
 
     this.flightControls.resetThrottle()
@@ -367,6 +375,7 @@ class SpaceClient {
       if (!activeIds.has(id)) this.removeEntity(id)
     }
 
+    this.applyPlanetaryWarning(ownPlanetaryWarning(state, this.selfId))
     this.syncOwnCombatState()
     this.updateCombatHud()
   }
@@ -814,6 +823,47 @@ class SpaceClient {
     this.updateCombatHud()
   }
 
+  planetaryProximityChanged(event) {
+    const warning = proximityEventWarning(event, this.selfId)
+    if (warning !== undefined) this.applyPlanetaryWarning(warning)
+  }
+
+  applyPlanetaryWarning(warning, {announce = true} = {}) {
+    const view = planetaryWarningView(warning)
+    const nextLevel = view?.level || "clear"
+    const nextPlanet = warning?.planet_id || null
+    const changed = nextLevel !== this.planetaryWarningLevel ||
+      nextPlanet !== this.planetaryWarningPlanet
+    const banner = this.root.querySelector("#planetary-proximity-warning")
+    const announcement = this.root.querySelector("#planetary-proximity-announcement")
+
+    if (banner) {
+      banner.hidden = !view
+      banner.dataset.level = nextLevel
+      banner.classList.toggle("border-rose-400/80", nextLevel === "critical")
+      banner.classList.toggle("bg-rose-950/95", nextLevel === "critical")
+      banner.classList.toggle("border-amber-400/60", nextLevel === "caution")
+      banner.classList.toggle("bg-amber-950/85", nextLevel === "caution")
+    }
+    if (view) {
+      const title = this.root.querySelector("#planetary-proximity-level")
+      const detail = this.root.querySelector("#planetary-proximity-detail")
+      if (title) {
+        title.textContent = view.label
+        title.classList.toggle("text-rose-100", view.level === "critical")
+        title.classList.toggle("text-amber-100", view.level === "caution")
+      }
+      if (detail) detail.textContent = view.detail
+    }
+
+    if (announce && changed && announcement) {
+      announcement.textContent = view?.announcement || "Planetary collision clearance restored."
+    }
+
+    this.planetaryWarningLevel = nextLevel
+    this.planetaryWarningPlanet = nextPlanet
+  }
+
   entityDestroyed(destruction) {
     const id = entityKey(destruction.entity.id)
     const isNpc = destruction.entity.kind === "npc"
@@ -829,6 +879,7 @@ class SpaceClient {
       // This is a SERVER-confirmed death, never a client-side distance guess.
       // Free the pointer for navigation and make the result unmistakable.
       this.exitMouseSteering({silent: true})
+      this.applyPlanetaryWarning(null, {announce: false})
       this.showError(label)
     }
     this.updateCombatHud()
