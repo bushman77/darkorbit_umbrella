@@ -589,3 +589,47 @@ mix test test/core/world/planetary_collision_test.exs \
 cd ../..
 npm test --prefix apps/darkorbit_web/assets
 ```
+
+
+### Planetary proximity alerts V1 — visual approach warnings (2026-11-03)
+
+The game now warns **before** a fatal planetary impact in each orbital
+region (Mercury, Venus, Mars, Jupiter, Saturn, Uranus, Neptune and Pluto).
+The server computes the 3D distance to the body's collision boundary:
+**CAUTION** at 1.55× the lethal radius, and **CRITICAL** at 1.20× the
+lethal radius. The lethal collision itself remains 1.08× the planet's
+mean physical radius. These are provisional gameplay alert distances,
+not a physically simulated atmospheric re-entry corridor.
+
+On Venus the rounded radial distances are approximately:
+- CAUTION starts at **10,131 km from the centre**, about **3,595 km**
+  before the fatal boundary.
+- CRITICAL starts at **7,843 km from the centre**, about **1,307 km**
+  before the fatal boundary.
+- IMPACT occurs at **6,536 km from the centre**.
+
+The normal approach-based arrival spawns outside CAUTION. New cockpit
+warning bands appear in amber/red, with live distance **to the lethal
+collision boundary**. A stereo-correct warning is drawn in the SBS 3D
+cockpit HUD; the flat banner is hidden in SBS to prevent eye strain.
+`Core.World.PlanetaryProximity` emits events only on changes between
+`:clear`, `:caution` and `:critical` (including retreat). Per-ship
+current warning data also travels in `planetary_warnings` on every
+authoritative world snapshot, allowing an already-nearby pilot to
+reconnect and immediately see the correct warning. No client-side
+distance estimate can change gameplay or fabricate death.
+
+This milestone has no collision sound, gravity, rescue, or automatic
+respawn. Earth's original `1-1` test region still has no planet volume.
+
+Test from the umbrella root:
+
+```sh
+cd apps/core
+mix test test/core/world/planetary_proximity_test.exs \
+  test/core/world/planetary_impact_integration_test.exs \
+  test/core/world/planetary_collision_test.exs
+cd ../..
+npm test --prefix apps/darkorbit_web/assets
+mix assets.build
+```
