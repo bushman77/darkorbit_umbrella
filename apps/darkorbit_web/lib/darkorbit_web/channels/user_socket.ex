@@ -22,12 +22,9 @@ defmodule DarkorbitWeb.UserSocket do
     end
   end
 
-  # Initial pairing is authorized by the secret invitation at channel join.
-  # This transport role cannot enter the normal world channel.
-  def connect(%{"pair_code" => code}, socket, _connect_info)
-      when is_binary(code) and byte_size(code) == 43 do
-    {:ok, socket |> assign(:socket_role, :pairing) |> assign(:pairing_code, code)}
-  end
+  # QR invitations are redeemed via POST /helmet/pair, which lets the phone
+  # persist its durable viewer credential BEFORE any WebSocket channel joins.
+  # The WebSocket only accepts a registered helmet bearer token.
 
   def connect(%{"helmet_token" => credential}, socket, _connect_info) do
     case Helmets.authenticate(credential) do
