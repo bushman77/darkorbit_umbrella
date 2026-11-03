@@ -47,6 +47,47 @@ defmodule Darkorbit.Helmets do
 
   def authenticate(_), do: :error
 
+  @doc """
+  Return the device's persisted optical alignment, or nil until first save.
+  The caller must already have authenticated the helmet's viewer credential.
+  """
+  def calibration(device_id) when is_integer(device_id) do
+    case Repo.get(Device, device_id) do
+      %Device{eye_gap_px: gap, eye_sep_mm: sep}
+          when is_integer(gap) and is_integer(sep) ->
+        %{eye_gap_px: gap, eye_sep_mm: sep}
+
+      _ ->
+        nil
+    end
+  end
+
+  @doc """
+  Save both calibration values atomically for an authenticated helmet device.
+  Device ID is obtained exclusively from the authenticated Phoenix socket,
+  never a client-supplied ID. No new registration or credential is created.
+  """
+  def save_calibration(device_id, gap, sep)
+      when is_integer(device_id) and is_integer(gap) and is_integer(sep) do
+    case Repo.get(Device, device_id) do
+      %Device{} = device ->
+        device
+        |> Device.calibration_changeset(%{eye_gap_px: gap, eye_sep_mm: sep})
+        |> Repo.update()
+        |> case do
+          {:ok, saved} ->
+            {:ok, %{eye_gap_px: saved.eye_gap_px, eye_sep_mm: saved.eye_sep_mm}}
+          {:error, _changeset} ->
+            {:error, :invalid_alignment}
+        end
+
+      nil ->
+        {:error, :revoked}
+    end
+  end
+
+  def save_calibration(_device_id, _gap, _sep), do: {:error, :invalid_alignment}
+
   def forget(player_id) when is_integer(player_id) do
     case device(player_id) do
       nil -> :ok
