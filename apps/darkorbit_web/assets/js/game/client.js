@@ -1058,6 +1058,14 @@ class SpaceClient {
   }
 
   handleDisplayModeKey(event) {
+    // When the mouse owns flight steering, ignore accidental V presses that
+    // would switch the cockpit view mid-maneuver. The header view selector and
+    // V shortcut still work once the mouse is released with Escape.
+    if (this.mouseSteeringEnabled && document.pointerLockElement === this.canvas &&
+        (event.code === "KeyV" || event.key?.toLowerCase() === "v")) {
+      event.preventDefault()
+      return
+    }
     if (event.defaultPrevented || this.navComputer?.isOpen) return
     if (event.repeat || event.ctrlKey || event.altKey || event.metaKey || event.key.toLowerCase() !== "v") return
     const element = event.target
