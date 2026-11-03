@@ -14,3 +14,13 @@ export function stereoViewports(width, height, requestedGap = 0) {
     right: {x: rightX, y: 0, width: rightWidth, height: h},
   }
 }
+
+// A negative "center gap" represents an inward optical image shift rather
+// than overlapping the physical eye viewports. In a perspective projection
+// centered geometry has NDC x = -projectionMatrix.elements[8]. Decrease that
+// term for the left eye (moves the view right), increase for the right eye
+// (moves it left). -2px gap shifts each image inward by 1 CSS pixel.
+export function inwardStereoProjectionOffset(signedGap, eyeWidth) {
+  const inwardPerEyePx = Math.max(0, -(Number(signedGap) || 0)) / 2
+  return 2 * inwardPerEyePx / Math.max(1, eyeWidth)
+}
