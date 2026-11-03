@@ -7,7 +7,7 @@ defmodule Core.Universe.Navigation do
   cruise through compressed game-scale system coordinates.
   Navigation and map-space combat are separate: no AU values are mapped into
   Sector 1-1 coordinates. Strategic traffic runs continuously even when no player is connected;
-  close passes produce observational, hailable cockpit flybys with genuine
+  close passes produce server-held, hailable decisions with genuine
   server-owned relative positions, but not tactical combat NPC instances.
 
   Voyages and traffic persist within the supervised server runtime and
@@ -48,6 +48,14 @@ defmodule Core.Universe.Navigation do
   @spec cancel_course(GenServer.server(), pos_integer()) :: {:ok, map()} | {:error, atom()}
   def cancel_course(server, player_id) when is_integer(player_id) and player_id > 0 do
     GenServer.call(server, {:cancel_course, player_id})
+  end
+
+  @doc "Resolve the exact pending close pass for this authenticated pilot."
+  @spec resolve_encounter(GenServer.server(), pos_integer(), term(), term()) ::
+          {:ok, map()} | {:error, atom()}
+  def resolve_encounter(server, player_id, encounter_id, choice)
+      when is_integer(player_id) and player_id > 0 do
+    GenServer.call(server, {:resolve_encounter, player_id, encounter_id, choice})
   end
 
   @doc "Hail an in-range contact; identity and position come from the server."
@@ -116,6 +124,7 @@ defmodule Core.Universe.Navigation do
           travel_distance_km: distance_km,
           distance_travelled_km: 0.0,
           status: :traveling,
+          pending_encounter: nil,
           elapsed_ms: 0,
           duration_ms: duration_ms
         }
@@ -128,18 +137,44 @@ defmodule Core.Universe.Navigation do
   def handle_call({:cancel_course, player_id}, _from, state) do
     {voyage, state} = ensure_player(state, player_id)
 
-    if voyage.status != :traveling do
-      {:reply, {:error, :no_active_course}, state}
-    else
-      # An aborted course stays at its departure region. Preserve the last
-      # completed arrival provenance: canceling a NEW route must not invent
-      # a different approach direction if the pilot reconnects afterward.
-      updated = %{idle(voyage.location_id) |
-        arrival_origin_id: voyage.arrival_origin_id,
-        voyage_number: voyage.voyage_number}
-      state = put_voyage(state, player_id, updated)
-      broadcast(state, player_id, updated)
-      {:reply, {:ok, public(updated, state, player_id)}, state}
+    cond do
+      voyage.status != :traveling ->
+        {:reply, {:error, :no_active_course}, state}
+
+      voyage.pending_encounter != nil ->
+        {:reply, {:error, :encounter_decision_required}, state}
+
+      true ->
+        # An aborted course stays at its departure region. Preserve the last
+        # completed arrival provenance: canceling a NEW route must not invent
+        # a different approach direction if the pilot reconnects afterward.
+        updated = %{idle(voyage.location_id) |
+          arrival_origin_id: voyage.arrival_origin_id,
+          voyage_number: voyage.voyage_number}
+        state = put_voyage(state, player_id, updated)
+        broadcast(state, player_id, updated)
+        {:reply, {:ok, public(updated, state, player_id)}, state}
+    end
+  end
+
+  def handle_call({:resolve_encounter, player_id, encounter_id, choice}, _from, state) do
+    {voyage, state} = ensure_player(state, player_id)
+
+    cond do
+      voyage.pending_encounter == nil ->
+        {:reply, {:error, :no_pending_encounter}, state}
+
+      not is_binary(encounter_id) or voyage.pending_encounter.id != encounter_id ->
+        {:reply, {:error, :encounter_mismatch}, state}
+
+      choice != :continue ->
+        {:reply, {:error, :invalid_encounter_choice}, state}
+
+      true ->
+        updated = %{voyage | pending_encounter: nil}
+        state = put_voyage(state, player_id, updated)
+        broadcast(state, player_id, updated)
+        {:reply, {:ok, public(updated, state, player_id)}, state}
     end
   end
 
@@ -174,6 +209,7 @@ defmodule Core.Universe.Navigation do
       propulsion_mode: :conventional,
       origin_position_km: position_km, position_km: position_km,
       destination_position_km: nil,
+      pending_encounter: nil,
       cruise_speed_km_s: 0.0,
       travel_distance_km: 0.0, distance_travelled_km: 0.0,
       elapsed_ms: 0, duration_ms: 0}
@@ -189,24 +225,34 @@ defmodule Core.Universe.Navigation do
 
     Enum.reduce(state.voyages, state, fn
       {player_id, %{status: :traveling} = voyage}, current ->
-        elapsed = min(voyage.duration_ms, voyage.elapsed_ms + state.tick_ms)
-        distance_covered = min(voyage.travel_distance_km,
-          voyage.cruise_speed_km_s * elapsed / 1_000.0)
         updated =
-          if distance_covered >= voyage.travel_distance_km do
-            %{idle(voyage.destination_id) |
-              arrival_origin_id: voyage.origin_id,
-              voyage_number: voyage.voyage_number}
+          if voyage.pending_encounter != nil do
+            # Only this pilot's voyage is stopped. The shared clock, other
+            # pilots and independent NPC traffic continue moving.
+            voyage
           else
-            fraction = distance_covered / voyage.travel_distance_km
-            %{voyage | elapsed_ms: elapsed,
-              distance_travelled_km: distance_covered,
-              position_km: Sol.interpolate_game_position(
-                voyage.origin_position_km, voyage.destination_position_km, fraction)}
+            elapsed = min(voyage.duration_ms, voyage.elapsed_ms + state.tick_ms)
+            distance_covered = min(voyage.travel_distance_km,
+              voyage.cruise_speed_km_s * elapsed / 1_000.0)
+
+            if distance_covered >= voyage.travel_distance_km do
+              %{idle(voyage.destination_id) |
+                arrival_origin_id: voyage.origin_id,
+                voyage_number: voyage.voyage_number}
+            else
+              fraction = distance_covered / voyage.travel_distance_km
+              %{voyage | elapsed_ms: elapsed,
+                distance_travelled_km: distance_covered,
+                position_km: Sol.interpolate_game_position(
+                  voyage.origin_position_km, voyage.destination_position_km, fraction)}
+            end
           end
+
         current = put_voyage(current, player_id, updated)
         current = announce_encounter(current, player_id, updated)
-        broadcast(current, player_id, updated)
+        # announce_encounter may have added a hold to the stored voyage.
+        # Broadcast THAT authoritative value, never the stale pre-hold map.
+        broadcast(current, player_id, Map.fetch!(current.voyages, player_id))
         current
 
       {player_id, voyage}, current ->
@@ -241,6 +287,7 @@ defmodule Core.Universe.Navigation do
       remaining_ms: remaining_ms,
       contacts: Traffic.contacts(traffic, voyage.position_km),
       encounter: EncounterDirector.evaluate(traffic, voyage, reputations_for(state, player_id)),
+      cruise_paused: voyage.pending_encounter != nil,
       planetary_view: PlanetaryView.describe(voyage),
       territory: %{
         status: jurisdiction.status,
@@ -256,6 +303,9 @@ defmodule Core.Universe.Navigation do
   # A real traffic vessel can pass multiple pilots. The flyby is published
   # only on a pilot's first proximity crossing for that vessel/voyage;
   # repeated SOL snapshots still carry its current relative position.
+  defp announce_encounter(state, _player_id, %{pending_encounter: pending})
+       when not is_nil(pending), do: state
+
   defp announce_encounter(state, player_id, voyage) do
     case EncounterDirector.evaluate(state.traffic, voyage, reputations_for(state, player_id)) do
       nil -> state
@@ -264,12 +314,16 @@ defmodule Core.Universe.Navigation do
         if MapSet.member?(seen, encounter.id) do
           state
         else
+          # Persist the decision in supervised state before announcing it;
+          # reconnecting pilots see the same pending encounter.
+          state = put_voyage(state, player_id, %{voyage | pending_encounter: encounter})
+          state = %{state | encountered: Map.put(state.encountered, player_id,
+            MapSet.put(seen, encounter.id))}
           EventSink.dispatch(state.event_sink, "sol", :solar_encounter_started, %{
             player_id: player_id,
             encounter: encounter
           })
-          %{state | encountered: Map.put(state.encountered, player_id,
-            MapSet.put(seen, encounter.id))}
+          state
         end
     end
   end

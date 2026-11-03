@@ -502,3 +502,20 @@ validation remain deferred.
 - [ ] Add shared tactical encounter instances, voluntary/forced interception
   and route-safe resumption; policy labels do not start combat.
 - [ ] Run Mix/JS suites and manually verify 3D + SBS UI in a live browser.
+
+
+### Encounter decision hold V1 (2026-11-03)
+
+- [x] Freeze only the involved pilot's strategic cruise progression upon
+  a real server-owned close pass; all other ships and traffic keep moving.
+- [x] Retain a pilot-scoped pending decision across channel reconnects.
+- [x] Reject spoofed encounter identities, unsupported choices, premature
+  course aborts and repeated resolutions.
+- [x] Show a modal with Hail and Ignore / Resume actions, including an
+  SBS per-eye version, while retaining real sensor-range validation.
+- [x] Add deterministic navigation and authenticated-channel regressions.
+- [ ] Execute Mix/asset suites, build assets, and visually verify normal 3D
+  and SBS flows in a real browser/HMD.
+- [ ] Introduce physical voluntary/forced interception, shared tactical
+  instancing and ship-state-safe resumption, including NPC motion policies.
+- [ ] Persist paused voyages and NPC traffic across full server restarts.

@@ -12,6 +12,18 @@ defmodule Core.Universe.NavigationTest do
     %{server: name}
   end
 
+  defp tick_and_resolve(server, player_id, count) do
+    for _ <- 1..count do
+      assert :ok = Navigation.tick(server)
+      assert {:ok, navigation} = Navigation.snapshot(server, player_id)
+
+      if navigation.pending_encounter do
+        assert {:ok, %{cruise_paused: false}} =
+          Navigation.resolve_encounter(server, player_id, navigation.pending_encounter.id, :continue)
+      end
+    end
+  end
+
   test "a new pilot starts at Earth with no travel or combat encounter", %{server: server} do
     assert {:ok, state} = Navigation.snapshot(server, 11)
     assert state.system_id == "sol"
@@ -63,7 +75,7 @@ defmodule Core.Universe.NavigationTest do
     assert step.elapsed_ms == 1_000
     assert step.distance_travelled_km == underway.cruise_speed_km_s
     assert step.position_km != underway.position_km
-    for _ <- 1..ceil(underway.duration_ms / 1_000), do: :ok = Navigation.tick(server)
+    tick_and_resolve(server, 11, ceil(underway.duration_ms / 1_000))
     assert {:ok, arrived} = Navigation.snapshot(server, 11)
     assert arrived.location_id == "mars"
     assert arrived.arrival_origin_id == "earth"
@@ -95,14 +107,14 @@ defmodule Core.Universe.NavigationTest do
     assert departure.position_km == departure.origin_position_km
 
     midpoint = div(departure.duration_ms, 2_000)
-    for _ <- 1..midpoint, do: :ok = Navigation.tick(server)
+    tick_and_resolve(server, 1_260, midpoint)
     {:ok, approaching} = Navigation.snapshot(server, 1_260)
     assert approaching.planetary_view.angular_diameter_deg >
       departure.planetary_view.angular_diameter_deg
     assert approaching.planetary_view.angular_diameter_deg < 65.0
     assert approaching.status == :traveling
 
-    for _ <- 1..ceil(departure.duration_ms / 1_000), do: :ok = Navigation.tick(server)
+    tick_and_resolve(server, 1_260, ceil(departure.duration_ms / 1_000))
     {:ok, arrived} = Navigation.snapshot(server, 1_260)
     assert arrived.status == :idle
     assert arrived.location_id == "venus"
@@ -139,14 +151,16 @@ defmodule Core.Universe.NavigationTest do
     assert hd(after_tick.contacts).distance_km > hd(before.contacts).distance_km
   end
 
-  test "Earth-to-Venus cruise discovers a live courier, announces once and supports hail", %{server: server} do
+  test "Earth-to-Venus cruise holds at a real courier, announces once and supports hail", %{server: server} do
     assert {:ok, %{encounter: nil}} = Navigation.set_course(server, 910, "venus")
 
     for _ <- 1..109, do: assert(:ok = Navigation.tick(server))
     assert {:ok, crossing} = Navigation.snapshot(server, 910)
     assert crossing.status == :traveling
     assert %{call_sign: "Vesper-02", contact_id: vessel_id,
-             mode: :strategic_flyby, distance_km: separation} = crossing.encounter
+             mode: :strategic_flyby, distance_km: separation} = crossing.pending_encounter
+    assert crossing.cruise_paused
+    assert crossing.elapsed_ms < 109_000
     assert separation < 650_000
 
     assert_receive {"sol", :solar_encounter_started,
@@ -164,15 +178,25 @@ defmodule Core.Universe.NavigationTest do
     for _ <- 1..5, do: assert(:ok = Navigation.tick(server))
     refute_receive {"sol", :solar_encounter_started, %{player_id: 910}}, 0
 
+    assert {:ok, paused} = Navigation.snapshot(server, 910)
+    assert paused.cruise_paused
+    assert paused.elapsed_ms == crossing.elapsed_ms
+    assert paused.position_km == crossing.position_km
+
+    assert {:ok, resumed} = Navigation.resolve_encounter(
+      server, 910, crossing.pending_encounter.id, :continue)
+    refute resumed.cruise_paused
+    assert resumed.pending_encounter == nil
+
     for _ <- 1..35, do: assert(:ok = Navigation.tick(server))
     assert {:ok, departed} = Navigation.snapshot(server, 910)
-    assert departed.encounter == nil
+    assert departed.pending_encounter == nil
     assert departed.status == :traveling
-    # Encounter range is intentionally much closer than sensor/hail range.
-    assert {:ok, _still_in_sensor_range} = Navigation.hail(server, 910, vessel_id)
+    assert departed.elapsed_ms > resumed.elapsed_ms
+    refute_receive {"sol", :solar_encounter_started, %{player_id: 910}}, 0
   end
 
-  test "director labels an authoritative hostile close pass without interrupting cruise" do
+  test "director labels an authoritative hostile close pass and holds cruise" do
     receiver = self()
     name = :"#{__MODULE__}.Hostile#{System.unique_integer([:positive])}"
     traffic =
@@ -196,7 +220,8 @@ defmodule Core.Universe.NavigationTest do
     assert underway.status == :traveling
     assert %{contact_id: "traffic:sol:vesper-02",
              classification: :hostile_contact, mode: :strategic_flyby} =
-      underway.encounter
+      underway.pending_encounter
+    assert underway.cruise_paused
     refute Map.has_key?(underway, :pilot_reputations)
     assert_receive {"sol", :solar_encounter_started,
       %{player_id: 991, encounter: %{classification: :hostile_contact}}}
@@ -204,6 +229,51 @@ defmodule Core.Universe.NavigationTest do
     assert {:ok, other} = Navigation.snapshot(name, 992)
     assert other.status == :idle
     assert other.encounter == nil
+  end
+
+
+  test "encounter hold is per pilot, survives a snapshot, and rejects invalid decisions",
+       %{server: server} do
+    assert {:ok, _} = Navigation.set_course(server, 731, "venus")
+    assert {:ok, _} = Navigation.set_course(server, 732, "mars")
+
+    for _ <- 1..85, do: assert(:ok = Navigation.tick(server))
+    assert {:ok, pilot} = Navigation.snapshot(server, 731)
+    assert pilot.cruise_paused
+    assert %{id: encounter_id, contact_id: contact_id} = pilot.pending_encounter
+    assert contact_id == "traffic:sol:vesper-02"
+
+    assert {:error, :encounter_decision_required} =
+      Navigation.cancel_course(server, 731)
+    assert {:error, :no_pending_encounter} =
+      Navigation.resolve_encounter(server, 732, encounter_id, :continue)
+    assert {:error, :encounter_mismatch} =
+      Navigation.resolve_encounter(server, 731, "forged:contact", :continue)
+    assert {:error, :invalid_encounter_choice} =
+      Navigation.resolve_encounter(server, 731, encounter_id, :fight)
+
+    assert {:ok, other_before} = Navigation.snapshot(server, 732)
+    for _ <- 1..10, do: assert(:ok = Navigation.tick(server))
+    assert {:ok, held} = Navigation.snapshot(server, 731)
+    assert held.position_km == pilot.position_km
+    assert held.elapsed_ms == pilot.elapsed_ms
+    assert held.remaining_ms == pilot.remaining_ms
+    assert held.pending_encounter.id == encounter_id
+
+    assert {:ok, other_after} = Navigation.snapshot(server, 732)
+    assert other_after.elapsed_ms > other_before.elapsed_ms
+    assert other_after.position_km != other_before.position_km
+
+    assert {:ok, continued} =
+      Navigation.resolve_encounter(server, 731, encounter_id, :continue)
+    assert continued.status == :traveling
+    assert continued.pending_encounter == nil
+    assert continued.cruise_paused == false
+    assert {:error, :no_pending_encounter} =
+      Navigation.resolve_encounter(server, 731, encounter_id, :continue)
+    assert :ok = Navigation.tick(server)
+    assert {:ok, moving} = Navigation.snapshot(server, 731)
+    assert moving.elapsed_ms == pilot.elapsed_ms + 1_000
   end
 
   test "simultaneous pilots advance the same one-second clock with different routes", %{server: server} do

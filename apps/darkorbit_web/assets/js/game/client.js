@@ -76,7 +76,7 @@ class SpaceClient {
     this.planetaryWarningPlanet = null
     this.solarEncounter = null
     this.encounterDisplayedId = null
-    this.encounterDismissedId = null
+    this.encounterResolving = false
     this.player = null
     this.commandDestination = null
     this.selectedTargetId = null
@@ -134,28 +134,60 @@ class SpaceClient {
         this.spaceLaser?.release()
       }
     })
-    this.root.querySelector("#solar-encounter-hail")?.addEventListener("click", () => {
-      const id = this.solarEncounter?.contact_id
-      if (!id) return
-      const output = this.root.querySelector("#solar-encounter-message")
-      if (output) output.textContent = "Opening secure civilian frequency…"
-      this.solarHail(id, (ok, communication, reason) => {
-        if (this.solarEncounter?.contact_id !== id || !output) return
-        if (!ok) {
-          output.textContent = "Contact lost: " + (reason || "out of range")
-          return
-        }
-        const manifest = Object.entries(communication.cargo || {})
-          .map(([item, count]) => item.replaceAll("_", " ") + ": " + count)
-          .join(", ")
-        output.textContent = String(communication.message || "Communications established.") +
-          (manifest ? "\nManifest: " + manifest : "")
-      })
+    const encounterPanel = this.root.querySelector("#solar-encounter-panel")
+    encounterPanel?.addEventListener("click", event => {
+      const choice = event.target?.closest?.("[data-encounter-action]")?.dataset.encounterAction
+      const encounter = this.solarEncounter
+      if (!choice || !encounter || this.encounterResolving) return
+
+      if (choice === "hail") {
+        this.encounterMessage("Opening communications…")
+        this.solarHail(encounter.contact_id, (ok, communication, reason) => {
+          if (this.solarEncounter?.id !== encounter.id) return
+          if (!ok) {
+            this.encounterMessage("Hail unavailable: " + (reason || "contact out of range") +
+              ". You can still resume your course.")
+            return
+          }
+          const manifest = Object.entries(communication.cargo || {})
+            .map(([item, count]) => item.replaceAll("_", " ") + ": " + count)
+            .join(", ")
+          this.encounterMessage(String(communication.message || "Communications established.") +
+            (manifest ? "\nManifest: " + manifest : ""))
+        })
+      } else if (choice === "continue") {
+        this.encounterResolving = true
+        this.encounterMessage("Requesting course resumption…")
+        this.showSolarEncounter()
+        this.solarResolveEncounter(encounter.id, (ok, navigation, reason) => {
+          this.encounterResolving = false
+          if (ok && navigation) {
+            this.applySolarNavigation(navigation)
+          } else if (this.solarEncounter?.id === encounter.id) {
+            this.encounterMessage("Unable to resume: " + (reason || "relay unavailable"))
+            this.showSolarEncounter()
+          }
+        })
+      }
     })
-    this.root.querySelector("#solar-encounter-dismiss")?.addEventListener("click", () => {
-      this.encounterDismissedId = this.solarEncounter?.id || null
-      this.showSolarEncounter()
-    })
+    // Modal decisions own keyboard focus. Escape and Atlas toggle cannot
+    // dismiss a server-held encounter without a choice.
+    window.addEventListener("keydown", event => {
+      if (!this.solarEncounter) return
+      if (event.key === "Tab") {
+        const actions = [...encounterPanel.querySelectorAll(
+          '.solar-encounter-eye:first-child [data-encounter-action]')]
+        const index = actions.indexOf(document.activeElement)
+        const next = event.shiftKey
+          ? actions[(index + actions.length - 1) % actions.length]
+          : actions[(index + 1) % actions.length]
+        if (next) next.focus({preventScroll: true})
+        event.preventDefault()
+      } else if (event.key === "Escape" || event.key.toLowerCase() === "m") {
+        event.preventDefault()
+      }
+      event.stopImmediatePropagation()
+    }, true)
 
     this.navComputer = new NavigationComputer({
       root: this.root.querySelector("#navigation-computer"),
@@ -276,11 +308,8 @@ class SpaceClient {
       }
     })
     channel.on("world_region_changed", payload => this.switchOrbitalRegion(payload?.map_id))
-    channel.on("solar_encounter_started", payload => {
-      if (String(payload.player_id) === String(this.selfId) && payload.encounter) {
-        this.setSolarEncounter(payload.encounter)
-      }
-    })
+    // The private first-contact event is accompanied by a navigation update;
+    // only that authoritative snapshot opens or closes the decision panel.
     channel.on("movement_started", entity => this.upsertEntity(entity))
     channel.on("entity_joined", entity => this.entityJoined(entity))
     channel.on("entity_left", entity => this.removeEntity(entity.id))
@@ -539,7 +568,7 @@ class SpaceClient {
 
   applySolarNavigation(navigation) {
     this.navComputer.setSolarNavigation(navigation)
-    this.setSolarEncounter(navigation?.encounter || null)
+    this.setSolarEncounter(navigation?.pending_encounter || null)
     const body = navigation?.planetary_view
     const planetaryStatus = this.root.querySelector("#planetary-view-status")
     if (planetaryStatus) {
@@ -557,7 +586,8 @@ class SpaceClient {
     const active=this.inSystemCruise()
     this.root.dataset.propulsionMode=active?"interplanetary_cruise":"conventional"
     const label=this.root.querySelector("#propulsion-status")
-    if(label)label.textContent=active?"SUBLIGHT CRUISE / FLIGHT LOCKED":"CONVENTIONAL FLIGHT"
+    if(label)label.textContent=navigation?.cruise_paused?"ENCOUNTER HOLD / CRUISE PAUSED":
+      active?"SUBLIGHT CRUISE / FLIGHT LOCKED":"CONVENTIONAL FLIGHT"
     if(active){
       this.exitMouseSteering({silent: true})
       this.flightControls?.release({silent:true})
@@ -566,24 +596,24 @@ class SpaceClient {
     }
   }
 
+  encounterMessage(message) {
+    for (const output of this.root.querySelectorAll("[data-encounter-message]")) {
+      output.textContent = message
+    }
+  }
+
   setSolarEncounter(encounter) {
     const nextId = typeof encounter?.id === "string" ? encounter.id : null
     if (nextId !== this.encounterDisplayedId) {
       this.encounterDisplayedId = nextId
-      // A dismissed ship should not repeatedly reopen the panel if its
-      // proximity briefly crosses the sensor boundary and later returns.
-      if (nextId && nextId !== this.encounterDismissedId) {
-        this.encounterDismissedId = null
-      }
-      const output = this.root.querySelector("#solar-encounter-message")
-      if (output) {
-        output.textContent = !nextId
-          ? ""
-          : encounter?.classification === "hostile_contact"
-            ? "Hostile traffic detected. Cruise continues; tactical interception is not yet available."
-            : encounter?.classification === "patrol_attention"
-              ? "Faction patrol attention. Cruise continues; inspection is not yet active."
-              : "Non-hostile traffic flyby. Cruise continues. Hail to identify its mission."
+      this.encounterResolving = false
+      if (nextId) {
+        const description = encounter.classification === "hostile_contact"
+          ? "Hostile vessel detected. Your course is on hold until you choose to proceed."
+          : encounter.classification === "patrol_attention"
+            ? "Faction patrol attention. Decide whether to hail or continue."
+            : "A vessel has crossed your route. Hail it or ignore the contact."
+        this.encounterMessage(description)
       }
     }
     this.solarEncounter = nextId ? encounter : null
@@ -592,24 +622,36 @@ class SpaceClient {
 
   showSolarEncounter() {
     const panel = this.root.querySelector("#solar-encounter-panel")
+    if (!panel) return
+    const wasHidden = panel.hidden
+    panel.hidden = !this.solarEncounter
+    if (!this.solarEncounter) return
+
     const encounter = this.solarEncounter
-    const visible = Boolean(encounter && encounter.id !== this.encounterDismissedId)
-    if (panel) panel.hidden = !visible
-    if (!visible) return
-    const title = this.root.querySelector("#solar-encounter-title")
-    const range = this.root.querySelector("#solar-encounter-distance")
-    if (title) title.textContent = String(encounter.call_sign || "Unidentified vessel") +
-      " · " + String(encounter.kind || "vessel").replaceAll("_", " ")
-    if (range && Number.isFinite(encounter.distance_km)) {
-      const status = encounter.classification === "hostile_contact"
-        ? "HOSTILE CONTACT"
-        : encounter.classification === "patrol_attention"
-          ? "PATROL ATTENTION"
-          : "NON-HOSTILE"
-      range.textContent = Math.round(encounter.distance_km).toLocaleString("en-US") +
-        " game km · " + status + " · " +
+    const status = encounter.classification === "hostile_contact"
+      ? "HOSTILE CONTACT"
+      : encounter.classification === "patrol_attention"
+        ? "PATROL ATTENTION"
+        : "NEUTRAL CONTACT"
+    for (const title of panel.querySelectorAll("[data-encounter-title]")) {
+      title.textContent = String(encounter.call_sign || "Unidentified vessel") +
+        " · " + String(encounter.kind || "vessel").replaceAll("_", " ")
+    }
+    for (const distance of panel.querySelectorAll("[data-encounter-distance]")) {
+      distance.textContent = Math.round(encounter.distance_km || 0).toLocaleString("en-US") +
+        " game km at detection · " + status + " · " +
         String(encounter.origin_id || "?") + " → " +
         String(encounter.destination_id || "?")
+    }
+    for (const button of panel.querySelectorAll("[data-encounter-action]")) {
+      button.disabled = this.encounterResolving
+    }
+    if (wasHidden) {
+      this.exitMouseSteering({silent: true})
+      this.flightControls?.release({silent: true})
+      this.spaceLaser?.release()
+      panel.querySelector('.solar-encounter-eye:first-child [data-encounter-action="hail"]')
+        ?.focus({preventScroll: true})
     }
   }
 
@@ -627,6 +669,16 @@ class SpaceClient {
       .receive("ok",response=>done(true,response.navigation))
       .receive("error",response=>done(false,null,response.reason))
       .receive("timeout",()=>done(false,null,"timeout"))
+  }
+
+  solarResolveEncounter(encounterId, done) {
+    if (this.channel?.state !== "joined") return done(false, null, "relay offline")
+    this.channel.push("solar_resolve_encounter", {
+      encounter_id: encounterId, choice: "continue",
+    }, 5000)
+      .receive("ok", response => done(true, response.navigation))
+      .receive("error", response => done(false, null, response.reason))
+      .receive("timeout", () => done(false, null, "timeout"))
   }
 
   solarHail(contactId, done) {

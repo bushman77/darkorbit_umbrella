@@ -779,3 +779,53 @@ mix test apps/darkorbit_web/test/darkorbit_web/channels/world_channel_test.exs
 npm test --prefix apps/darkorbit_web/assets
 mix precommit
 ```
+
+
+### Encounter decision hold V1 — visible choice during cruise (2026-11-03)
+
+A real strategic close pass now **holds the pilot's interplanetary course**
+at the detected game-km position. The authoritative SOL navigation server
+stores a `pending_encounter` on that pilot's voyage and keeps its elapsed
+travel time, position, and ETA unchanged on subsequent ticks. This is a
+per-pilot hold, **not** a global pause: other pilots, NPC schedules and the
+SOL clock keep advancing.
+
+A centered `SOL / ENCOUNTER DETECTED` dialog appears above the Atlas or
+normal cockpit. Stereo SBS presents one matching dialog in each eye.
+The options are **Hail vessel** (existing server-validated communications,
+keeps the ship held) and **Ignore / Resume course** (authenticated server
+command that releases the hold without resetting the route). The modal
+cannot be dismissed just by Escape or opening the Atlas. Reconnecting to
+the server restores the exact pending encounter. Invalid encounter IDs
+and unsupported actions are rejected. The course abort action is blocked
+while an encounter decision is pending.
+
+The contact's reported distance is its distance **at detection**; live
+NPCs continue moving. A hail may become unavailable if a vessel leaves
+sensor range, but the pilot can always resume the voyage. This V1 is a
+dialogue hold, **not** an NPC braking manoeuvre, tactical interception,
+combat instance, trade transfer, or faction consequence. No randomly
+spawned enemies are introduced.
+
+Automated regression tests were added for a held Earth–Venus courier,
+server-side pause/resume and spoofed-decision rejection. Existing travel
+completion tests now explicitly resolve genuine encounters when they
+occur. Test execution and visual browser verification have not been
+performed in the editing environment.
+
+Suggested checks from the umbrella root:
+
+```sh
+mix test apps/core/test/core/universe/navigation_test.exs
+mix test apps/darkorbit_web/test/darkorbit_web/channels/world_channel_test.exs
+npm test --prefix apps/darkorbit_web/assets
+mix assets.build
+mix precommit
+```
+
+To see the dialog, start from a fresh world process, plot Earth → Venus
+and remain in the Atlas or cockpit. The Vesper-02 courier is initially
+ahead along the route, so a close pass should occur roughly **81 seconds**
+after leaving Earth if traffic has not already moved on. Later departures
+change encounter opportunities; a voyage is not guaranteed to meet the
+courier at that time.

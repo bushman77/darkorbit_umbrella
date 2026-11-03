@@ -81,6 +81,18 @@ defmodule DarkorbitWeb.WorldChannel do
     end
   end
 
+  def handle_in("solar_resolve_encounter",
+        %{"encounter_id" => id, "choice" => "continue"}, socket)
+      when is_binary(id) do
+    case World.solar_resolve_encounter(socket.assigns.world_session_id, id, :continue) do
+      {:ok, navigation} -> {:reply, {:ok, %{navigation: navigation}}, socket}
+      {:error, reason} -> {:reply, {:error, %{reason: error_reason(reason)}}, socket}
+    end
+  end
+
+  def handle_in("solar_resolve_encounter", _payload, socket),
+    do: {:reply, {:error, %{reason: "invalid_encounter_choice"}}, socket}
+
   def handle_in("solar_hail", %{"contact_id" => id}, socket)
       when is_binary(id) do
     case World.solar_hail(socket.assigns.world_session_id, id) do

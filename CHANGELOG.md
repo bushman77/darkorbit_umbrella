@@ -447,3 +447,20 @@
 - Test execution: not run here (Elixir/Mix unavailable); live browser
   verification remains outstanding. No faction reputation persistence,
   tactical instances, interception, random spawns or NPC combat added.
+
+
+### Strategic encounter modal and pilot cruise hold (2026-11-03)
+
+- Changed real SOL close passes from passing notifications to a
+  server-authoritative, pilot-scoped travel hold with a pending decision.
+- The pilot's location, voyage progress and ETA freeze during the hold.
+  NPC vessel traffic and all other pilots continue independently.
+- Added authenticated `solar_resolve_encounter` with strict encounter ID
+  and action validation. Hail remains read-only and sensor-range checked;
+  Continue resumes the original route without a position reset.
+- Added centered modal encounter decisions to normal cockpit/Atlas and
+  duplicated per-eye panels for SBS. Updated Atlas and helm status.
+- Added regression cases for hold/reconnect state, isolation, travel
+  completion after resolution, and invalid client decisions.
+- No physical tactical encounter/combat or restart durability yet.
+  Mix, npm, asset build and browser/HMD verification are still pending.

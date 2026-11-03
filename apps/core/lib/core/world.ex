@@ -67,6 +67,16 @@ defmodule Core.World do
     end
   end
 
+  @doc "Resolve a server-held encounter using the authenticated pilot session."
+  @spec solar_resolve_encounter(pos_integer(), term(), term(), keyword()) ::
+          {:ok, map()} | {:error, term()}
+  def solar_resolve_encounter(session_id, encounter_id, choice, opts \\ []) do
+    with {:ok, session} <- fetch_session(Keyword.get(opts, :sessions, SessionManager)) do
+      SolarNavigation.resolve_encounter(
+        solar_navigation_server(opts), session.player_id, encounter_id, choice)
+    end
+  end
+
   defp solar_navigation_server(opts) do
     Keyword.get(opts, :solar_navigation_server,
       Module.concat(Keyword.get(opts, :sessions, SessionManager), SolarNavigation))

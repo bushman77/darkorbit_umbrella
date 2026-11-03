@@ -209,8 +209,10 @@ export class NavigationComputer {
   setSolarNavigation(navigation) {
     if(navigation?.system_id!=="sol" || !["idle","traveling"].includes(navigation.status))return
     this.solarNavigation=navigation
-    this.solarStatusMessage=navigation.status==="traveling" ?
-      "SUBLIGHT INTERPLANETARY CRUISE" : "CONVENTIONAL FLIGHT READY"
+    this.solarStatusMessage=navigation.pending_encounter ?
+      "ENCOUNTER HOLD · DECISION REQUIRED" :
+      navigation.status==="traveling" ?
+        "SUBLIGHT INTERPLANETARY CRUISE" : "CONVENTIONAL FLIGHT READY"
     if(this.isOpen&&this.view==="system")this.renderSolarView()
   }
 
@@ -321,10 +323,11 @@ export class NavigationComputer {
       `${percent}% · ${duration(nav.remaining_ms)} remaining`:
       "Conventional flight · choose a planet to begin sublight cruise"
     const drive=this.root.querySelector("#nav-solar-drive")
-    if(drive)drive.textContent=traveling ? "SUBLIGHT INTERPLANETARY CRUISE" : "CONVENTIONAL"
+    if(drive)drive.textContent=nav?.cruise_paused ? "ENCOUNTER HOLD · CRUISE PAUSED" :
+      traveling ? "SUBLIGHT INTERPLANETARY CRUISE" : "CONVENTIONAL"
     const speed=this.root.querySelector("#nav-solar-speed")
-    if(speed)speed.textContent=traveling ?
-      `${Math.round(nav.cruise_speed_km_s || 0).toLocaleString("en-US")} game km/s` :
+    if(speed)speed.textContent=nav?.cruise_paused ? "0 game km/s · held at encounter" :
+      traveling ? `${Math.round(nav.cruise_speed_km_s || 0).toLocaleString("en-US")} game km/s` :
       "Conventional thrusters"
     const distance=this.root.querySelector("#nav-solar-distance-travelled")
     if(distance)distance.textContent=traveling ?
@@ -340,7 +343,7 @@ export class NavigationComputer {
         `Set course to ${name(this.solarSelection)}`
     }
     const abort=this.root.querySelector("#nav-solar-cancel")
-    if(abort)abort.disabled=this.solarPending||!connected||!traveling
+    if(abort)abort.disabled=this.solarPending||!connected||!traveling||Boolean(nav?.pending_encounter)
     this.renderTrafficContacts()
   }
 

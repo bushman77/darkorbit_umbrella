@@ -868,8 +868,43 @@ body:has(#helmet-client) {
   display: none !important;
 }
 
-/* Encounter labels for SBS are drawn on the stereo-correct cockpit instrument.
-   Hailing remains accessible from Solar Atlas, not a flat binocular overlay. */
-[data-display-mode="sbs"] #solar-encounter-panel {
-  display: none !important;
+/* Server-held encounter decisions are modal; SBS uses a matching panel
+   for each eye rather than stretching a flat alert across both eye images. */
+.solar-encounter-modal {
+  position: absolute; inset: 0; z-index: 110; display: grid;
+  grid-template-columns: minmax(0, 1fr); place-items: center;
+  overflow: auto; padding: 1rem; background: rgb(1 7 18 / .90);
+}
+.solar-encounter-modal[hidden] { display: none !important; }
+.solar-encounter-eye { display: flex; width: 100%; align-items: center; justify-content: center; }
+.solar-encounter-eye-right { display: none; }
+.solar-encounter-card {
+  width: min(31rem, 100%); padding: clamp(1.2rem, 3vw, 2rem);
+  border: 1px solid rgb(74 222 238 / .7); border-radius: 1rem;
+  background: linear-gradient(155deg, #102d47, #050f20 75%);
+  box-shadow: 0 20px 80px #000b, inset 0 0 28px #22d3ee10; color: #e6faff;
+}
+.solar-encounter-kicker { color: #67e8f9; font: 750 .65rem ui-monospace, monospace; letter-spacing: .18em; }
+.solar-encounter-hold { margin: .8rem 0 1rem; color: #fcd34d; font: 800 .7rem ui-monospace, monospace; letter-spacing: .1em; }
+.solar-encounter-card h2 { font-size: clamp(1.25rem, 2vw, 1.75rem); font-weight: 800; line-height: 1.25; }
+.solar-encounter-distance { color: #9fcee0; margin: .55rem 0 1rem; font: 650 .75rem ui-monospace, monospace; }
+.solar-encounter-description { color: #d0eaf2; line-height: 1.55; font-size: .9rem; }
+.solar-encounter-message { color: #a7f3d0; margin: 1rem 0; font-size: .8rem; white-space: pre-line; overflow-wrap: anywhere; }
+.solar-encounter-actions { display: grid; grid-template-columns: 1fr 1fr; gap: .65rem; margin-top: 1rem; }
+.solar-encounter-note { color: #96aabc; font-size: .7rem; line-height: 1.5; margin-top: 1.1rem; }
+#game-client[data-display-mode="sbs"] .solar-encounter-modal {
+  grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0; padding: .35rem;
+}
+#game-client[data-display-mode="sbs"] .solar-encounter-eye { padding: .35rem; }
+#game-client[data-display-mode="sbs"] .solar-encounter-eye-right { display: flex; }
+#game-client[data-display-mode="sbs"] .solar-encounter-card {
+  width: min(27rem, 100%); padding: clamp(.5rem, 1.5vw, 1rem);
+}
+#game-client[data-display-mode="sbs"] .solar-encounter-card h2 { font-size: clamp(.9rem, 1.6vw, 1.35rem); }
+#game-client[data-display-mode="sbs"] .solar-encounter-message,
+#game-client[data-display-mode="sbs"] .solar-encounter-description { font-size: .72rem; }
+#game-client[data-display-mode="sbs"] .solar-encounter-actions { grid-template-columns: 1fr; }
+@media (max-width: 520px) {
+  .solar-encounter-actions { grid-template-columns: 1fr; }
+  #game-client[data-display-mode="sbs"] .solar-encounter-note { font-size: .58rem; }
 }

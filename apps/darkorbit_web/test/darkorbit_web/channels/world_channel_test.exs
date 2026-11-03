@@ -108,7 +108,15 @@ defmodule DarkorbitWeb.WorldChannelTest do
       duration_ms: duration_ms}}
 
     server = Module.concat(SessionManager, Core.Universe.Navigation)
-    for _ <- 1..ceil(duration_ms / 1_000), do: :ok = Core.Universe.Navigation.tick(server)
+    for _ <- 1..ceil(duration_ms / 1_000) do
+      assert :ok = Core.Universe.Navigation.tick(server)
+      assert {:ok, navigation} = Core.Universe.Navigation.snapshot(server, account.id)
+
+      if navigation.pending_encounter do
+        assert {:ok, _} = Core.Universe.Navigation.resolve_encounter(
+          server, account.id, navigation.pending_encounter.id, :continue)
+      end
+    end
     assert_push "world_region_changed", %{map_id: "sol:venus"}
     leave_and_wait(old_socket)
 
@@ -161,6 +169,53 @@ defmodule DarkorbitWeb.WorldChannelTest do
       %{player_id: player_id, encounter: %{contact_id: "traffic:sol:vesper-02"}}
     assert player_id == account.id
     leave_and_wait(joined)
+  end
+
+
+  test "encounter decision is bound to the pilot session and cannot be forged" do
+    account = verified_player_account_fixture()
+    server = Module.concat(SessionManager, Core.Universe.Navigation)
+    original_state = :sys.get_state(server)
+    # Pin the shared server's traffic schedule for this integration case;
+    # unrelated channel tests may have advanced its clock already.
+    :sys.replace_state(server, fn state ->
+      %{state | traffic: Core.Universe.Traffic.seed(),
+        encountered: %{},
+        voyages: Map.delete(state.voyages, account.id)}
+    end)
+    on_exit(fn -> :sys.replace_state(server, fn _ -> original_state end) end)
+    {:ok, socket} = authenticated_socket(account)
+    {:ok, _response, socket} = subscribe_and_join(socket, WorldChannel, "world:1-1")
+
+    ref = push(socket, "solar_resolve_encounter",
+      %{"encounter_id" => "anything", "choice" => "continue"})
+    assert_reply ref, :error, %{reason: "no_pending_encounter"}
+
+    ref = push(socket, "solar_set_course", %{"body_id" => "venus"})
+    assert_reply ref, :ok, %{navigation: %{status: :traveling}}
+    for _ <- 1..85, do: assert(:ok = Core.Universe.Navigation.tick(server))
+    assert {:ok, %{pending_encounter: %{id: encounter_id}, cruise_paused: true}} =
+      Core.Universe.Navigation.snapshot(server, account.id)
+
+    ref = push(socket, "solar_resolve_encounter",
+      %{"encounter_id" => encounter_id, "choice" => "fight"})
+    assert_reply ref, :error, %{reason: "invalid_encounter_choice"}
+
+    ref = push(socket, "solar_cancel_course", %{})
+    assert_reply ref, :error, %{reason: "encounter_decision_required"}
+
+    ref = push(socket, "solar_resolve_encounter",
+      %{"encounter_id" => "forged", "choice" => "continue"})
+    assert_reply ref, :error, %{reason: "encounter_mismatch"}
+
+    ref = push(socket, "solar_resolve_encounter",
+      %{"encounter_id" => encounter_id, "choice" => "continue", "player_id" => -1})
+    assert_reply ref, :ok, %{navigation: %{status: :traveling,
+      cruise_paused: false, pending_encounter: nil}}
+
+    assert {:ok, %{cruise_paused: false}} =
+      Core.Universe.Navigation.snapshot(server, account.id)
+    leave_and_wait(socket)
   end
 
   test "SOL interplanetary courses are server-authorized and no NPC spawns on travel" do
