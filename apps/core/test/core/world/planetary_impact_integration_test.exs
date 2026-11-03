@@ -49,6 +49,68 @@ defmodule Core.World.PlanetaryImpactIntegrationTest do
       attitude: %{yaw: -:math.pi() / 2, pitch: 0.0, roll: 0.0}}
   end
 
+  test "proximity progresses from clear to caution and critical then clears on retreat", ctx do
+    boundary = ctx.planet.exclusion_radius
+    opts = Keyword.put(ctx.opts, :entry, entry(ctx.planet, boundary * 0.55 + 15.0))
+    assert {:ok, session} = World.connect(:proximity_pilot, ctx.stats, opts)
+
+    assert {:ok, initial} = World.snapshot("sol:venus", ctx.opts)
+    assert initial.planetary_warnings == []
+
+    assert {:ok, _} = World.move(session.id, %{
+      x: ctx.planet.center.x + boundary * 1.1,
+      y: ctx.planet.center.y,
+      z: 0.0
+    }, ctx.opts)
+    assert {:ok, nearby} = World.tick("sol:venus", ctx.opts)
+    assert [%{entity_id: :proximity_pilot, level: :caution}] =
+      nearby.planetary_warnings
+    assert_receive {"sol:venus", :planetary_proximity_changed,
+      %{entity_id: :proximity_pilot, level: :caution,
+        previous_level: :clear, planet_id: "venus"}}
+
+    assert {:ok, _} = World.tick("sol:venus", ctx.opts)
+    refute_receive {"sol:venus", :planetary_proximity_changed,
+      %{entity_id: :proximity_pilot, level: :caution, previous_level: :clear}}
+
+    # 320 km/s × 0.1 s per tick: enter the critical band but remain outside
+    # the lethal radius. The map server is authoritative at each step.
+    for _ <- 1..73, do: assert({:ok, _} = World.tick("sol:venus", ctx.opts))
+    assert {:ok, critical} = World.snapshot("sol:venus", ctx.opts)
+    assert [%{entity_id: :proximity_pilot, level: :critical}] =
+      critical.planetary_warnings
+    assert_receive {"sol:venus", :planetary_proximity_changed,
+      %{entity_id: :proximity_pilot, level: :critical,
+        previous_level: :caution, planet_id: "venus"}}
+    assert Enum.find(critical.entities, &(&1.id == :proximity_pilot)).status == :alive
+
+    assert {:ok, _} = World.move(session.id, %{
+      x: ctx.planet.center.x + boundary * 1.75,
+      y: ctx.planet.center.y,
+      z: 0.0
+    }, ctx.opts)
+    for _ <- 1..125, do: assert({:ok, _} = World.tick("sol:venus", ctx.opts))
+    assert {:ok, clear} = World.snapshot("sol:venus", ctx.opts)
+    assert clear.planetary_warnings == []
+    assert_receive {"sol:venus", :planetary_proximity_changed,
+      %{entity_id: :proximity_pilot, level: :caution,
+        previous_level: :critical}}
+    assert_receive {"sol:venus", :planetary_proximity_changed,
+      %{entity_id: :proximity_pilot, level: :clear,
+        previous_level: :caution, clearance_km: nil}}
+    refute_receive {"sol:venus", :entity_destroyed,
+      %{entity: %{id: :proximity_pilot}}}
+  end
+
+  test "initial warning zone is included in world snapshot for a reconnecting cockpit", ctx do
+    boundary = ctx.planet.exclusion_radius
+    opts = Keyword.put(ctx.opts, :entry, entry(ctx.planet, boundary * 0.4))
+    assert {:ok, _session} = World.connect(:reconnecting_pilot, ctx.stats, opts)
+    assert {:ok, snapshot} = World.snapshot("sol:venus", ctx.opts)
+    assert [%{entity_id: :reconnecting_pilot, level: :caution,
+              planet_id: "venus"}] = snapshot.planetary_warnings
+  end
+
   test "manual approach kills once, publishes planet impact, and disables controls", ctx do
     opts = Keyword.put(ctx.opts, :entry, entry(ctx.planet, 4.0))
     assert {:ok, session} = World.connect(:manual_crash, ctx.stats, opts)
