@@ -402,7 +402,7 @@ validation remain deferred.
 - [x] Automatically transfer the pilot's Phoenix channel on arrival,
   update the local Atlas bounds and keep SOL navigation broadcasts global.
 - [x] Real planetary mean radii, camera-relative planet rendering and
-  a server-controlled exclusion sphere to stop flying through the planet.
+  a server-controlled exclusion sphere, now lethal when crossed.
 - [x] Remove the four original procedural test asteroid spheres and
   relocate the starfield around the camera in large maps.
 - [x] Add directional arrival, region routing, collision and view tests.
