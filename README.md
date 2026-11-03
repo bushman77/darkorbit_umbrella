@@ -829,3 +829,20 @@ ahead along the route, so a close pass should occur roughly **81 seconds**
 after leaving Earth if traffic has not already moved on. Later departures
 change encounter opportunities; a voyage is not guaranteed to meet the
 courier at that time.
+
+### Development headset access (2026-11-03)
+
+During development, Phoenix/Bandit binds to `0.0.0.0:4000` by default, so a
+paired SBS headset/phone on the **same trusted LAN** can access the laptop at
+`http://<laptop-LAN-IP>:4000`. The loopback host `localhost` still works on
+the laptop but cannot be used from a separate device.
+
+Run normally: `iex -S mix phx.server`. To deliberately restrict the dev server
+to the laptop, launch with `DARKORBIT_LOOPBACK_ONLY=1 iex -S mix phx.server`.
+This dev configuration is not intended for untrusted/public networks;
+`check_origin: false` remains enabled for development and should not be
+used for a public deployment. Firewalls and Wi-Fi client isolation can still
+prevent headset access even when Bandit listens on all interfaces.
+
+Configuration change inspected on the `sbs` branch. Browser/HMD connectivity
+has not been manually verified.

@@ -17,10 +17,11 @@ config :darkorbit, Darkorbit.Repo,
 # watchers to your application. For example, we can use it
 # to bundle .js and .css sources.
 config :darkorbit_web, DarkorbitWeb.Endpoint,
-  # Headset discovery is opt-in: expose the dev server to a trusted LAN only
-  # when running `DARKORBIT_LAN_HMD=1 iex -S mix phx.server`.
-  http: [ip: if(System.get_env("DARKORBIT_LAN_HMD") == "1",
-    do: {0, 0, 0, 0}, else: {127, 0, 0, 1})],
+  # Dev cockpit and paired HMD must both reach the same Phoenix server.
+  # Bind all interfaces by default for LAN headset access. Run on a trusted
+  # network; set DARKORBIT_LOOPBACK_ONLY=1 to restrict access to this laptop.
+  http: [ip: if(System.get_env("DARKORBIT_LOOPBACK_ONLY") == "1",
+    do: {127, 0, 0, 1}, else: {0, 0, 0, 0})],
   check_origin: false,
   code_reloader: true,
   debug_errors: true,

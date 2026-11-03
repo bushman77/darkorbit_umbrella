@@ -519,3 +519,11 @@ validation remain deferred.
 - [ ] Introduce physical voluntary/forced interception, shared tactical
   instancing and ship-state-safe resumption, including NPC motion policies.
 - [ ] Persist paused voyages and NPC traffic across full server restarts.
+
+### SBS development LAN listener (2026-11-03)
+
+- [x] Bind Phoenix dev endpoint to `0.0.0.0:4000` by default to support a
+  headset/phone connecting to the laptop over trusted LAN Wi-Fi.
+- [x] Provide `DARKORBIT_LOOPBACK_ONLY=1` opt-out for laptop-only debugging.
+- [ ] Verify remote HMD pairing from another device and review production
+  origin/security rules before any public hosting.

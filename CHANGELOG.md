@@ -474,3 +474,13 @@
   731 remains paused. No runtime encounter behavior was changed.
 - User-reported initial run: 11/12 core navigation tests, 18/18 Phoenix
   channel tests, and asset build succeeded. Revised test awaits execution.
+
+### LAN-accessible development endpoint (2026-11-03)
+
+- Changed the default development Bandit interface from loopback
+  `127.0.0.1` to `0.0.0.0`, supporting an external SBS headset without
+  requiring the former `DARKORBIT_LAN_HMD=1` launch flag.
+- Added `DARKORBIT_LOOPBACK_ONLY=1` to opt into a restricted local-only
+  listener on untrusted networks. Production endpoint configuration is unchanged.
+- Not verified on physical headset; run from a trusted LAN and use the
+  laptop's IPv4 address for remote device connections.
