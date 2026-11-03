@@ -50,7 +50,7 @@ defmodule Core.Universe.NavigationTest do
     assert underway.cruise_speed_km_s > 0
     assert underway.travel_distance_km > 0
     assert underway.position_km == underway.origin_position_km
-    assert_receive {"1-1", :solar_navigation_updated,
+    assert_receive {"sol", :solar_navigation_updated,
                     %{player_id: 11, navigation: %{destination_id: "mars"}}}
     assert {:error, :already_traveling} = Navigation.set_course(server, 11, "pluto")
     assert :ok = Navigation.tick(server)
