@@ -40,18 +40,25 @@ export class HelmetClient {
     if (this.credential) {
       const verification = await this.verifySavedCredential()
       if (verification === true && this.pairCode) {
+        // The phone is already registered. Do not consume a second invitation.
         this.pairCode = null
         window.history.replaceState({}, "", "/helmet")
       }
     }
 
-    if (!this.pairCode && !this.credential) {
-      this.message("Open the Pilot HMD panel in your laptop's Atlas and scan its QR code.")
+    if (!this.credential && this.pairCode) {
+      // Redeem once over HTTP and persist the token BEFORE opening Phoenix.
+      // A viewer channel crash must never leave a consumed QR with no token.
+      if (!await this.redeemPairingCode()) return
+    }
+
+    if (!this.credential) {
+      this.message("No saved helmet registration. Open Atlas → PILOT HMD and scan a new QR code.")
       return
     }
 
     this.socket = new Socket("/socket", {
-      params: () => helmetSocketParams({pairCode: this.pairCode, credential: this.credential}),
+      params: () => helmetSocketParams({credential: this.credential}),
     })
     this.socket.connect()
     this.channel = this.socket.channel("helmet:viewer", {device_name: "Android VR headset"})
@@ -90,23 +97,12 @@ export class HelmetClient {
       }
     })
     this.channel.join()
-      .receive("ok", ({mode, player_id, credential}) => {
-        if (credential) {
-          this.credential = credential
-          localStorage.setItem(STORAGE_KEY, credential)
-          this.pairCode = null
-          window.history.replaceState({}, "", "/helmet")
-        }
+      .receive("ok", ({mode, player_id}) => {
         this.selfId = key(player_id)
         this.setMode(mode)
       })
       .receive("error", ({reason}) => {
-        // Do not endlessly retry a spent QR invitation. Fresh pairing must
-        // begin from the laptop's open Atlas HMD panel.
-        const hint = reason === "invalid_pairing" ?
-          "QR invitation already used or no longer open. If paired, open /helmet on this phone; otherwise rescan a new Atlas QR." :
-          "Helmet join rejected: " + (reason || "unknown")
-        this.message(hint)
+        this.message("Helmet viewer connection refused: " + (reason || "unknown"))
         this.channel.leave()
       })
     window.addEventListener("resize", () => {
@@ -124,6 +120,52 @@ export class HelmetClient {
       }
     })
     setInterval(() => this.report(this.running && this.frameCount > 0 && !document.hidden), 5000)
+  }
+
+  async redeemPairingCode() {
+    if (!this.pairCode) return false
+
+    // Check storage before consuming the single-use invitation.
+    try {
+      const storageTestKey = STORAGE_KEY + ":storage_test"
+      localStorage.setItem(storageTestKey, "1")
+      localStorage.removeItem(storageTestKey)
+    } catch (_error) {
+      this.message("This browser is blocking local storage. Enable site storage or use Chrome/Samsung Internet before pairing.")
+      return false
+    }
+
+    this.message("Registering helmet with Phoenix…")
+    try {
+      const response = await fetch("/helmet/pair", {
+        method: "POST",
+        headers: {"Content-Type": "application/json", "Accept": "application/json"},
+        cache: "no-store",
+        credentials: "omit",
+        body: JSON.stringify({code: this.pairCode, device_name: "Galaxy S21 headset"}),
+      })
+      const result = await response.json().catch(() => ({}))
+      if (response.ok && typeof result.credential === "string") {
+        // Save the credential before any viewer channel can subscribe/crash.
+        localStorage.setItem(STORAGE_KEY, result.credential)
+        this.credential = result.credential
+        this.pairCode = null
+        window.history.replaceState({}, "", "/helmet")
+        this.message("Helmet registered. Connecting display…")
+        return true
+      }
+      if (response.status === 409) {
+        this.message("The laptop already has a paired helmet, but this browser has no valid saved credential. Choose Forget headset in the laptop Atlas, then scan the new QR once.")
+      } else if (response.status === 410) {
+        this.message("That QR invitation is no longer active. Keep the Atlas HMD panel open, generate a fresh QR, and scan again.")
+      } else {
+        this.message("Helmet registration failed (" + response.status + "). Check the Phoenix server log.")
+      }
+      return false
+    } catch (_error) {
+      this.message("Could not reach the helmet registration endpoint. Check the laptop network address.")
+      return false
+    }
   }
 
   async verifySavedCredential() {
