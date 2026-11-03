@@ -32,7 +32,9 @@ without scanning again. Pilot **Forget headset** invalidates that credential.
 - Atlas closed -> :combat. Phone subscribes to the sector topic, receives a
   fresh authoritative world snapshot, and renders local left/right SBS frames.
 - Laptop 3D/SBS selection remains local. Laptop controls the ship in both cases.
-- Disconnect -> device remains paired; connection state updates by process monitor.
+- Phone disconnect -> device remains paired; connection state updates by process monitor.
+- Laptop/controller disconnect -> headset mode becomes standby immediately; the
+  phone cannot continue receiving world updates after the controlling session closes.
 - Helmet clients have no Core.World session and cannot call movement, combat or
   navigation commands. WorldChannel explicitly requires a pilot-role socket.
 
