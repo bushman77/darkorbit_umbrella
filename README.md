@@ -43,8 +43,8 @@ Open a normal and private browser window with one account in each to see both
 ships and the same NPC encounter. Left-click or hold empty space in the
 viewport to fly, select an NPC without firing, then press Ctrl, press 1, or use
 **Toggle laser** to start and stop X1 automatic fire. Escape clears the target.
-Space is reserved for a future single-shot rocket and currently reports that
-the action is unavailable. The server validates each intention and broadcasts
+Manual fire is now **right mouse button held down** over the cockpit
+viewport. Space no longer fires (it is unassigned). The server validates each intention and broadcasts
 tick-owned positions, engagement, health, damage, destruction, and respawning
 back to all clients.
 
