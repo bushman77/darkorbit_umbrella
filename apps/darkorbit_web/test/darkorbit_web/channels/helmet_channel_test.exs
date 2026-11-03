@@ -68,10 +68,38 @@ defmodule DarkorbitWeb.HelmetChannelTest do
     assert_reply ref, :ok
     assert %{rendering: true} = HelmetManager.status(account.id)
 
+    # The phone owns and reports its actual calibration values.
+    ref = push(viewer, "alignment_state", %{"eye_gap_px" => 8, "eye_sep_mm" => 64})
+    assert_reply ref, :ok
+    assert %{alignment: %{eye_gap_px: 8, eye_sep_mm: 64}} =
+      HelmetManager.status(account.id)
+
+    # Only the laptop's authenticated controller can adjust an actively
+    # rendering phone. Viewer commands must remain read-only.
+    ref = push(control, "adjust_alignment", %{"axis" => "gap", "direction" => 1})
+    assert_reply ref, :ok, %{axis: "gap", direction: 1}
+    assert_push "helmet_alignment_adjust", %{axis: "gap", direction: 1}
+
+    ref = push(control, "adjust_alignment", %{"axis" => "eye_sep", "direction" => -1})
+    assert_reply ref, :ok, %{axis: "eye_sep", direction: -1}
+    assert_push "helmet_alignment_adjust", %{axis: "eye_sep", direction: -1}
+
+    ref = push(viewer, "adjust_alignment", %{"axis" => "gap", "direction" => 1})
+    assert_reply ref, :error, %{reason: "read_only_or_invalid_command"}
+
+    ref = push(control, "adjust_alignment", %{"axis" => "gap", "direction" => 99})
+    assert_reply ref, :error, %{reason: "read_only_or_invalid_command"}
+
+    ref = push(viewer, "alignment_state", %{"eye_gap_px" => 999, "eye_sep_mm" => 64})
+    assert_reply ref, :error, %{reason: "read_only_or_invalid_command"}
+
     ref = push(control, "set_mode", %{"mode" => "standby"})
     assert_reply ref, :ok, %{mode: "standby"}
     assert_push "helmet_mode", %{mode: "standby"}
     assert %{mode: :standby, rendering: false} = HelmetManager.status(account.id)
+
+    ref = push(control, "adjust_alignment", %{"axis" => "gap", "direction" => 1})
+    assert_reply ref, :error, %{reason: "not_in_cockpit"}
 
     leave(viewer)
     assert {:ok, _device} = Helmets.authenticate(credential)
@@ -96,6 +124,11 @@ defmodule DarkorbitWeb.HelmetChannelTest do
     {:ok, pilot} = connect(UserSocket, %{"token" => GameAuth.socket_token(account)})
     {:ok, _, control} =
       subscribe_and_join(pilot, HelmetChannel, "helmet:control:#{account.id}")
+
+    ref = push(control, "set_mode", %{"mode" => "combat"})
+    assert_reply ref, :ok
+    ref = push(control, "adjust_alignment", %{"axis" => "gap", "direction" => -1})
+    assert_reply ref, :error, %{reason: "helmet_not_rendering"}
 
     ref = push(control, "open_pairing", %{})
     assert_reply ref, :ok, %{code: code}
