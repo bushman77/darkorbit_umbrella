@@ -66,6 +66,27 @@ defmodule DarkorbitWeb.HelmetChannel do
     {:reply, {:ok, %{mode: mode}}, socket}
   end
 
+  def handle_in("adjust_alignment", %{"axis" => axis, "direction" => direction},
+                %{assigns: %{helmet_role: :controller, current_player_id: player_id}} = socket)
+      when axis in ["gap", "eye_sep"] and direction in [-1, 1] do
+    dimension = if axis == "gap", do: :gap, else: :eye_sep
+
+    case HelmetManager.adjust_alignment(player_id, dimension, direction) do
+      :ok -> {:reply, {:ok, %{axis: axis, direction: direction}}, socket}
+      {:error, reason} -> {:reply, {:error, %{reason: Atom.to_string(reason)}}, socket}
+    end
+  end
+
+  def handle_in("alignment_state", %{"eye_gap_px" => gap, "eye_sep_mm" => separation},
+                %{assigns: %{helmet_role: :viewer}} = socket)
+      when is_integer(gap) and gap in 0..80 and
+           is_integer(separation) and separation in 40..85 do
+    case HelmetManager.report_alignment(self(), gap, separation) do
+      :ok -> {:reply, {:ok, %{}}, socket}
+      {:error, reason} -> {:reply, {:error, %{reason: Atom.to_string(reason)}}, socket}
+    end
+  end
+
   def handle_in("rendering_status", %{"rendering" => rendering},
                 %{assigns: %{helmet_role: :viewer}} = socket)
       when is_boolean(rendering) do
@@ -114,6 +135,14 @@ defmodule DarkorbitWeb.HelmetChannel do
   def handle_info({event, _payload}, socket)
       when event in [:world_state, :laser_fired, :npc_spawned, :entity_destroyed],
       do: {:noreply, socket}
+
+  def handle_info({:helmet_alignment_adjust, axis, direction},
+                  %{assigns: %{helmet_role: :viewer, helmet_active: true}} = socket)
+      when axis in [:gap, :eye_sep] and direction in [-1, 1] do
+    push(socket, "helmet_alignment_adjust",
+      %{axis: Atom.to_string(axis), direction: direction})
+    {:noreply, socket}
+  end
 
   def handle_info(:helmet_revoked, socket) do
     push(socket, "helmet_revoked", %{})
