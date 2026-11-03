@@ -54,6 +54,7 @@ defmodule Core.Universe.PlanetaryView do
   def describe(%{status: :idle, location_id: id}) do
     with {:ok, radius} <- Map.fetch(@radii_km, id) do
       visual(id, radius, @arrival_diameter_deg, :orbital_preview)
+      |> Map.put(:planet_center, Core.Universe.OrbitalEntry.center(id))
     else
       :error -> nil
     end
