@@ -17,9 +17,10 @@ config :darkorbit, Darkorbit.Repo,
 # watchers to your application. For example, we can use it
 # to bundle .js and .css sources.
 config :darkorbit_web, DarkorbitWeb.Endpoint,
-  # Binding to loopback ipv4 address prevents access from other machines.
-  # Change to `ip: {0, 0, 0, 0}` to allow access from other machines.
-  http: [ip: {127, 0, 0, 1}],
+  # Headset discovery is opt-in: expose the dev server to a trusted LAN only
+  # when running `DARKORBIT_LAN_HMD=1 iex -S mix phx.server`.
+  http: [ip: if(System.get_env("DARKORBIT_LAN_HMD") == "1",
+    do: {0, 0, 0, 0}, else: {127, 0, 0, 1})],
   check_origin: false,
   code_reloader: true,
   debug_errors: true,
