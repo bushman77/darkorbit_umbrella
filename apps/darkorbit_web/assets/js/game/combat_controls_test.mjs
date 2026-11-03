@@ -4,6 +4,7 @@ import test from "node:test"
 import {
   combatKeyIntent,
   gameplayTypingTarget,
+  manualLaserPointerIntent,
   desiredEntityAngle,
   hotbarActionActive,
   hotbarSlotForCode,
@@ -43,25 +44,27 @@ test("Ctrl toggles once from either physical key and ignores held repeats or cho
   assert.equal(combatKeyIntent({code: "ControlRight", ctrlKey: true, shiftKey: true}), null)
 })
 
-test("Space fires ready laser and ignores modifiers and editable controls", () => {
-  const target = selector => ({matches: query => query.includes(selector)})
-
-  assert.deepEqual(combatKeyIntent({code: "Space"}), {type: "manual_laser"})
+test("right mouse button fires only while combat is active, Space is unassigned", () => {
+  const event = (button, extras = {}) => ({button, ...extras})
+  assert.equal(manualLaserPointerIntent(event(2), true), true)
+  assert.equal(manualLaserPointerIntent(event(2), false), false)
+  assert.equal(manualLaserPointerIntent(event(0), true), false)
+  assert.equal(manualLaserPointerIntent(event(1), true), false)
+  assert.equal(manualLaserPointerIntent(event(2, {ctrlKey: true}), true), false)
+  assert.equal(manualLaserPointerIntent(event(2, {altKey: true}), true), false)
+  assert.equal(manualLaserPointerIntent(event(2, {metaKey: true}), true), false)
+  assert.equal(manualLaserPointerIntent(event(2, {shiftKey: true}), true), false)
+  assert.equal(combatKeyIntent({code: "Space"}), null)
+  assert.equal(combatKeyIntent({code: "Space", repeat: true}), null)
   assert.deepEqual(combatKeyIntent({code: "KeyL"}), {type: "toggle_laser"})
   assert.deepEqual(combatKeyIntent({code: "KeyT"}), {type: "target_nearest"})
-  assert.equal(combatKeyIntent({code: "Space", repeat: true}), null)
-  assert.equal(combatKeyIntent({code: "Space", ctrlKey: true}), null)
-  assert.equal(combatKeyIntent({code: "Space", shiftKey: true}), null)
   assert.equal(combatKeyIntent({code: "KeyL", repeat: true}), null)
-  assert.equal(combatKeyIntent({code: "KeyT", target: target("input")}), null)
+  assert.equal(combatKeyIntent({code: "KeyT", target: {matches: () => true}}), null)
   assert.deepEqual(combatKeyIntent({code: "Escape"}), {type: "disengage"})
   assert.deepEqual(combatKeyIntent({code: "Digit0"}), {type: "activate_slot", slot: 10})
   assert.equal(combatKeyIntent({code: "Digit1", repeat: true}), null)
   assert.equal(combatKeyIntent({code: "Digit1", ctrlKey: true}), null)
-  assert.equal(combatKeyIntent({code: "Digit1", target: target("input")}), null)
-  assert.deepEqual(combatKeyIntent({code: "Space", target: target("button")}), {type: "manual_laser"})
-  assert.deepEqual(combatKeyIntent({code: "Space", target: target("data-cockpit-drag-handle")}), {type: "manual_laser"})
-  assert.equal(combatKeyIntent({code: "Space", target: {isContentEditable: true}}), null)
+  assert.equal(combatKeyIntent({code: "Digit1", target: {matches: () => true}}), null)
   assert.equal(gameplayTypingTarget({tagName: "INPUT"}), true)
 })
 
