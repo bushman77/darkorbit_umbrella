@@ -39,6 +39,28 @@ defmodule DarkorbitWeb.WorldChannelTest do
     assert :error = connect(UserSocket, %{"token" => token})
   end
 
+  test "runtime configuration starts all planetary maps, not only legacy Sector 1-1" do
+    expected = %{
+      "1-1" => "earth",
+      "sol:mercury" => "mercury",
+      "sol:venus" => "venus",
+      "sol:mars" => "mars",
+      "sol:jupiter" => "jupiter",
+      "sol:saturn" => "saturn",
+      "sol:uranus" => "uranus",
+      "sol:neptune" => "neptune",
+      "sol:pluto" => "pluto"
+    }
+
+    for {map_id, planet_id} <- expected do
+      assert {:ok, region} = World.snapshot(map_id),
+             "Expected supervised region #{map_id} to be registered"
+      assert region.map_id == map_id
+      assert region.planet_id == planet_id
+      assert region.entities == []
+    end
+  end
+
   test "authenticated pilot is redirected to its actual orbital region" do
     account = verified_player_account_fixture()
     {:ok, socket} = authenticated_socket(account)
