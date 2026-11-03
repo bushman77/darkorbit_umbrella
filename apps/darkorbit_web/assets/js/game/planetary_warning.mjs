@@ -6,7 +6,7 @@ export function planetaryWarningView(warning) {
       !Number.isFinite(warning.clearance_km) || warning.clearance_km < 0 ||
       typeof warning.planet_id !== "string") return null
 
-  const planet = /^[a-z]+$/.test(warning.planet_id)
+  const planet = /^[a-z][a-z0-9_-]{0,39}$/.test(warning.planet_id)
     ? warning.planet_id.toUpperCase()
     : "PLANET"
 
