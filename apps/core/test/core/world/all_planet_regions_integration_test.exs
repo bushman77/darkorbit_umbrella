@@ -108,7 +108,7 @@ defmodule Core.World.AllPlanetRegionsIntegrationTest do
       }
     }
 
-    outside = %Position{x: 100_000.0 + 20_000.0, y: 100_000.0, z: 0.0}
+    outside = %Position{x: 100_000.0 + 21_000.0, y: 100_000.0, z: 0.0}
     dangerous = %Position{x: 100_000.0 + 14_000.0, y: 100_000.0, z: 0.0}
     collision = %Position{x: 100_000.0 + 12_000.0, y: 100_000.0, z: 0.0}
 
