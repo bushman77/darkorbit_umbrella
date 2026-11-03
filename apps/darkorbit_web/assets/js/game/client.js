@@ -500,8 +500,11 @@ class SpaceClient {
         typeof body.body_id === "string" && Number.isFinite(body.angular_diameter_deg)
       planetaryStatus.hidden = !valid
       if (valid) {
-        const stage = body.stage === "approach_preview" ? "APPROACH" : "ORBITAL STAGING"
-        planetaryStatus.textContent = `SOL · ${body.body_id.toUpperCase()} · ${stage} · ${body.angular_diameter_deg.toFixed(1)}° APPARENT · VISUAL PREVIEW`
+        const approach = body.stage === "approach_preview"
+        const detail = approach
+          ? `APPROACH · ${body.angular_diameter_deg.toFixed(1)}° APPARENT · PREVIEW`
+          : "ORBITAL REGION · REAL-RADIUS VIEW · STAGING PHYSICS"
+        planetaryStatus.textContent = `SOL · ${body.body_id.toUpperCase()} · ${detail}`
       }
     }
     const active=this.inSystemCruise()
