@@ -530,6 +530,33 @@ resets the seeded route. Real persistence, safe physical encounters,
 player/NPC co-location, tactical enter/exit transitions, trade inventory
 and NPC-v-NPC consequences remain upcoming development slices.
 
+## Scaled planetary backdrop in the existing cockpit (2026-11-03)
+
+`Core.Universe.PlanetaryView` maps authoritative SOL navigation
+progress to explicit **visual-only** celestial metadata with reference
+planet radii. Its preview approach curve is deliberately schematic
+because SOL game-kilometers are compressed, not physical orbital
+kilometers. When the ship reaches a body, the model stages an orbital
+preview at a 65° apparent diameter.
+
+`apps/darkorbit_web/assets/js/game/planetary_view.mjs`
+validates the payload and maps the angle to a radius at a safe 900
+Three.js scene-unit camera distance. `planetary_body.js` draws a
+procedural cloud-textured and softly haloed sphere, anchored to the
+current initial cockpit bearing but fixed in its subsequent local
+world direction. `StereoSpaceView` uses the **same** scene layer
+for 3D and SBS, with the same 0.1–3000 clipping planes. Stars are
+forced behind opaque planet geometry; no remote image requests.
+The existing tactical ship and laser positions remain unchanged.
+
+The visual transition does *not* move the underlying sector entity:
+there is not yet a planet-centered orbital physics map, safe arrival
+world-space spawn, descent, collision, gravity or surface. Use the
+overlay's VISUAL PREVIEW label to distinguish this scenic milestone
+from the future authoritative orbital region. Turning can move the
+body out of view; local thrust currently doesn't change its preview
+size. The in-memory voyage reset on server restart still applies.
+
 ## Distinct conventional and sublight cruise regimes (2026-11-02)
 
 `Core.Universe.Sol` supplies a static gameplay geometry in `game km`:
