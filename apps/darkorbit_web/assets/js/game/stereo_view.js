@@ -7,6 +7,7 @@ import {orientationTelemetry} from "./orientation_interpolation.mjs"
 import {targetRange, LASER_FEEDBACK_MS} from "./laser_feedback.mjs"
 import {createDartModel, DART_MODEL_ID, dartHeadingRotation} from "./dart_model.mjs"
 import {PlanetaryBody} from "./planetary_body.js"
+import {EncounterShipVisual} from "./encounter_ship.js"
 
 // Rendering only: no Phoenix socket, no movement authority, no combat calculations.
 const clamp = (value, min, max) => Math.max(min, Math.min(value, max))
@@ -83,6 +84,7 @@ export class StereoSpaceView {
     // The spherical planet is visually scaled by its angular diameter.
     // It must not inherit the tactical map's 3,000-unit clipping limits.
     this.planetaryBody = new PlanetaryBody(THREE, this.scene)
+    this.encounterShip = new EncounterShipVisual(THREE, this.scene)
     this.addCockpit()
     this.beamGroup = new THREE.Group()
     this.scene.add(this.beamGroup)
@@ -375,16 +377,20 @@ export class StereoSpaceView {
       Math.abs(degrees(rates.yaw)) + " / " + Math.abs(degrees(rates.roll)) +
       " deg/s", 30, 194)
     const range = targetRange(own, selected)
+    const flyby = client.navComputer?.solarNavigation?.encounter
     const planetWarning = client.planetaryWarningDisplay
     // This canvas is a stereo-correct 3D HUD surface shared by both SBS
     // eyes. Render the hazard inside the instrument rather than a flat
     // non-stereoscopic banner that would be uncomfortable in a headset.
     ctx.fillStyle = planetWarning
       ? planetWarning.level === "critical" ? "#ff8f90" : "#ffcf7a"
+      : flyby ? "#7eead6"
       : range?.inRange === false ? "#ff9b96" : "#9fc7df"
     ctx.font = "bold 22px monospace"
     ctx.fillText(planetWarning
       ? planetWarning.level.toUpperCase() + " · " + planetWarning.detail
+      : flyby ? "CLOSE PASS · " + String(flyby.call_sign).slice(0, 24) +
+        " · HAIL VIA ATLAS"
       : range ? range.label :
         "LASER " + Math.round(own?.attackRange || 0) + "u  ·  RMB FIRE  ·  T TARGET",
       30, 234)
@@ -402,6 +408,7 @@ export class StereoSpaceView {
     // planet-centred maps. Stars are an infinite visual background.
     this.stars?.position.copy(this.camera.position)
     this.planetaryBody.update(client.navComputer?.solarNavigation, this.camera, time, ownShip)
+    this.encounterShip.update(client.navComputer?.solarNavigation, this.camera)
     this.syncShips(client)
     this.syncBeams(client, time)
     this.updateHud(client, time)
