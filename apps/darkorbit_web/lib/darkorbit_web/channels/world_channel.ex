@@ -175,7 +175,8 @@ defmodule DarkorbitWeb.WorldChannel do
   # Contact lists are computed from each pilot's authenticated SOL position.
   # Do not relay another player's navigation/contact snapshot to this client.
   def handle_info({:solar_navigation_updated, %{player_id: player_id} = payload},
-                  %{assigns: %{current_player_id: player_id}} = socket) do
+                  %{assigns: %{current_player_id: current_player_id}} = socket)
+      when player_id == current_player_id do
     :ok = push(socket, "solar_navigation_updated", payload)
     {:noreply, socket}
   end
