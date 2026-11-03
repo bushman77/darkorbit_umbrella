@@ -57,6 +57,7 @@ class SpaceClient {
     this.mouseSteeringSensitivity = validMouseSensitivity(savedSensitivity)
       ? savedSensitivity : 1
     this.mouseSteering = new MouseSteering({sensitivity: this.mouseSteeringSensitivity})
+    this.mouseCaptureLost = false
     this.entities = new Map()
     this.pilots = new Map()
     this.boundaries = {width: 20000, height: 12000}
@@ -974,6 +975,7 @@ class SpaceClient {
         return
       }
       try {
+        this.mouseCaptureLost = false
         const request = this.canvas.requestPointerLock()
         request?.catch?.(() =>
           this.mouseSteeringMessage("Mouse capture was denied. Click the cockpit to retry."))
@@ -992,6 +994,14 @@ class SpaceClient {
     document.addEventListener("pointerlockchange", () => {
       const captured = this.mouseSteeringEnabled &&
         document.pointerLockElement === this.canvas
+      if (captured) {
+        this.mouseCaptureLost = false
+      } else if (this.mouseSteeringEnabled && !this.navComputer?.isOpen &&
+                 !this.inSystemCruise()) {
+        // A lost pointer lock is an actual input pause, not a lost setting.
+        // The browser requires another physical click before recapturing.
+        this.mouseCaptureLost = true
+      }
       // Use the faster mouse-only angular rate profile on the server ONLY
       // during pointer capture, reverting when the cursor is released.
       if (!captured) {
@@ -1029,9 +1039,12 @@ class SpaceClient {
     if (!node) return
     node.hidden = !this.mouseSteeringEnabled || Boolean(this.navComputer?.isOpen)
     if (node.hidden) return
-    node.textContent = document.pointerLockElement === this.canvas
+    const captured = document.pointerLockElement === this.canvas
+    node.textContent = captured
       ? "MOUSE STEERING ACTIVE · MOVE TO PITCH/YAW · ESC RELEASES"
-      : "MOUSE STEERING ENABLED · CLICK COCKPIT TO CAPTURE"
+      : this.mouseCaptureLost
+        ? "MOUSE STEERING PAUSED · CLICK COCKPIT TO RESUME"
+        : "MOUSE STEERING ENABLED · CLICK COCKPIT TO CAPTURE"
   }
 
   exitMouseSteering({silent = false} = {}) {
