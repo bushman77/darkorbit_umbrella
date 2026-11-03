@@ -154,9 +154,13 @@ keyboard pitch/yaw taking priority on any held axis. The feature defaults off
 so the original cockpit behavior is unchanged until deliberately enabled.
 Browser support for Pointer Lock is required for the optional mode.
 
-Mouse steering now buffers the browser's uneven mousemove event bursts, ignores
-zero-delta packets, and eases the yaw/pitch input back to neutral after a short
-idle grace period instead of cutting it off abruptly. If Firefox releases
+Mouse steering still buffers nearby mousemove events while the pointer
+is moving, but now **sends zero yaw/pitch without any easing or trailing
+coast** after approximately 55ms with no movement. The zero input bypasses
+ordinary client command throttling. On the next server simulation tick, mouse
+yaw/pitch angular velocity snaps to zero; keyboard steering keeps its smooth
+braking model, and translational flight inertia is unchanged. Actual response
+is subject to browser frame scheduling and the server tick. If Firefox releases
 pointer lock (for example after Esc, switching windows or opening Atlas),
 the cockpit explicitly displays **MOUSE STEERING PAUSED · CLICK COCKPIT TO
 RESUME**. Click inside the cockpit once to recapture; this is a browser
