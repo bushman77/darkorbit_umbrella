@@ -218,32 +218,70 @@ class SpaceClient {
       combatActive: !this.navComputer.isOpen,
     }).start()
 
-    this.channel = this.socket.channel(`world:${this.mapId}`, {})
-    this.channel.on("world_state", state => this.applyWorldState(state))
-    this.channel.on("solar_navigation_updated", payload => {
+    this.joinSector(this.mapId)
+  }
+
+  joinSector(mapId, retry = 0) {
+    // Map identity comes from an authenticated region redirect/arrival event,
+    // never from browser-provided world coordinates.
+    if (!/^(1-1|sol:(mercury|venus|mars|jupiter|saturn|uranus|neptune|pluto))$/.test(mapId)) {
+      this.showError("Invalid orbital destination map.")
+      return
+    }
+
+    this.mapId = mapId
+    const channel = this.socket.channel(`world:${mapId}`, {})
+    this.channel = channel
+    channel.on("world_state", state => this.applyWorldState(state))
+    channel.on("solar_navigation_updated", payload => {
       if (String(payload.player_id) === String(this.selfId) && payload.navigation) {
         this.applySolarNavigation(payload.navigation)
       }
     })
-    this.channel.on("movement_started", entity => this.upsertEntity(entity))
-    this.channel.on("entity_joined", entity => this.entityJoined(entity))
-    this.channel.on("entity_left", entity => this.removeEntity(entity.id))
-    this.channel.on("npc_spawned", entity => this.upsertEntity(entity, true))
-    this.channel.on("npc_movement_started", entity => this.upsertEntity(entity))
-    this.channel.on("npc_state_changed", entity => this.upsertEntity(entity))
-    this.channel.on("target_selected", selection => this.targetSelected(selection))
-    this.channel.on("target_cleared", selection => this.targetCleared(selection))
-    this.channel.on("combat_engaged", engagement => this.combatEngaged(engagement))
-    this.channel.on("combat_disengaged", engagement => this.combatDisengaged(engagement))
-    this.channel.on("laser_fired", attack => this.laserFired(attack))
-    this.channel.on("entity_destroyed", destruction => this.entityDestroyed(destruction))
-    this.channel.onError(() => this.setConnection("Sector channel lost", "error"))
-    this.channel.onClose(() => this.setConnection("Sector channel closed", "error"))
+    channel.on("world_region_changed", payload => this.switchOrbitalRegion(payload?.map_id))
+    channel.on("movement_started", entity => this.upsertEntity(entity))
+    channel.on("entity_joined", entity => this.entityJoined(entity))
+    channel.on("entity_left", entity => this.removeEntity(entity.id))
+    channel.on("npc_spawned", entity => this.upsertEntity(entity, true))
+    channel.on("npc_movement_started", entity => this.upsertEntity(entity))
+    channel.on("npc_state_changed", entity => this.upsertEntity(entity))
+    channel.on("target_selected", selection => this.targetSelected(selection))
+    channel.on("target_cleared", selection => this.targetCleared(selection))
+    channel.on("combat_engaged", engagement => this.combatEngaged(engagement))
+    channel.on("combat_disengaged", engagement => this.combatDisengaged(engagement))
+    channel.on("laser_fired", attack => this.laserFired(attack))
+    channel.on("entity_destroyed", destruction => this.entityDestroyed(destruction))
+    channel.onError(() => {
+      if (this.channel === channel) this.setConnection("Sector channel lost", "error")
+    })
+    channel.onClose(() => {
+      if (this.channel === channel && !this.switchingRegion) {
+        this.setConnection("Sector channel closed", "error")
+      }
+    })
 
-    this.channel
-      .join()
-      .receive("ok", response => this.joined(response))
+    channel.join()
+      .receive("ok", response => {
+        this.switchingRegion = false
+        this.joined(response)
+      })
       .receive("error", response => {
+        if (this.channel !== channel) return
+        if (response.reason === "region_redirect" &&
+            response.map_id !== mapId && retry < 2) {
+          this.joinSector(response.map_id, retry + 1)
+          return
+        }
+        if (response.reason === "already_connected" && this.switchingRegion &&
+            retry < 5) {
+          // Phoenix may acknowledge leaving before the old session's
+          // terminate callback has removed its server-owned registration.
+          setTimeout(() => {
+            if (this.channel === channel) this.joinSector(mapId, retry + 1)
+          }, 250)
+          return
+        }
+        this.switchingRegion = false
         const reason = response.reason === "already_connected"
           ? "This pilot already has an active sector connection."
           : `Unable to join sector: ${response.reason || "unknown error"}`
@@ -251,12 +289,41 @@ class SpaceClient {
         this.setConnection("Join rejected", "error")
       })
       .receive("timeout", () => {
-        this.showError("The sector relay did not answer in time.")
-        this.setConnection("Join timeout", "error")
+        if (this.channel === channel) {
+          this.switchingRegion = false
+          this.showError("The orbital relay did not answer in time.")
+          this.setConnection("Join timeout", "error")
+        }
       })
   }
 
+  switchOrbitalRegion(mapId) {
+    if (!mapId || mapId === this.mapId || this.switchingRegion) return
+    if (!/^(1-1|sol:(mercury|venus|mars|jupiter|saturn|uranus|neptune|pluto))$/.test(mapId)) {
+      this.showError("The server sent an unsupported orbital region.")
+      return
+    }
+    this.switchingRegion = true
+    this.setConnection("Entering " + mapId + " orbital region", "online")
+    this.exitMouseSteering({silent: true})
+    this.flightControls?.release({silent: true})
+    this.spaceLaser?.release()
+    this.selectedTargetId = null
+    this.commandDestination = null
+    this.entities.clear()
+    this.beams = []
+    this.stereoView?.planetaryBody?.dispose()
+    const previous = this.channel
+    const enter = () => {
+      if (this.channel === previous) this.joinSector(mapId)
+    }
+    previous.leave().receive("ok", enter).receive("timeout", enter)
+  }
+
   joined(response) {
+    this.mapId = response.map.map_id
+    this.root.dataset.mapId = this.mapId
+    this.entities.clear()
     this.player = response.player
     this.selfId = entityKey(response.player.pilot.id)
     this.boundaries = response.map.boundaries
