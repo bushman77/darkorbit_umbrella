@@ -186,6 +186,9 @@ defmodule Core.World.FlightDynamics do
       z: if(position.z == predicted.z, do: velocity.z, else: 0.0)
     }
 
+    {position, velocity, cruise_speed} =
+      planetary_exclusion(position, entity.position, velocity, cruise_speed, map.planet)
+
     %{entity | position: position, velocity: velocity, cruise_speed: cruise_speed,
                attitude: attitude, orientation: orientation, angular_velocity: angular_velocity}
   end
@@ -228,6 +231,46 @@ defmodule Core.World.FlightDynamics do
   end
 
   defp degrees_to_radians(degrees), do: degrees * :math.pi() / 180.0
+
+  # Orbital sectors contain physical planet-sized exclusion volumes rather
+  # than visual-only spheres pilots can fly straight through. Halt translational
+  # motion at a safe buffer above the planet. Sector 1-1 legacy fixtures have
+  # no planetary collision and retain their original flight behavior.
+  defp planetary_exclusion(%Position{} = position, _previous, velocity, speed, nil),
+    do: {position, velocity, speed}
+
+  defp planetary_exclusion(position, previous, velocity, speed,
+         %{center: center, exclusion_radius: boundary}) do
+    delta = %{
+      x: position.x - center.x,
+      y: position.y - center.y,
+      z: position.z - center.z
+    }
+    separation = magnitude(delta)
+
+    if separation < boundary do
+      # A degenerate arrival exactly at the centre is projected away from
+      # the centre toward the previous position (or +X as a fallback).
+      old_delta = %{
+        x: previous.x - center.x,
+        y: previous.y - center.y,
+        z: previous.z - center.z
+      }
+      radial = if separation > 0.000001, do: delta,
+        else: if(magnitude(old_delta) > 0.000001, do: old_delta,
+          else: %{x: 1.0, y: 0.0, z: 0.0})
+      factor = boundary / magnitude(radial)
+
+      landed = %Position{
+        x: center.x + radial.x * factor,
+        y: center.y + radial.y * factor,
+        z: center.z + radial.z * factor
+      }
+      {landed, %{x: 0.0, y: 0.0, z: 0.0}, 0.0}
+    else
+      {position, velocity, speed}
+    end
+  end
 
   defp get(map, key, default), do: Map.get(map, key, Map.get(map, String.to_atom(key), default))
 
