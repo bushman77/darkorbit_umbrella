@@ -271,6 +271,58 @@ defmodule Core.World.FlightDynamicsTest do
     assert updated.route_waypoints == []
   end
 
+  test "captured mouse steering has higher bounded yaw/pitch response than keyboard" do
+    map = MapDefinition.starting_map()
+
+    {:ok, keyboard} = FlightDynamics.controls(ship(), %{yaw: 1.0, pitch: 1.0}, 0)
+    {:ok, mouse} =
+      FlightDynamics.controls(ship(),
+        %{yaw: 1.0, pitch: 1.0, mouse_steering: true}, 0)
+
+    keyboard_first = FlightDynamics.step(keyboard, map, 0.1, 1)
+    mouse_first = FlightDynamics.step(mouse, map, 0.1, 1)
+
+    assert mouse_first.angular_velocity.yaw > keyboard_first.angular_velocity.yaw
+    assert mouse_first.angular_velocity.pitch > keyboard_first.angular_velocity.pitch
+
+    keyboard_full =
+      Enum.reduce(2..12, keyboard_first, fn tick, current ->
+        FlightDynamics.step(current, map, 0.1, tick)
+      end)
+
+    mouse_full =
+      Enum.reduce(2..12, mouse_first, fn tick, current ->
+        FlightDynamics.step(current, map, 0.1, tick)
+      end)
+
+    deg = 180.0 / :math.pi()
+    assert_in_delta keyboard_full.angular_velocity.yaw * deg, 44.0, 1.0e-6
+    assert_in_delta keyboard_full.angular_velocity.pitch * deg, 38.0, 1.0e-6
+    assert_in_delta mouse_full.angular_velocity.yaw * deg, 100.0, 1.0e-6
+    assert_in_delta mouse_full.angular_velocity.pitch * deg, 88.0, 1.0e-6
+
+    # Releasing mouse capture reverts to the keyboard profile, including
+    # bounded angular braking rather than an abrupt physical attitude jump.
+    {:ok, released} =
+      FlightDynamics.controls(mouse_full,
+        %{yaw: 0.0, pitch: 0.0, mouse_steering: false}, 12)
+    braking = FlightDynamics.step(released, map, 0.1, 13)
+
+    assert braking.angular_velocity.yaw < mouse_full.angular_velocity.yaw
+    assert braking.angular_velocity.pitch < mouse_full.angular_velocity.pitch
+    assert braking.angular_velocity.yaw >= 0.0
+    assert braking.angular_velocity.pitch >= 0.0
+  end
+
+  test "untrusted mouse steering mode must be boolean and cannot override rotation bounds" do
+    assert {:error, :invalid_flight_controls} =
+      FlightDynamics.controls(ship(), %{yaw: 1.0, mouse_steering: "fast"}, 0)
+    assert {:error, :invalid_flight_controls} =
+      FlightDynamics.controls(ship(), %{yaw: 8.0, mouse_steering: true}, 0)
+    assert {:error, :invalid_flight_controls} =
+      FlightDynamics.controls(ship(), %{pitch: -8.0, mouse_steering: true}, 0)
+  end
+
   test "a held pitch key ramps smoothly to a capped rate without jumping" do
     map = MapDefinition.starting_map()
     {:ok, started} = FlightDynamics.controls(ship(), %{pitch: 1.0}, 0)
