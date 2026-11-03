@@ -78,8 +78,37 @@
           <h2 id="nav-title">Solar System Atlas</h2>
           <p id="nav-subtitle" class="nav-subtitle">One star system · Sun, eight planets and Pluto · select a world to inspect.</p>
         </div>
+        <button id="nav-helmet-open" class="nav-button" type="button" aria-controls="helmet-panel">
+          PILOT HMD · <span id="nav-helmet-status">NOT PAIRED</span>
+        </button>
         <button id="nav-close" class="nav-button nav-close" type="button" aria-label="Close navigation computer">Return to cockpit <span class="text-cyan-300">[M / Esc]</span></button>
       </div>
+      <section id="helmet-panel" hidden aria-label="Pilot HMD management"
+               class="mx-4 mb-4 rounded-xl border border-cyan-400/30 bg-slate-950 p-4 text-slate-100">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <h3 class="font-bold tracking-wider text-cyan-200">PILOT HMD / HEADSET LINK</h3>
+          <button id="nav-helmet-close" type="button" class="nav-button">Close panel</button>
+        </div>
+        <p id="helmet-device-status" class="my-3 text-sm text-slate-300">No helmet paired</p>
+        <div id="helmet-unpaired">
+          <div class="flex flex-wrap items-start gap-4">
+            <canvas id="helmet-qr" width="220" height="220" class="rounded-lg bg-white"></canvas>
+            <div class="max-w-md space-y-2 text-sm text-slate-300">
+              <p>Scan once with your phone. The ship automatically authorizes it as a read-only SBS helmet.</p>
+              <label for="helmet-host" class="block font-semibold text-cyan-100">Reachable laptop address</label>
+              <input id="helmet-host" type="text" class="w-full rounded border border-slate-600 bg-slate-900 p-2 text-white"
+                     placeholder="http://192.168.1.100:4000" />
+              <p>If the laptop address says localhost, replace it with its LAN IP and port. Phone and laptop must share a reachable network.</p>
+              <p id="helmet-pairing-message" role="status">Open this panel to generate a pairing invitation.</p>
+            </div>
+          </div>
+        </div>
+        <div id="helmet-paired" hidden class="space-y-3">
+          <p class="text-sm text-cyan-100">This helmet is remembered across disconnects and server restarts.
+            The phone displays black in the Atlas and renders SBS only in the combat cockpit.</p>
+          <button id="helmet-forget" class="nav-button nav-danger" type="button">Forget headset</button>
+        </div>
+      </section>
       <div class="atlas-view-tabs" role="tablist" aria-label="Atlas navigation level">
         <button id="nav-view-system" class="atlas-view-tab is-active" type="button"
           role="tab" aria-selected="true" aria-controls="nav-solar-view">
