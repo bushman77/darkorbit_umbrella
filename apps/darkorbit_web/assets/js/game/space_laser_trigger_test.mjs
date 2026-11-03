@@ -22,7 +22,7 @@ const harness = () => {
   }
 }
 
-test("Space fires on press even without a selected target", () => {
+test("right-mouse hold fires on press even without a selected target", () => {
   const h = harness()
   h.trigger.press()
   h.trigger.press()
@@ -57,7 +57,7 @@ test("holding follows authoritative cooldown, releasing stops future shots", () 
   assert.equal(h.shots.length, 2)
 })
 
-test("Space does not fire when disconnected, destroyed or atlas is open", () => {
+test("held laser does not fire when disconnected, destroyed or Atlas is open", () => {
   const h = harness()
   h.setActive(false)
   h.trigger.press()
