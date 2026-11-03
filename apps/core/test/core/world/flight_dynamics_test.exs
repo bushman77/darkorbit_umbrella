@@ -351,7 +351,7 @@ defmodule Core.World.FlightDynamicsTest do
     assert braking.angular_velocity.pitch >= 0.0
   end
 
-  test "mouse-look neutral input stops yaw and pitch on the next simulation tick" do
+  test "mouse-look neutral input stops yaw and pitch immediately on command receipt" do
     map = MapDefinition.starting_map()
     {:ok, captured} =
       FlightDynamics.controls(ship(),
@@ -363,6 +363,12 @@ defmodule Core.World.FlightDynamicsTest do
     {:ok, neutral} =
       FlightDynamics.controls(rotating,
         %{yaw: 0.0, pitch: 0.0, mouse_steering: true}, 1)
+    # The GenServer command response already contains a frozen orientation
+    # and zero yaw/pitch rates; no extra 100ms simulation tick is required.
+    assert neutral.angular_velocity.yaw == 0.0
+    assert neutral.angular_velocity.pitch == 0.0
+    assert neutral.orientation == rotating.orientation
+    assert neutral.attitude == rotating.attitude
     stopped = FlightDynamics.step(neutral, map, 0.1, 2)
 
     assert stopped.angular_velocity.yaw == 0.0
@@ -381,6 +387,8 @@ defmodule Core.World.FlightDynamicsTest do
     {:ok, vertical_only} =
       FlightDynamics.controls(rotating,
         %{yaw: 0.0, pitch: 1.0, mouse_steering: true}, 1)
+    assert vertical_only.angular_velocity.yaw == 0.0
+    assert vertical_only.angular_velocity.pitch == rotating.angular_velocity.pitch
     next = FlightDynamics.step(vertical_only, map, 0.1, 2)
 
     assert next.angular_velocity.yaw == 0.0
