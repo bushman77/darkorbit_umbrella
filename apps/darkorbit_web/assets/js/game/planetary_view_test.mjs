@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 import {
-  planetaryRenderSpec, generatePlanetPixels, PLANET_APPEARANCE,
+  planetaryRenderSpec, generatePlanetPixels, PLANET_APPEARANCE, planetAppearance,
 } from "./planetary_view.mjs"
 
 const sample = (body_id = "venus", angular_diameter_deg = 65, radius_km = 6051.8) => ({
@@ -38,7 +38,7 @@ test("planets grow predictably without changing the cockpit clipping plane", () 
 
 test("server visual metadata must be bounded and internally consistent", () => {
   assert.equal(planetaryRenderSpec(null), null)
-  assert.equal(planetaryRenderSpec({...sample(), body_id: "invented"}), null)
+  assert.equal(planetaryRenderSpec({...sample(), body_id: "../invented"}), null)
   assert.equal(planetaryRenderSpec({...sample(), visual_only: false}), null)
   assert.equal(planetaryRenderSpec({...sample(), radius_km: -1}), null)
   assert.equal(planetaryRenderSpec({...sample(), visual_distance_km: 0}), null)
@@ -59,7 +59,25 @@ test("Venus cloud texture is procedural, deterministic and fully opaque", () => 
     colors.add(`${a.pixels[i]}:${a.pixels[i + 1]}:${a.pixels[i + 2]}`)
   }
   assert.ok(colors.size > 20)
-  assert.equal(generatePlanetPixels("unknown", 48, 24), null)
+  assert.equal(generatePlanetPixels("../invalid", 48, 24), null)
   assert.equal(generatePlanetPixels("venus", -1, 24), null)
   assert.equal(generatePlanetPixels("venus", 3000, 24), null)
+})
+
+test("Earth uses the same validated real-radius projection as Venus", () => {
+  const earth = planetaryRenderSpec(sample("earth", 65, 6371.0))
+  assert.equal(earth.id, "earth")
+  assert.ok(earth.sceneRadius > 480)
+  assert.ok(earth.sceneRadius < 490)
+})
+
+test("future registered bodies use a procedural default without code changes", () => {
+  const newPlanet = planetaryRenderSpec(sample("proxima-b", 65, 7000))
+  assert.equal(newPlanet.id, "proxima-b")
+  assert.ok(planetAppearance("proxima-b"))
+  const pixels = generatePlanetPixels("proxima-b", 32, 16)
+  assert.equal(pixels.pixels.length, 32 * 16 * 4)
+  assert.deepEqual(pixels.pixels, generatePlanetPixels("proxima-b", 32, 16).pixels)
+  assert.equal(planetAppearance("../../html"), null)
+  assert.equal(generatePlanetPixels("__proto__", 32, 16), null)
 })
