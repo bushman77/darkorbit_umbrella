@@ -59,7 +59,7 @@ test("Atlas shows an in-range neutral freighter and uses safe text-only renderin
     assert.match(card.children[1].textContent, /earth → mars/)
     assert.match(card.children[1].textContent, /1,234,568 game km/)
     assert.equal(card.children[2].dataset.trafficHail, "traffic:sol:meridian-01")
-    assert.equal(card.children[2].textContent, "Hail freighter")
+    assert.equal(card.children[2].textContent, "Hail vessel")
 
     nav.solarNavigation = {...nav.solarNavigation, contacts: []}
     nav.renderTrafficContacts()
