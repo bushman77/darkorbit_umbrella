@@ -36,6 +36,7 @@ import {
   ownPlanetaryWarning, proximityEventWarning, planetaryWarningView,
 } from "./planetary_warning.mjs"
 import {validOrbitalMapId, shouldEnterOrbitalRegion} from "./orbital_regions.mjs"
+import {tacticalEncounterAction} from "./solar_encounter_actions.mjs"
 
 const clamp = (value, minimum, maximum) => Math.min(Math.max(value, minimum), maximum)
 const validDestination = (destination, boundaries) =>
@@ -159,7 +160,9 @@ class SpaceClient {
         })
       } else if (choice === "engage") {
         this.encounterResolving = true
-        this.encounterMessage("Entering tactical interception…")
+        this.encounterMessage(encounter.classification === "neutral_flyby"
+          ? "Intercepting neutral vessel… Your attack may provoke retaliation."
+          : "Entering tactical interception…")
         this.showSolarEncounter()
         this.solarEnterEncounter(encounter.id, (ok, result, reason) => {
           this.encounterResolving = false
@@ -167,7 +170,7 @@ class SpaceClient {
             this.applySolarNavigation(result.navigation)
             this.navComputer?.close()
             this.setCombatMessage("Intercept engaged. " +
-              (result.enemy?.display_name || "Hostile contact") +
+              (result.enemy?.display_name || "Vessel") +
               " is now in tactical range.")
           } else if (this.solarEncounter?.id === encounter.id) {
             this.encounterMessage("Unable to enter combat: " +
@@ -667,7 +670,7 @@ class SpaceClient {
           ? "Hostile vessel detected. Your course is on hold until you choose to proceed."
           : encounter.classification === "patrol_attention"
             ? "Faction patrol attention. Decide whether to hail or continue."
-            : "A vessel has crossed your route. Hail it or ignore the contact."
+            : "Neutral traffic detected. Hail, attack, or ignore. The vessel may retaliate if hit."
         this.encounterMessage(description)
       }
     }
@@ -707,11 +710,11 @@ class SpaceClient {
         String(encounter.origin_id || "?") + " → " +
         String(encounter.destination_id || "?")
     }
-    const engageAllowed = encounter.classification === "hostile_contact" ||
-      encounter.classification === "patrol_attention"
+    const tacticalAction = tacticalEncounterAction(encounter.classification)
     for (const button of panel.querySelectorAll("[data-encounter-action]")) {
       if (button.dataset.encounterAction === "engage") {
-        button.hidden = !engageAllowed
+        button.hidden = !tacticalAction.visible
+        button.textContent = tacticalAction.label
       }
       button.disabled = this.encounterResolving
     }

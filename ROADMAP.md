@@ -586,3 +586,20 @@ validation remain deferred.
   and prevent a dead pilot from invoking a fake defeat or retreat.
 - [x] Render tactical Dart variants as the actual 3D Dart ship model.
 - [ ] Implement final death/respawn UX and economic consequences.
+
+
+### Neutral trader attack choice (2026-11-03)
+
+- [x] Offer Attack vessel for neutral SOL close-pass contacts, in addition
+  to Hail and Ignore / Resume.
+- [x] Validate the exact server-owned neutral encounter and pilot session
+  before entering a local 3D tactical fight.
+- [x] Make neutral tactical opponents passive until a confirmed damage hit;
+  retain proactive hostile raider behavior.
+- [x] Add UI action-choice tests and headless tests for retaliation, close
+  pass, authorization, and voyage resumption.
+- [ ] Run Mix/JavaScript suites and verify laptop plus SBS headset.
+- [ ] Implement actual trader ship visuals and AI/behavior beyond the
+  existing Dart-class tactical placeholder.
+- [ ] Add standing/reputation penalties, faction-law response, cargo/loot,
+  and rewards for attacking civilian traffic.

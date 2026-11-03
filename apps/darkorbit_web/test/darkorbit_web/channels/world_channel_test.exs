@@ -174,6 +174,63 @@ defmodule DarkorbitWeb.WorldChannelTest do
   end
 
 
+  test "a neutral procedural Harbor encounter offers a server-authorized attack" do
+    account = verified_player_account_fixture()
+    server = Module.concat(SessionManager, Core.Universe.Navigation)
+    original_state = :sys.get_state(server)
+
+    {:ok, traffic} =
+      Core.Universe.Traffic.launch_contact(
+        %{}, "earth", "venus", 1, :independent_trader, 0.5)
+
+    :sys.replace_state(server, fn state ->
+      %{state | traffic: traffic, encountered: %{},
+        procedural_contact_chance: 0.0,
+        voyages: Map.delete(state.voyages, account.id)}
+    end)
+    on_exit(fn -> :sys.replace_state(server, fn _ -> original_state end) end)
+
+    {:ok, socket} = authenticated_socket(account)
+    {:ok, _response, joined} =
+      subscribe_and_join(socket, WorldChannel, "world:1-1")
+
+    ref = push(joined, "solar_set_course", %{"body_id" => "venus"})
+    assert_reply ref, :ok, %{navigation: %{status: :traveling}}
+
+    held =
+      Enum.reduce_while(1..125, nil, fn _, _ ->
+        assert :ok = Core.Universe.Navigation.tick(server)
+        {:ok, navigation} = Core.Universe.Navigation.snapshot(server, account.id)
+        if navigation.pending_encounter,
+          do: {:halt, navigation},
+          else: {:cont, nil}
+      end)
+
+    assert %{pending_encounter: %{id: encounter_id,
+                                 contact_id: "traffic:sol:cruise-1",
+                                 classification: :neutral_flyby}} = held
+    assert held.cruise_paused
+
+    ref = push(joined, "solar_enter_encounter",
+      %{"encounter_id" => "forged-neutral-attack"})
+    assert_reply ref, :error, %{reason: "encounter_mismatch"}
+
+    ref = push(joined, "solar_enter_encounter", %{"encounter_id" => encounter_id})
+    assert_reply ref, :ok, %{navigation: %{tactical_encounter: %{
+      id: ^encounter_id, classification: :neutral_flyby}}, enemy: %{kind: :npc, id: npc_id}}
+
+    assert {:ok, world} = World.snapshot("1-1")
+    assert Enum.any?(world.entities, &(&1.id == npc_id))
+    assert :ok = Core.Universe.Navigation.tick(server)
+    assert {:ok, paused} = Core.Universe.Navigation.snapshot(server, account.id)
+    assert paused.cruise_paused
+
+    ref = push(joined, "solar_retreat_encounter", %{"encounter_id" => encounter_id})
+    assert_reply ref, :ok, %{navigation: %{
+      tactical_encounter: nil, cruise_paused: false}}
+    leave_and_wait(joined)
+  end
+
   test "a hostile SOL contact enters authenticated tactical combat and can retreat" do
     account = verified_player_account_fixture()
     server = Module.concat(SessionManager, Core.Universe.Navigation)

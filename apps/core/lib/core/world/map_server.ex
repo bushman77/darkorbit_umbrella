@@ -142,12 +142,14 @@ defmodule Core.World.MapServer do
     do: call_map(registry, map_id, {:start_encounter, npc_type_id})
 
   @doc "Spawn an encounter NPC for the authenticated pilot in their current map."
-  @spec start_solar_tactical(atom(), String.t(), pos_integer(), term(), String.t(), String.t()) ::
+  @spec start_solar_tactical(atom(), String.t(), pos_integer(), term(), String.t(), String.t(), boolean()) ::
           {:ok, map()} | {:error, term()}
-  def start_solar_tactical(registry, map_id, session_id, player_id, encounter_id, call_sign)
-      when is_integer(player_id) and is_binary(encounter_id) and is_binary(call_sign) do
+  def start_solar_tactical(registry, map_id, session_id, player_id, encounter_id,
+          call_sign, aggressive?)
+      when is_integer(player_id) and is_binary(encounter_id) and is_binary(call_sign) and
+           is_boolean(aggressive?) do
     call_map(registry, map_id,
-      {:start_solar_tactical, session_id, player_id, encounter_id, call_sign})
+      {:start_solar_tactical, session_id, player_id, encounter_id, call_sign, aggressive?})
   end
 
   @doc "Server-authorized victory verification or safe retreat."
@@ -289,7 +291,7 @@ defmodule Core.World.MapServer do
   end
 
   def handle_call(
-        {:start_solar_tactical, session_id, player_id, encounter_id, call_sign},
+        {:start_solar_tactical, session_id, player_id, encounter_id, call_sign, aggressive?},
         _from, state
       ) do
     with {:ok, ship} <- authorized_entity(state, session_id, player_id),
@@ -312,7 +314,8 @@ defmodule Core.World.MapServer do
           npcs: Map.put(state.npcs, npc.id, npc),
           npc_definitions: Map.put(state.npc_definitions, type_id, definition),
           solar_tactical: Map.put(state.solar_tactical, player_id,
-            %{encounter_id: encounter_id, npc_id: npc.id, type_id: type_id})
+            %{encounter_id: encounter_id, npc_id: npc.id, type_id: type_id,
+              provoked?: aggressive?})
         }
         broadcast(updated, :npc_spawned, public_entity(npc))
         {:reply, {:ok, public_entity(npc)}, updated}
@@ -626,6 +629,7 @@ defmodule Core.World.MapServer do
       entities: Map.put(state.entities, attacker.id, updated_attacker),
       npcs: npcs
     }
+    |> provoke_tactical_contacts(Enum.map(impacts, & &1.target_id))
 
     first = List.first(impacts)
     visual_beams =
@@ -867,6 +871,7 @@ defmodule Core.World.MapServer do
       | entities: Map.put(state.entities, attacker.id, updated_attacker),
         npcs: Map.put(state.npcs, target.id, damaged_target)
     }
+    |> provoke_tactical_contacts([target.id])
 
     payload =
       combat_payload(updated_attacker, damaged_target, damage, state.tick)
@@ -1203,18 +1208,42 @@ defmodule Core.World.MapServer do
     end
   end
 
-  # Dynamic tactical opponents pursue only the authenticated owner; the
-  # current orbital map may also contain unrelated multiplayer ships.
-  defp tactical_targets(state, npc, entities) do
-    owner_id = Enum.find_value(state.solar_tactical, fn {id, encounter} ->
-      if encounter.npc_id == npc.id, do: id
-    end)
+  # Player-initiated attacks on a neutral trader/patrol are not themselves
+  # hits. A peaceful contact patrols until an authoritative weapon impact.
+  # The first landed hit enables retaliation on subsequent world ticks.
+  defp provoke_tactical_contacts(state, target_ids) do
+    targets = MapSet.new(target_ids)
 
-    case owner_id do
-      nil -> Map.values(entities)
-      id ->
-        case Map.fetch(entities, id) do
-          {:ok, owner} -> [owner]
+    changed =
+      Map.new(state.solar_tactical, fn {pilot_id, encounter} ->
+        updated =
+          if MapSet.member?(targets, encounter.npc_id),
+            do: Map.put(encounter, :provoked?, true),
+            else: encounter
+        {pilot_id, updated}
+      end)
+
+    %{state | solar_tactical: changed}
+  end
+
+  # Dynamic tactical opponents pursue only their owning pilot, and neutral
+  # vessels do not acquire a target until they have taken a confirmed hit.
+  defp tactical_targets(state, npc, entities) do
+    owner =
+      Enum.find(state.solar_tactical, fn {_id, encounter} ->
+        encounter.npc_id == npc.id
+      end)
+
+    case owner do
+      nil ->
+        Map.values(entities)
+
+      {_pilot_id, %{provoked?: false}} ->
+        []
+
+      {pilot_id, _encounter} ->
+        case Map.fetch(entities, pilot_id) do
+          {:ok, pilot} -> [pilot]
           :error -> []
         end
     end

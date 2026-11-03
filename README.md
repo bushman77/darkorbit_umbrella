@@ -957,4 +957,35 @@ has not run Mix or physical HMD testing.
 
 The tactical Dart is rendered with the existing swept-wing Dart Three.js model,
 not a generic orange placeholder. The NPC targets its owning pilot only;
-other pilots may observe the shared orbital-map fight. 
+other pilots may observe the shared orbital-map fight.
+
+
+### Player-initiated attacks on neutral encounters (2026-11-03)
+
+The held SOL encounter dialog offers three choices for a neutral vessel such
+as Harbor-1: **Hail vessel**, **Attack vessel**, or **Ignore / Resume course**.
+Previously only hostile raiders and patrol-attention contacts could use the
+tactical cockpit handoff. The server now permits a pilot to initiate combat
+against their own authenticated, currently pending neutral flyby; the client
+cannot invent an encounter or spoof a target. Existing hostile encounters
+still show **Engage / Enter combat**.
+
+Entering combat against a neutral vessel uses the same currently available
+3D Dart-class placeholder opponent and the existing paused-voyage handoff.
+Unlike a raider, the neutral opponent patrols without acquiring the pilot
+as a target. It begins defending itself **only after an authoritative hit**
+from either a targeted attack or a manual twin-laser burst. Pressing the
+Attack button is not itself a laser hit. The original shared SOL voyage
+remains held until verified victory, retreat, or defeat.
+
+This first implementation has **no reputation penalty, criminal status,
+loot, or cargo transfer** yet, and the neutral freighter still uses a Dart
+tactical model until proper trader hull assets are implemented. These
+consequences and visuals must be designed separately, rather than pretending
+they exist. The six scheduled ships and generated traffic continue their
+normal shared SOL movement.
+
+Regression coverage includes an ordinary neutral scheduled encounter,
+a genuine procedurally generated Harbor-1 contact, prevented pre-hit
+aggression, first-hit retaliation, and exact-encounter session authorization.
+Mix tests and live headset/browser verification were not run here.

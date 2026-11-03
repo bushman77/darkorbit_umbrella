@@ -58,7 +58,7 @@ defmodule Core.Universe.Navigation do
     GenServer.call(server, {:resolve_encounter, player_id, encounter_id, choice})
   end
 
-  @doc "Enter the existing held hostile/patrol contact's tactical cockpit."
+  @doc "Enter the pilot's held encounter (including a chosen neutral attack)."
   @spec enter_tactical(GenServer.server(), pos_integer(), String.t()) ::
           {:ok, map()} | {:error, atom()}
   def enter_tactical(server, player_id, encounter_id)
@@ -216,14 +216,16 @@ defmodule Core.Universe.Navigation do
       voyage.tactical_encounter != nil ->
         {:reply, {:error, :tactical_encounter_active}, state}
 
-      voyage.pending_encounter.classification not in [:hostile_contact, :patrol_attention] ->
+      voyage.pending_encounter.classification not in
+          [:hostile_contact, :patrol_attention, :neutral_flyby] ->
         {:reply, {:error, :not_a_combat_encounter}, state}
 
       true ->
         # Retain pending_encounter as the authoritative suspended decision.
         # The UI shows the combat cockpit instead of the modal during combat.
         tactical = %{id: encounter_id, contact_id: voyage.pending_encounter.contact_id,
-          call_sign: voyage.pending_encounter.call_sign}
+          call_sign: voyage.pending_encounter.call_sign,
+          classification: voyage.pending_encounter.classification}
         updated = %{voyage | tactical_encounter: tactical}
         state = put_voyage(state, player_id, updated)
         broadcast(state, player_id, updated)

@@ -898,6 +898,53 @@ defmodule Core.WorldTest do
   end
 
   @tag no_initial_encounter: true, no_auto_respawn: true
+  test "a neutral trader can be attacked and retaliates only after a real hit", context do
+    opts = context.world_options
+    stats = %{context.stats | damage: 50}
+    assert {:ok, session} = World.connect(9_735, stats, opts)
+
+    # Vesper-02 is a normally neutral scheduled courier. The same policy
+    # also applies to server-generated independent traders such as Harbor-1.
+    assert {:ok, _} = World.solar_set_course(session.id, "venus", opts)
+    for _ <- 1..85, do: assert(:ok = SolarNavigation.tick(@solar_navigation_server))
+
+    assert {:ok, held} = World.solar_snapshot(session.id, opts)
+    assert %{id: encounter_id, classification: :neutral_flyby} =
+      held.pending_encounter
+    assert {:ok, %{navigation: combat, enemy: enemy}} =
+      World.solar_enter_tactical(session.id, encounter_id, opts)
+    assert combat.tactical_encounter.classification == :neutral_flyby
+    assert combat.cruise_paused
+    assert enemy.display_name == held.pending_encounter.call_sign
+
+    [{map_pid, _}] = Registry.lookup(@registry, {:world_map, "1-1"})
+    assert :sys.get_state(map_pid).solar_tactical[session.entity_id].provoked? == false
+
+    # A neutral ship must not lock or shoot the owner merely because the
+    # pilot selected Attack; it can defend itself after the first hit.
+    assert {:ok, before} = World.tick("1-1", opts)
+    idle_enemy = Enum.find(before.entities, &(&1.id == enemy.id))
+    assert idle_enemy.target_id == nil
+    assert {:ok, _} = World.select_target(session.id, enemy.id, opts)
+    assert {:ok, %{destroyed: false, target_id: target_id}} =
+      World.attack(session.id, opts)
+    assert target_id == enemy.id
+    assert :sys.get_state(map_pid).solar_tactical[session.entity_id].provoked? == true
+
+    assert {:ok, after_hit} = World.tick("1-1", opts)
+    defending = Enum.find(after_hit.entities, &(&1.id == enemy.id))
+    assert defending.target_id == session.entity_id
+
+    # Retiring the encounter must release the original cruise without
+    # accidentally retaining the NPC's aggression in future voyages.
+    assert {:ok, resumed} =
+      World.solar_finish_tactical(session.id, encounter_id, :retreat, opts)
+    assert resumed.tactical_encounter == nil
+    refute resumed.cruise_paused
+    assert :sys.get_state(map_pid).solar_tactical == %{}
+  end
+
+  @tag no_initial_encounter: true, no_auto_respawn: true
   test "a held hostile SOL encounter enters map-owned 3D combat and resumes on victory",
        context do
     opts = context.world_options

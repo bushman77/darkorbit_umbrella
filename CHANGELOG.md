@@ -538,3 +538,16 @@
   Added authorization regression tests for defeated ships.
 - Reused the original swept-wing Dart model for unique tactical NPC IDs
   and limited an encounter NPC's auto-targeting to its owner.
+
+
+### Neutral trader tactical attacks (2026-11-03)
+
+- Added an explicit **Attack vessel** encounter action for peaceful traffic,
+  including procedural Harbor traders; retained existing Hail and Ignore.
+- Opened server-authorized tactical combat for pending neutral flybys
+  while keeping encounter ownership and held SOL cruise enforced.
+- Neutral NPCs now remain passive until hit, then can retaliate; raiders
+  and hostile patrol contacts still pursue immediately.
+- Updated UI copy and added JS, Core World and Phoenix channel regressions.
+- Trader-specific models, reputation/penalties, trade inventory outcomes
+  and actual loot remain future work. Tests still require local execution.

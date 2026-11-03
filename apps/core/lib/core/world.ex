@@ -88,8 +88,11 @@ defmodule Core.World do
     with {:ok, session} <- fetch_session(sessions, session_id),
          {:ok, navigation} <-
            SolarNavigation.enter_tactical(server, session.player_id, encounter_id) do
+      aggressive? = navigation.tactical_encounter.classification != :neutral_flyby
+
       case MapServer.start_solar_tactical(registry, session.map_id, session.id,
-             session.entity_id, encounter_id, navigation.tactical_encounter.call_sign) do
+             session.entity_id, encounter_id, navigation.tactical_encounter.call_sign,
+             aggressive?) do
         {:ok, enemy} ->
           {:ok, %{navigation: navigation, enemy: enemy}}
 
