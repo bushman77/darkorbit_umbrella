@@ -35,6 +35,7 @@ defmodule DarkorbitWeb.Router do
     pipe_through :api
 
     post "/helmet/verify", HelmetController, :verify
+    post "/helmet/pair", HelmetController, :pair
   end
 
   scope "/", DarkorbitWeb do
