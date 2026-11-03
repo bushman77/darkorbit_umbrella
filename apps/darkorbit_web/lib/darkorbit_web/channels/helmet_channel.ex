@@ -23,22 +23,6 @@ defmodule DarkorbitWeb.HelmetChannel do
     end
   end
 
-  def join("helmet:viewer", %{"device_name" => name},
-           %{assigns: %{socket_role: :pairing, pairing_code: code}} = socket) do
-    with {:ok, result} <- HelmetManager.redeem(code, name),
-         {:ok, mode} <- HelmetManager.viewer_online(self(), result.player_id, result.device_id) do
-      send(self(), {:helmet_mode, mode})
-      {:ok, %{mode: mode, player_id: result.player_id,
-              credential: result.credential},
-       socket |> assign(:helmet_role, :viewer)
-              |> assign(:helmet_player_id, result.player_id)
-              |> assign(:helmet_active, false)}
-    else
-      {:error, reason} when is_atom(reason) -> {:error, %{reason: Atom.to_string(reason)}}
-      {:error, _reason} -> {:error, %{reason: "registration_failed"}}
-    end
-  end
-
   def join("helmet:viewer", _params,
            %{assigns: %{socket_role: :helmet, helmet_player_id: player_id,
                         helmet_device_id: device_id}} = socket) do
@@ -135,6 +119,15 @@ defmodule DarkorbitWeb.HelmetChannel do
     push(socket, "helmet_revoked", %{})
     {:stop, :normal, socket}
   end
+
+  # Core.World broadcasts additional PubSub notifications (movement_started,
+  # movement_stopped, etc.). They are not part of the phone's minimal display
+  # feed and MUST NOT crash a viewer channel during combat.
+  # In standby the channel is unsubscribed, so these do not use bandwidth.
+  def handle_info({_world_event, _payload}, socket), do: {:noreply, socket}
+
+  # Unrelated process messages must never tear down a registered HMD.
+  def handle_info(_message, socket), do: {:noreply, socket}
 
   @impl true
   def terminate(_reason, %{assigns: %{helmet_role: :viewer}}) do
