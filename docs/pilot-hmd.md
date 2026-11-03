@@ -61,6 +61,29 @@ The Atlas manager reports separate pairing, connection, rendering, and mode
 states. The phone reports rendering health rather than claiming it is physically
 worn. Only one device is registered per pilot in the initial release.
 
+## Live lens calibration from laptop
+
+In laptop **cockpit** mode, once the paired Galaxy S21 reports that it is
+actually rendering SBS, use the following keyboard shortcuts:
+
+- **F5:** decrease the black center gap by 2 pixels.
+- **Ctrl+F5:** increase the center gap by 2 pixels.
+- **F6:** decrease eye separation (IPD) by 1 mm.
+- **Ctrl+F6:** increase eye separation (IPD) by 1 mm.
+
+The laptop sends a constrained command through the authenticated
+`helmet:control:<pilot-id>` channel. `HelmetManager` permits the command only
+in cockpit/combat mode with a connected, actively rendering phone, and the
+`helmet:viewer` channel relays it to the phone. The phone applies the change
+immediately, persists its own gap/IPD settings in localStorage, and reports
+the actual values back to the laptop. The cockpit panel shows those values.
+
+Commands are ignored while the Solar Atlas or a typing field is open, and
+holding a key does not auto-repeat adjustments. Some browsers reserve F5
+and Ctrl+F5 for reload and may not deliver the keydown event to the page.
+If that happens, use the four **Gap −/+** and **IPD −/+** buttons on the
+in-cockpit HMD calibration panel. No QR re-pairing is necessary.
+
 ## Running on the laptop
 
 From the umbrella root:
