@@ -389,3 +389,29 @@ validation remain deferred.
 - [ ] Preserve the actual midcourse position when abandoning cruise instead
   of restoring the departure region.
 - [ ] Implement drive acceleration/deceleration and possible interception.
+
+
+### Planetary orbital regions V2 (2026-11-03)
+
+- [x] Eight independently supervised planetary tactical regions plus
+  the legacy Earth map; server-owned map identities and join validation.
+- [x] Arrival side derived from the incoming SOL voyage, with deterministic
+  pilot staggering and heading toward the actual planet centre.
+- [x] Separate local provisional-kilometre coordinates from compressed
+  system-wide cruise coordinates, preserving one shared map per planet.
+- [x] Automatically transfer the pilot's Phoenix channel on arrival,
+  update the local Atlas bounds and keep SOL navigation broadcasts global.
+- [x] Real planetary mean radii, camera-relative planet rendering and
+  a server-controlled exclusion sphere to stop flying through the planet.
+- [x] Remove the four original procedural test asteroid spheres and
+  relocate the starfield around the camera in large maps.
+- [x] Add directional arrival, region routing, collision and view tests.
+- [ ] Migrate Earth's legacy 1-1 map and first-time spawn onto the new
+  consistent planetary frame, retaining any needed combat fixtures.
+- [ ] Preserve active hull/shields/loadout and physical orbital coordinates
+  across region transitions, disconnects and full server restarts.
+- [ ] Implement trajectory-preserving interplanetary handoff, orbital
+  velocity/gravity, planet rotation, real docking and atmospheric entry.
+- [ ] Add permanent stations, asteroid fields and contextual traffic
+  in the respective planetary regions.
+
