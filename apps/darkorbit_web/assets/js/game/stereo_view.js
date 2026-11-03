@@ -108,6 +108,7 @@ export class StereoSpaceView {
     }))
     // Stars are an infinitely distant backdrop, never in front of a planet.
     stars.renderOrder = -100
+    this.stars = stars
     this.scene.add(stars)
   }
 
@@ -388,6 +389,9 @@ export class StereoSpaceView {
       feedback.hit ? 0x79ff9b : 0xff7272 : 0x78e6fc)
     const ownShip = client.entities.get(client.selfId)
     this.setCamera(ownShip)
+    // Keep the distant starfield surrounding the pilot even in large
+    // planet-centred maps. Stars are an infinite visual background.
+    this.stars?.position.copy(this.camera.position)
     this.planetaryBody.update(client.navComputer?.solarNavigation, this.camera, time, ownShip)
     this.syncShips(client)
     this.syncBeams(client, time)
