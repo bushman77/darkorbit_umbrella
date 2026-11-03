@@ -22,7 +22,11 @@ defmodule Core.Universe.NavigationTest do
     assert "earth" in state.territory.faction_ids
     assert state.territory.status in [:controlled, :contested]
     assert :ok = Navigation.tick(server)
-    assert {:ok, ^state} = Navigation.snapshot(server, 11)
+    assert {:ok, updated} = Navigation.snapshot(server, 11)
+    assert updated.location_id == state.location_id
+    assert updated.position_km == state.position_km
+    # The freighter continues independently, so its contact distance changes.
+    assert hd(updated.contacts).distance_km > hd(state.contacts).distance_km
   end
 
   test "validates destination and never trusts arbitrary solar names", %{server: server} do
@@ -64,9 +68,39 @@ defmodule Core.Universe.NavigationTest do
     assert arrived.destination_id == nil
     assert {:ok, mars_position} = Core.Universe.Sol.game_position_km("mars")
     assert arrived.position_km == mars_position
-    assert {:ok, ^starting} = Navigation.snapshot(server, 22)
+    assert {:ok, waiting} = Navigation.snapshot(server, 22)
+    assert waiting.location_id == starting.location_id
+    assert waiting.position_km == starting.position_km
+    assert waiting.status == :idle
     assert {:ok, %{destination_id: "pluto"}} =
       Navigation.set_course(server, 11, "pluto")
+  end
+
+  test "contact identity and traffic progression persist across disconnected pilots", %{server: server} do
+    assert {:ok, initial} = Navigation.snapshot(server, 11)
+    assert [%{id: id, origin_id: "earth", destination_id: "mars"}] = initial.contacts
+    start_distance = hd(initial.contacts).distance_km
+
+    for _ <- 1..8, do: :ok = Navigation.tick(server)
+    assert {:ok, later} = Navigation.snapshot(server, 77)
+    assert [%{id: ^id, distance_km: distance}] = later.contacts
+    assert distance > start_distance
+
+    assert {:ok, after_return} = Navigation.snapshot(server, 11)
+    assert hd(after_return.contacts).id == id
+  end
+
+  test "an authenticated in-range pilot can hail civilian cargo without hijacking its route", %{server: server} do
+    assert {:ok, before} = Navigation.snapshot(server, 101)
+    assert [%{id: ship_id}] = before.contacts
+    assert {:ok, hail} = Navigation.hail(server, 101, ship_id)
+    assert hail.cargo == %{"industrial_machinery" => 120}
+    assert hail.disposition == :neutral
+    assert {:error, :unknown_contact} = Navigation.hail(server, 101, "traffic:sol:fake")
+
+    assert :ok = Navigation.tick(server)
+    assert {:ok, after_tick} = Navigation.snapshot(server, 101)
+    assert hd(after_tick.contacts).distance_km > hd(before.contacts).distance_km
   end
 
   test "simultaneous pilots advance the same one-second clock with different routes", %{server: server} do
