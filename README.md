@@ -680,3 +680,62 @@ mix test apps/darkorbit_web/test/darkorbit_web/channels/world_channel_test.exs
 npm test --prefix apps/darkorbit_web/assets
 mix assets.build
 ```
+
+
+### Living-universe flyby encounters V1 — observable in the cockpit (2026-11-03)
+
+Six **pre-existing, autonomous** SOL vessels now run the shared-world
+traffic loop: Meridian-01 freight Earth–Mars, Vesper-02 express courier
+Earth–Venus, Wayfinder-04 Earth–Mars survey vessel, Sentinel-07 patrol
+Venus–Mercury, Aurora-12 Mars–Jupiter freight and Sable-18 Jupiter–Saturn
+independent trader. Each has a fixed identity, cargo manifest, purpose,
+initial route phase, and repeated outbound/return routes. No player action
+creates a vessel. Vessel movement proceeds every second even without
+players logged in, and schedules vary relative to pilot departure times.
+
+`Core.Universe.Encounters.nearest/2` resolves a **close pass within
+650,000 game km** while a pilot is between 5% and 95% of an actual
+interplanetary cruise. This is stricter than the 2,000,000 game-km
+sensor/hail radius. Only moving traffic is eligible. The authoritative
+navigation process emits `:solar_encounter_started` once per vessel
+voyage for each pilot, and exposes the current `encounter` in the
+per-pilot navigation snapshot. This does not stop or redirect travel,
+and no client may invent an encounter or reveal cargo just by scanning.
+
+In normal 3D and SBS cockpit mode, a close-pass sensor projection shows
+a visible 3D ship from the traffic's **actual route-relative bearing**.
+Its apparent scale grows as separation decreases. This is a visual
+staging contact, *not* a tactical combat NPC, local-kilometre position,
+targetable hitbox or collision body. Normal 3D also shows a Hail/Dismiss
+panel; SBS renders the notification in the stereo cockpit HUD, and
+hailing remains available through Solar Atlas. Hails use the already
+server-validated `solar_hail` endpoint to reveal purpose and manifest.
+The encounter disappears on separation, and the voyage continues.
+
+**Repeatable verification after a fresh world restart:** plot an
+Earth → Venus course and watch the cockpit around the middle of
+the approximately three-minute cruise. Vesper-02 begins about 22% along
+the Earth→Venus route at world start and moves at 42,000 game km/s;
+your 65,000 game km/s drive catches up approximately 109 seconds after
+a *fresh* launch. This is a test opportunity, not an invariant scripted
+spawn: traffic continues in the background, so encounter timing changes
+if you depart later. Other routes have independent opportunities.
+
+**Not yet included:** intentional tactical intercept/stop, 3D collision
+or combat with traffic, piracy, hostile skirmishes, trade transfer,
+persistent cargo database, or restart-proof voyage states. These need a
+shared physical encounter-map handoff; a visual flyby never grants
+tactical combat authority.
+
+Targeted tests from the umbrella root:
+
+```sh
+cd apps/core
+mix test test/core/universe/traffic_test.exs \
+  test/core/universe/encounters_test.exs \
+  test/core/universe/navigation_test.exs
+cd ../..
+mix test apps/darkorbit_web/test/darkorbit_web/channels/world_channel_test.exs
+npm test --prefix apps/darkorbit_web/assets
+mix assets.build
+```
