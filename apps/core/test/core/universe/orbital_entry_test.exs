@@ -34,6 +34,24 @@ defmodule Core.Universe.OrbitalEntryTest do
     assert OrbitalEntry.map_id("bogus") == nil
   end
 
+  test "a fresh Earth pilot begins outside planetary caution and fatal zones" do
+    assert {:ok, entry} = OrbitalEntry.entry(nil, "earth", 77, 0)
+    assert entry.map_id == "sol:earth"
+    assert entry.body_id == "earth"
+
+    earth = Enum.find(OrbitalEntry.planet_maps(), &(&1.id == "sol:earth"))
+    assert earth
+    assert earth.planet.radius_km == 6_371.0
+    assert Core.World.PlanetaryProximity.warning(entry.position, earth) == nil
+    assert :clear ==
+      Core.World.PlanetaryCollision.first_contact(
+        entry.position, entry.position,
+        earth.planet.center, earth.planet.exclusion_radius
+      )
+    assert entry.position.x >= 0 and entry.position.x <= earth.width
+    assert entry.position.y >= 0 and entry.position.y <= earth.height
+  end
+
   test "arrival from Earth to Venus is outside the planet and faces its centre" do
     assert {:ok, entry} = OrbitalEntry.entry("earth", "venus", 47, 3)
     assert entry.map_id == "sol:venus"
