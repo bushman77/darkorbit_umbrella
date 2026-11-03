@@ -126,9 +126,12 @@ defmodule Core.Universe.Navigation do
     if voyage.status != :traveling do
       {:reply, {:error, :no_active_course}, state}
     else
-      # V1 travel is a region-to-region transit, not local free flight.
-      # An aborted course stays at its departure region.
-      updated = idle(voyage.location_id)
+      # An aborted course stays at its departure region. Preserve the last
+      # completed arrival provenance: canceling a NEW route must not invent
+      # a different approach direction if the pilot reconnects afterward.
+      updated = %{idle(voyage.location_id) |
+        arrival_origin_id: voyage.arrival_origin_id,
+        voyage_number: voyage.voyage_number}
       state = put_voyage(state, player_id, updated)
       broadcast(state, player_id, updated)
       {:reply, {:ok, public(updated, state.traffic)}, state}
