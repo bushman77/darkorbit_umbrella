@@ -26,14 +26,13 @@ export const gameplayTypingTarget = target => Boolean(
   target?.matches?.("input, textarea, select, [contenteditable='true']")
 )
 
-export const combatKeyIntent = event => {
-  // Space must fire even when a cockpit button or drag handle has focus.
-  if (event.code === "Space") {
-    if (event.repeat || gameplayTypingTarget(event.target) ||
-        event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return null
-    return {type: "manual_laser"}
-  }
+export const manualLaserPointerIntent = (event, active) =>
+  Boolean(active && event?.button === 2 && !event.ctrlKey && !event.altKey &&
+    !event.metaKey && !event.shiftKey)
 
+export const combatKeyIntent = event => {
+  // Manual laser is exclusively RMB on the cockpit viewport. Space remains
+  // unassigned so it cannot accidentally activate weapons.
   if (event.repeat || inputControl(event.target)) {
     return null
   }
