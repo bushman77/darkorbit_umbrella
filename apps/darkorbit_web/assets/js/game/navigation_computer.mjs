@@ -276,10 +276,13 @@ export class NavigationComputer {
     }
     for (const contact of contacts) {
       const item = document.createElement("div")
-      item.className = "rounded border border-cyan-500/25 bg-slate-900/80 p-2"
+      const flyby = this.solarNavigation?.encounter?.contact_id === contact.id
+      item.className = flyby
+        ? "rounded border border-emerald-300/70 bg-emerald-950/40 p-2"
+        : "rounded border border-cyan-500/25 bg-slate-900/80 p-2"
       const title = document.createElement("p")
       title.className = "font-semibold text-cyan-100"
-      title.textContent = `${contact.call_sign} · ${contact.disposition.toUpperCase()}`
+      title.textContent = `${flyby ? "CLOSE PASS · " : ""}${contact.call_sign} · ${contact.disposition.toUpperCase()}`
       const detail = document.createElement("p")
       detail.className = "mt-1 text-slate-300"
       detail.textContent = `${contact.origin_id} → ${contact.destination_id} · ${contact.state.replaceAll("_", " ")} · ${Math.round(contact.distance_km).toLocaleString("en-US")} game km`
@@ -287,7 +290,7 @@ export class NavigationComputer {
       button.type = "button"
       button.className = "nav-button mt-2"
       button.dataset.trafficHail = contact.id
-      button.textContent = "Hail freighter"
+      button.textContent = "Hail vessel"
       item.append(title, detail, button)
       root.appendChild(item)
     }
