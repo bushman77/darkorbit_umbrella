@@ -334,3 +334,85 @@ test("continuous Ctrl+wheel extends roll but never leaves it latched", () => {
   assert.equal(flight.axes().roll, 0)
   assert.equal(sent.at(-1).roll, 0)
 })
+
+test("mouse-look yaw and pitch coexist with keyboard roll, throttle and firing controls", () => {
+  let time = 1000
+  const events = []
+  const flight = new FlightControls({send: data => events.push(data), now: () => time})
+  flight.wheel(wheel(-100))
+  const throttle = flight.throttle
+
+  assert.equal(flight.setMouseSteering({yaw: 0.6, pitch: 0.4}), true)
+  assert.equal(flight.axes().yaw, 0.6)
+  assert.equal(flight.axes().pitch, 0.4)
+  assert.equal(flight.throttle, throttle)
+  assert.equal(flight.axes().roll, 0)
+
+  time += 100
+  flight.keyDown(press("KeyQ"))
+  assert.equal(flight.axes().roll, -1)
+  assert.equal(flight.axes().yaw, 0.6)
+  flight.keyUp(press("KeyQ"))
+  assert.equal(flight.axes().roll, 0)
+
+  flight.clearMouseSteering()
+  assert.deepEqual(flight.axes(), {yaw: 0, pitch: 0, roll: 0})
+  assert.equal(flight.throttle, throttle)
+  assert.equal(events.at(-1).yaw, 0)
+})
+
+test("keyboard yaw and pitch temporarily override mouse-look on their own axes", () => {
+  let time = 1000
+  const flight = new FlightControls({send: () => {}, now: () => time})
+  flight.setMouseSteering({yaw: 0.7, pitch: 0.4})
+  flight.keyDown(press("KeyA"))
+  assert.deepEqual(flight.axes(), {yaw: -1, pitch: 0.4, roll: 0})
+  flight.keyDown(press("KeyS"))
+  assert.deepEqual(flight.axes(), {yaw: -1, pitch: -1, roll: 0})
+  flight.keyUp(press("KeyA"))
+  assert.deepEqual(flight.axes(), {yaw: 0.7, pitch: -1, roll: 0})
+  flight.keyUp(press("KeyS"))
+  assert.deepEqual(flight.axes(), {yaw: 0.7, pitch: 0.4, roll: 0})
+})
+
+test("mouse-look commands are rate-limited and send pending changes on heartbeat", () => {
+  let time = 1000
+  const sent = []
+  const flight = new FlightControls({send: payload => sent.push(payload), now: () => time})
+  flight.setMouseSteering({yaw: 0.2, pitch: 0.3})
+  assert.equal(sent.length, 1)
+  time += 5
+  flight.setMouseSteering({yaw: 0.4, pitch: 0.5})
+  assert.equal(sent.length, 1)
+  time += 5
+  flight.setMouseSteering({yaw: 0.8, pitch: -0.3})
+  assert.equal(sent.length, 1)
+  time += 45
+  flight.heartbeat(time)
+  assert.equal(sent.length, 2)
+  assert.equal(sent.at(-1).yaw, 0.8)
+  assert.equal(sent.at(-1).pitch, -0.3)
+  flight.clearMouseSteering()
+  assert.equal(sent.at(-1).yaw, 0)
+  assert.equal(sent.at(-1).pitch, 0)
+})
+
+test("Atlas disables mouse steering, and blur and autopilot clear all mouse input", () => {
+  let active = true
+  const sent = []
+  const flight = new FlightControls({
+    send: payload => sent.push(payload),
+    active: () => active,
+    now: () => 1000,
+  })
+  flight.setMouseSteering({yaw: 0.5, pitch: 0.5})
+  active = false
+  assert.equal(flight.setMouseSteering({yaw: 1, pitch: 1}), false)
+  flight.release({silent: true})
+  assert.deepEqual(flight.axes(), {yaw: 0, pitch: 0, roll: 0})
+  assert.equal(sent.length, 1)
+  active = true
+  flight.setMouseSteering({yaw: 0.7, pitch: -0.4})
+  flight.resetThrottle()
+  assert.deepEqual(flight.axes(), {yaw: 0, pitch: 0, roll: 0})
+})
