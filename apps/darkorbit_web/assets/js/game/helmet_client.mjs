@@ -1,5 +1,7 @@
 import {Socket} from "phoenix"
 import {StereoSpaceView} from "./stereo_view.js"
+import {visualLaserRays} from "./laser_burst.mjs"
+import {laserFeedback} from "./laser_feedback.mjs"
 
 const STORAGE_KEY = "darkorbit:pilot_hmd_credential"
 const key = value => String(value)
@@ -50,6 +52,7 @@ export class HelmetClient {
     this.channel.on("world_state", map => {
       if (this.mode === "combat") this.applyWorld(map)
     })
+    this.channel.on("laser_fired", shot => this.laserFired(shot))
     this.channel.on("helmet_revoked", () => {
       localStorage.removeItem(STORAGE_KEY)
       this.credential = null
@@ -167,9 +170,24 @@ export class HelmetClient {
     this.selectedTargetId = this.entities.get(this.selfId)?.targetId || null
   }
 
+  laserFired(shot) {
+    if (this.mode !== "combat") return
+    const attacker = this.entities.get(key(shot.attacker_id))
+    const target = this.entities.get(key(shot.target_id))
+    const at = performance.now()
+    for (const ray of visualLaserRays(shot, attacker, target)) {
+      this.beams.push({...ray, hostile: attacker?.kind === "npc",
+        startedAt: at, expiresAt: at + 550})
+    }
+    if (key(shot.attacker_id) === this.selfId) {
+      this.lastLaserFeedback = laserFeedback(shot, this.entities, at)
+    }
+  }
+
   frame(time) {
     if (!this.running || this.mode !== "combat" || document.hidden) return
     try {
+      this.beams = this.beams.filter(beam => beam.expiresAt > time)
       this.view.render(this, time)
       this.frameCount++
       if (this.frameCount === 1) this.report(true)
