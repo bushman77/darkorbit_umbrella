@@ -447,13 +447,11 @@ exists for Earth and other navigable SOL planets. A small cockpit label
 clearly identifies the selected planet, angular size and **visual preview**
 status. There are no external planet textures or network requests.
 
-**Scope:** these are artistically staged approach/orbit *visuals* in
-compressed SOL coordinates, **not** true orbital locations, collisions,
-gravitational or atmospheric physics, or the ability to physically fly
-down to a planetary surface. On arrival the current tactical map remains
-unchanged; local throttle will not yet change orbital altitude or planet
-apparent size. Proper shared planetary coordinate frames and travel
-handoffs are the next milestone.
+**Historical V1 scope:** the initial implementation provided only staged
+planet visuals and had no collision or separate orbital maps. These
+limitations were subsequently addressed in part by Planetary Orbital
+Regions V2 and Fatal Planet Impact V1 (documented below). True gravity,
+atmospheric flight and surface landings are still not implemented.
 
 Because SOL voyage state is currently in memory, restarting the game to
 load this build returns pilots to Earth. Earth is visible immediately;
