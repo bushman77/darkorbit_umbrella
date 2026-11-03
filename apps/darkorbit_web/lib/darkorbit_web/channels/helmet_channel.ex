@@ -139,5 +139,12 @@ defmodule DarkorbitWeb.HelmetChannel do
     :ok
   end
 
+  def terminate(_reason, %{assigns: %{helmet_role: :controller,
+                                      current_player_id: player_id}}) do
+    # A QR invitation is only valid while the controlling Atlas channel exists.
+    HelmetManager.cancel_pairing(player_id)
+    :ok
+  end
+
   def terminate(_reason, _socket), do: :ok
 end
