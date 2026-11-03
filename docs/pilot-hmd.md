@@ -80,6 +80,21 @@ in cockpit/combat mode with a connected, actively rendering phone, and the
 immediately, persists its own gap/IPD settings in localStorage, and reports
 the actual values back to the laptop. The cockpit panel shows those values.
 
+**Calibration persists silently.** The phone updates localStorage immediately
+on every adjustment, then sends one `save_alignment` event after a 350ms
+pause in input. The viewer channel authorizes the device ID from its socket
+session and writes the two calibrated values atomically into PostgreSQL's
+`helmet_devices` row. There is no Save button, popup or save notification.
+A new viewer join returns the stored database calibration and the phone applies
+it *before* the first stereoscopic frame. If this database field is empty
+(first upgrade), the phone's existing local calibration is automatically
+migrated into it. An unacknowledged local change survives a disconnect and
+is reconciled on reconnect without overwriting newer adjustments.
+
+Migration: `apps/darkorbit/priv/repo/migrations/20261102210000_add_helmet_calibration.exs`.
+It adds nullable `eye_gap_px` and `eye_sep_mm`, with bounded database checks.
+Forgetting a device deletes its calibration.
+
 Commands are ignored while the Solar Atlas or a typing field is open.
 Holding Left/Right repeats adjustments at a controlled rate rather than
 flooding Phoenix. F5 is no longer mapped. The cockpit also has **Closer/Farther**
