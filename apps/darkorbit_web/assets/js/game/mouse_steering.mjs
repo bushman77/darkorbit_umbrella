@@ -2,9 +2,9 @@
 // server-authoritative yaw/pitch; throttle, roll and weapons remain separate.
 //
 // The browser does not provide a "mouse stopped" event. Treat the lack of
-// a nonzero movement packet for roughly three 60Hz frames as release.
+// a nonzero movement packet for about one to two 60Hz frames as release.
 // Preserve small-event accumulation while moving, but NEVER coast afterward.
-export const MOUSE_STEERING_IDLE_MS = 55
+export const MOUSE_STEERING_IDLE_MS = 25
 export const MOUSE_STEERING_DEFAULT_SENSITIVITY = 1
 
 const clamp = (value, low, high) => Math.min(high, Math.max(low, value))
@@ -42,7 +42,7 @@ export class MouseSteering {
     // Keep part of the previous neighboring impulse so a stream of small
     // movement events adds up to useful steering, rather than replacing the
     // input with the last 1px event.
-    const adjacent = time - this.lastMovementAt <= 120
+    const adjacent = time - this.lastMovementAt < MOUSE_STEERING_IDLE_MS
     const carryYaw = adjacent && yaw !== 0 && Math.sign(yaw) === Math.sign(this.yaw)
       ? 0.5 : 0
     const carryPitch = adjacent && pitch !== 0 && Math.sign(pitch) === Math.sign(this.pitch)
