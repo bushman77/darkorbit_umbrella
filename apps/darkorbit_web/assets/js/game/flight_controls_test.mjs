@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import test from "node:test"
-import {FlightControls} from "./flight_controls.mjs"
+import {FlightControls, MOUSE_COMMAND_INTERVAL_MS} from "./flight_controls.mjs"
 
 const press = (code, extras = {}) => ({
   code, repeat: false, defaultPrevented: false,
@@ -489,4 +489,31 @@ test("neutral mouse stop preserves held keyboard flight and mouse wheel throttle
   assert.equal(events.at(-1).throttle, 0.05)
   flight.keyUp(press("KeyA"))
   assert.equal(events.at(-1).yaw, 0)
+})
+
+test("faster mouse updates flush every 25ms while preserving the immediate neutral stop", () => {
+  assert.equal(MOUSE_COMMAND_INTERVAL_MS, 25)
+  let time = 1000
+  const sent = []
+  const flight = new FlightControls({send: p => sent.push(p), now: () => time})
+  flight.setMouseMode(true)
+  flight.setMouseSteering({yaw: 0.4})
+  const startCount = sent.length
+  time += 12
+  flight.setMouseSteering({yaw: 0.7})
+  assert.equal(sent.length, startCount)
+  time += 12
+  flight.heartbeat(time)
+  assert.equal(sent.length, startCount)
+  time += 1
+  flight.heartbeat(time)
+  assert.equal(sent.length, startCount + 1)
+  assert.equal(sent.at(-1).yaw, 0.7)
+
+  time += 2
+  flight.setMouseSteering({yaw: 0, pitch: 0})
+  assert.equal(sent.length, startCount + 2)
+  assert.equal(sent.at(-1).yaw, 0)
+  assert.equal(sent.at(-1).mouse_steering, true)
+  assert.equal(flight.mouseDirty, false)
 })
