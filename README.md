@@ -872,3 +872,38 @@ The HMD overlay is informational, not a VR controller.
 Added `helmet_encounter_view_test.mjs` and new helmet channel event
 privacy tests. Execution of Mix, JS and browser/HMD manual verification
 remains outstanding at this commit.
+
+### Reliable procedural SOL encounter traffic (2026-11-03)
+
+Previously a voyage could have no encounters unless it physically crossed one
+of six continuously moving scheduled ships, within 650,000 game-km. Vesper-02
+could be gone from the Earth–Venus route by the time a player launched.
+
+For the current gameplay prototype the world supervisor now launches one
+**server-owned shared traffic vessel per accepted interplanetary course**.
+The ship travels on a real opposing route, not as a client-only popup or
+tactical NPC spawn. The server randomly selects an independent trader,
+faction patrol or hostile raider and a viable position on the lane. Existing
+six scheduled vessels continue independently. The new ship is visible to
+other pilots through the same traffic simulation.
+
+The real close pass activates the existing pilot-only navigation hold and
+Hail / Ignore–Resume popup. The radio channel stays established for the
+exact pending encounter even if that vessel subsequently moves outside
+short-range sensors. Hailing other ships still requires sensor proximity.
+
+The world supervisor's playtest launch chance is 1.0, so an attempted
+shared contact occurs on each voyage; a bounded 32-ship procedural pool
+can skip launches if full. Generated vessels expire after 15 minutes of
+world simulation. Isolated Navigation tests default to 0.0 to keep their
+original scripted fleet checks deterministic. Before production, reduce
+the launch chance and balance faction/ZOC/route traffic density.
+
+Hostile contacts are informational until the tactical combat handoff is
+implemented. Process restarts still reset strategic fleet state.
+
+Run the SOL traffic and navigation Mix tests, the Phoenix channel tests
+and `mix precommit`. A live playtest should start from Earth, set a course
+to Venus, encounter a real trader/patrol/raider at roughly 20–40% journey
+progress, Hail, then Resume without resetting the route. Manual/automated
+test execution has not been performed in the editing environment.

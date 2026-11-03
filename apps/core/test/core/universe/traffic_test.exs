@@ -113,4 +113,63 @@ defmodule Core.Universe.TrafficTest do
     assert fleet == Traffic.seed()
     assert {:error, :unknown_contact} = Traffic.hail(fleet, earth, nil)
   end
+
+  test "procedural encounter is a genuine moving shared traffic vessel" do
+    base = Traffic.seed()
+    {:ok, traffic} =
+      Traffic.launch_contact(base, "earth", "venus", 1, :independent_trader, 0.5)
+
+    assert map_size(traffic) == map_size(base) + 1
+    contact = Map.fetch!(traffic, "traffic:sol:cruise-1")
+    assert contact.kind == :independent_trader
+    assert contact.origin_id == "venus"
+    assert contact.destination_id == "earth"
+    assert contact.state == :in_transit
+    assert contact.procedural?
+    assert contact.voyage_number == 1
+    refute Map.has_key?(hd(Traffic.contacts(traffic, contact.position_km)), :cargo)
+
+    moved = Traffic.advance(traffic, 1_000)
+    assert moved[contact.id].position_km != contact.position_km
+
+    {:ok, earth} = Sol.game_position_km("earth")
+    assert {:error, :contact_out_of_range} = Traffic.hail(traffic, earth, contact.id)
+    assert {:ok, established} = Traffic.hail_established(traffic, contact.id)
+    assert established.id == contact.id
+    assert moved[contact.id].lifetime_remaining_ms == 899_000
+    assert Map.keys(base) |> Enum.all?(&Map.has_key?(moved, &1))
+
+    # Once the ship's service window ends it is pruned, preserving the
+    # permanent timetable instead of leaking one ship per finished voyage.
+    later = Traffic.advance(traffic, 900_000)
+    refute Map.has_key?(later, contact.id)
+    assert map_size(later) == map_size(base)
+  end
+
+  test "procedural lane vessels use bounded server-owned identity and categories" do
+    base = Traffic.seed()
+    {:ok, patrol} = Traffic.launch_contact(base, "earth", "venus", 7, :patrol, 0.5)
+    assert patrol["traffic:sol:cruise-7"].faction_id == "venus"
+    assert patrol["traffic:sol:cruise-7"].kind == :patrol
+
+    {:ok, hostile} = Traffic.launch_contact(base, "earth", "venus", 8, :raider, 0.5)
+    assert hostile["traffic:sol:cruise-8"].disposition == :hostile
+    assert {:error, :invalid_route} =
+      Traffic.launch_contact(base, "earth", "earth", 9, :patrol, 0.5)
+    assert {:error, :invalid_archetype} =
+      Traffic.launch_contact(base, "earth", "venus", 9, :unknown, 0.5)
+    assert {:error, :invalid_contact} =
+      Traffic.launch_contact(base, "earth", "venus", 9, :patrol, 0.01)
+
+    full =
+      Enum.reduce(1..32, base, fn serial, traffic ->
+        {:ok, updated} =
+          Traffic.launch_contact(traffic, "earth", "venus", serial,
+            :independent_trader, 0.5)
+        updated
+      end)
+    assert {:error, :traffic_capacity} =
+      Traffic.launch_contact(full, "earth", "venus", 33, :patrol, 0.5)
+  end
+
 end

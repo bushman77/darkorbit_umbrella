@@ -52,7 +52,10 @@ defmodule Core.World.Supervisor do
         {Registry, keys: :unique, name: registry},
         {SessionManager, name: sessions},
         {SolarNavigation, name: solar_navigation_server, event_sink: event_sink,
-         auto_tick: auto_tick?, tick_ms: 1_000}
+         auto_tick: auto_tick?, tick_ms: 1_000,
+         # Playtest default: one shared converging contact per departure.
+         # Tune below 1.0 when testing encounter frequency after the modal.
+         procedural_contact_chance: Keyword.get(opts, :procedural_contact_chance, 1.0)}
       ] ++ map_children
 
     # Sessions and map entities form one ephemeral consistency boundary. If a

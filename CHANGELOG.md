@@ -499,3 +499,17 @@
   trade or tactical travel changes were introduced.
 - Tests and real headset/browser verification were not run in the
   editing environment.
+
+### Procedural SOL encounters (2026-11-03)
+
+- Corrected the scarcity of close-pass events after an Earth–Venus departure:
+  a shared real-position traffic vessel is now launched on a converging
+  route for each departure in the current playtest configuration.
+- Randomized trader/patrol/raider type and meeting phase in the server.
+- Added 32-ship procedural limit and 15-minute expiry, preserving the
+  six scheduled ships and existing NPC independence.
+- Maintained an established radio channel for the exact pilot-held
+  pending contact; unrelated hails remain range-gated.
+- Added collision-of-trajectories and lifecycle regressions and extended
+  channel arrival test for multiple decisions. Tactical fights remain
+  unimplemented; no Mix execution available in the editing environment.

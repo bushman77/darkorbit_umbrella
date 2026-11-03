@@ -327,4 +327,88 @@ defmodule Core.Universe.NavigationTest do
       refute Map.has_key?(underway, :patrols)
     end
   end
+
+  test "procedural encounter intersects Earth-to-Venus despite an empty existing fleet" do
+    receiver = self()
+    name = :"#{__MODULE__}.Procedural#{System.unique_integer([:positive])}"
+
+    start_supervised!(%{
+      id: name,
+      start: {Navigation, :start_link, [[
+        name: name,
+        auto_tick: false,
+        tick_ms: 1_000,
+        traffic: %{},
+        procedural_contact_chance: 1.0,
+        event_sink: fn map_id, event, payload ->
+          send(receiver, {map_id, event, payload})
+        end
+      ]]}
+    })
+
+    assert {:ok, %{status: :traveling, pending_encounter: nil}} =
+      Navigation.set_course(name, 814, "venus")
+
+    # A real, newly launched vessel belongs to the shared SOL simulation.
+    world_state = :sys.get_state(name)
+    assert map_size(world_state.traffic) == 1
+    contact = world_state.traffic["traffic:sol:cruise-1"]
+    assert contact.state == :in_transit
+    assert contact.origin_id == "venus"
+    assert contact.destination_id == "earth"
+
+    for _ <- 1..100, do: assert(:ok = Navigation.tick(name))
+    assert {:ok, holding} = Navigation.snapshot(name, 814)
+    assert holding.cruise_paused
+    assert %{contact_id: "traffic:sol:cruise-1", id: encounter_id,
+             mode: :strategic_flyby} = holding.pending_encounter
+    assert holding.progress > 0.05
+    assert holding.progress < 0.95
+
+    assert_receive {"sol", :solar_encounter_started,
+      %{player_id: 814, encounter: %{id: ^encounter_id}}}
+    # While this specific decision is held, the server preserves the
+    # comms channel even as the traffic contact moves out of sensor range.
+    assert {:ok, hail} = Navigation.hail(name, 814, "traffic:sol:cruise-1")
+    assert hail.id == "traffic:sol:cruise-1"
+    assert {:error, :unknown_contact} =
+      Navigation.hail(name, 814, "traffic:sol:cruise-999")
+
+    {:ok, other} = Navigation.snapshot(name, 815)
+    assert other.status == :idle
+    refute other.pending_encounter
+
+    assert {:ok, %{cruise_paused: false}} =
+      Navigation.resolve_encounter(name, 814, encounter_id, :continue)
+    assert :ok = Navigation.tick(name)
+    assert {:ok, resumed} = Navigation.snapshot(name, 814)
+    assert resumed.elapsed_ms == holding.elapsed_ms + 1_000
+  end
+
+  test "procedural spawn is optional for isolated tests and never client-supplied" do
+    receiver = self()
+    name = :"#{__MODULE__}.NoSpawn#{System.unique_integer([:positive])}"
+
+    start_supervised!(%{
+      id: name,
+      start: {Navigation, :start_link, [[
+        name: name,
+        auto_tick: false,
+        tick_ms: 1_000,
+        traffic: %{},
+        procedural_contact_chance: 0.0,
+        event_sink: fn map_id, event, payload ->
+          send(receiver, {map_id, event, payload})
+        end
+      ]]}
+    })
+
+    assert {:ok, _} = Navigation.set_course(name, 812, "venus")
+    assert :sys.get_state(name).traffic == %{}
+    for _ <- 1..100, do: assert(:ok = Navigation.tick(name))
+    assert {:ok, voyage} = Navigation.snapshot(name, 812)
+    assert voyage.pending_encounter == nil
+    assert voyage.cruise_paused == false
+  end
+
 end

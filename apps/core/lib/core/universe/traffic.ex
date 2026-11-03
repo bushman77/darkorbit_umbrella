@@ -18,6 +18,8 @@ defmodule Core.Universe.Traffic do
   @sensor_radius_km 2_000_000.0
   @dock_ms 45_000
   @cruise_speed_km_s 42_000.0
+  @max_procedural_contacts 32
+  @procedural_lifetime_ms 900_000
 
   @doc """
   Persistent scheduled ships. Their routes/initial phases are world data, not
@@ -80,10 +82,113 @@ defmodule Core.Universe.Traffic do
     end)
   end
 
+  @doc """
+  Introduce a real, shared traffic vessel on a converging interplanetary lane.
+
+  The navigation server owns the serial, archetype and position fraction.
+  Clients never name or position these ships. The vessel follows the reverse
+  route and advances on the same SOL clock as scheduled traffic, even if the
+  pilot disconnects. A bounded population and lifetime prevent unbounded
+  accumulation during repeated voyages.
+
+  This is a strategic vessel, not a local combat NPC or tactical instance.
+  """
+  @spec launch_contact(map(), String.t(), String.t(), pos_integer(), atom(), float()) ::
+          {:ok, map()} | {:error, atom()}
+  def launch_contact(ships, from_id, to_id, serial, archetype, progress)
+      when is_map(ships) and is_binary(from_id) and is_binary(to_id) and
+           is_integer(serial) and serial > 0 and is_float(progress) and
+           progress >= 0.25 and progress <= 0.75 do
+    count = Enum.count(ships, fn {_id, ship} -> Map.get(ship, :procedural?, false) end)
+
+    cond do
+      count >= @max_procedural_contacts ->
+        {:error, :traffic_capacity}
+
+      not Sol.destination?(from_id) or not Sol.destination?(to_id) or from_id == to_id ->
+        {:error, :invalid_route}
+
+      archetype not in [:independent_trader, :patrol, :raider] ->
+        {:error, :invalid_archetype}
+
+      true ->
+        {name, kind, disposition, faction_id, purpose, cargo} =
+          case archetype do
+            :independent_trader ->
+              {"Harbor", :independent_trader, :neutral, "independent",
+               :trade_route, %{"industrial_parts" => 32}}
+
+            :patrol ->
+              {"Sentinel", :patrol, :neutral, to_id,
+               :sector_patrol, %{"patrol_supplies" => 20}}
+
+            :raider ->
+              {"Corsair", :raider, :hostile, "independent",
+               :intercept_traffic, %{"salvage" => 18}}
+          end
+
+        id = "traffic:sol:cruise-" <> Integer.to_string(serial)
+
+        if Map.has_key?(ships, id) do
+          {:error, :duplicate_contact}
+        else
+          # Start halfway down the opposite lane. Player and vessel converge
+          # in midspace; the flyby remains a genuine positional intersection.
+          distance_km = Sol.cruise_distance_km(to_id, from_id)
+          vessel = %{
+            id: id,
+            call_sign: name <> "-" <> Integer.to_string(serial),
+            kind: kind,
+            faction_id: faction_id,
+            disposition: disposition,
+            purpose: purpose,
+            state: :in_transit,
+            origin_id: to_id,
+            destination_id: from_id,
+            home_origin_id: to_id,
+            home_destination_id: from_id,
+            location_id: to_id,
+            cargo: cargo,
+            outbound_cargo: cargo,
+            return_cargo: cargo,
+            cruise_speed_km_s: @cruise_speed_km_s,
+            voyage_number: 1,
+            elapsed_ms: 0,
+            dwell_remaining_ms: 0,
+            distance_km: distance_km,
+            position_km: position!(to_id),
+            procedural?: true,
+            lifetime_remaining_ms: @procedural_lifetime_ms
+          }
+
+          vessel = Map.put(vessel, :duration_ms, duration(vessel))
+          vessel = advance_vessel(vessel, trunc(vessel.duration_ms * progress))
+          {:ok, Map.put(ships, id, vessel)}
+        end
+    end
+  end
+
+  def launch_contact(_ships, _from, _to, _serial, _archetype, _progress),
+    do: {:error, :invalid_contact}
+
   @spec advance(map(), non_neg_integer()) :: map()
   def advance(ships, elapsed_ms)
       when is_map(ships) and is_integer(elapsed_ms) and elapsed_ms >= 0 do
-    Map.new(ships, fn {id, vessel} -> {id, advance_vessel(vessel, elapsed_ms)} end)
+    ships
+    |> Enum.reduce(%{}, fn {id, vessel}, result ->
+      if Map.get(vessel, :procedural?, false) do
+        lifetime = vessel.lifetime_remaining_ms - elapsed_ms
+
+        if lifetime <= 0 do
+          result
+        else
+          updated = advance_vessel(vessel, elapsed_ms)
+          Map.put(result, id, %{updated | lifetime_remaining_ms: lifetime})
+        end
+      else
+        Map.put(result, id, advance_vessel(vessel, elapsed_ms))
+      end
+    end)
   end
 
   @doc """
@@ -126,21 +231,7 @@ defmodule Core.Universe.Traffic do
       :error -> {:error, :unknown_contact}
       {:ok, vessel} ->
         if distance(vessel.position_km, position) <= @sensor_radius_km do
-          {:ok, %{
-            id: vessel.id,
-            call_sign: vessel.call_sign,
-            faction_id: vessel.faction_id,
-            disposition: vessel.disposition,
-            origin_id: vessel.origin_id,
-            destination_id: vessel.destination_id,
-            purpose: vessel.purpose,
-            state: vessel.state,
-            cargo: vessel.cargo,
-            message: vessel.call_sign <> ", " <> vessel.faction_id <> " service. " <>
-              "Operating " <> Atom.to_string(vessel.purpose) <>
-              " between " <> vessel.origin_id <> " and " <> vessel.destination_id <>
-              ". No assistance requested."
-          }}
+          {:ok, hail_response(vessel)}
         else
           {:error, :contact_out_of_range}
         end
@@ -148,6 +239,42 @@ defmodule Core.Universe.Traffic do
   end
 
   def hail(_ships, _position, _id), do: {:error, :unknown_contact}
+
+  @doc """
+  Continue an authenticated encounter's established radio channel after
+  the vessel has physically moved out of short-range sensors.
+
+  The caller MUST first verify that this is the exact pending encounter
+  for the requesting pilot. Never expose this directly to client sockets:
+  ordinary hails still enforce the range check in hail/3.
+  """
+  @spec hail_established(map(), String.t()) :: {:ok, map()} | {:error, atom()}
+  def hail_established(ships, id) when is_map(ships) and is_binary(id) do
+    case Map.fetch(ships, id) do
+      {:ok, vessel} -> {:ok, hail_response(vessel)}
+      :error -> {:error, :unknown_contact}
+    end
+  end
+
+  def hail_established(_ships, _id), do: {:error, :unknown_contact}
+
+  defp hail_response(vessel) do
+    %{
+      id: vessel.id,
+      call_sign: vessel.call_sign,
+      faction_id: vessel.faction_id,
+      disposition: vessel.disposition,
+      origin_id: vessel.origin_id,
+      destination_id: vessel.destination_id,
+      purpose: vessel.purpose,
+      state: vessel.state,
+      cargo: vessel.cargo,
+      message: vessel.call_sign <> ", " <> vessel.faction_id <> " service. " <>
+        "Operating " <> Atom.to_string(vessel.purpose) <>
+        " between " <> vessel.origin_id <> " and " <> vessel.destination_id <>
+        ". Communications established."
+    }
+  end
 
   @spec sensor_radius_km() :: float()
   def sensor_radius_km, do: @sensor_radius_km

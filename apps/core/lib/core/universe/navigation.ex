@@ -83,6 +83,10 @@ defmodule Core.Universe.Navigation do
       # Server-owned reputation fixtures until the faction ledger is connected.
       # Never supplied by Phoenix client payloads or exposed in public snapshots.
       pilot_reputations: Keyword.get(opts, :pilot_reputations, %{}),
+      # Isolated Navigation tests opt in; the actual world supervisor enables
+      # procedural shared contacts so real departures are encounter-capable.
+      procedural_contact_chance: Keyword.get(opts, :procedural_contact_chance, 0.0),
+      next_contact_serial: 1,
       tick_ms: tick_ms,
       auto_tick?: Keyword.get(opts, :auto_tick, true),
       event_sink: Keyword.fetch!(opts, :event_sink)
@@ -129,6 +133,7 @@ defmodule Core.Universe.Navigation do
           duration_ms: duration_ms
         }
         state = put_voyage(state, player_id, updated)
+        state = maybe_launch_cruise_contact(state, updated)
         broadcast(state, player_id, updated)
         {:reply, {:ok, public(updated, state, player_id)}, state}
     end
@@ -180,7 +185,20 @@ defmodule Core.Universe.Navigation do
 
   def handle_call({:hail, player_id, contact_id}, _from, state) do
     {voyage, state} = ensure_player(state, player_id)
-    {:reply, Traffic.hail(state.traffic, voyage.position_km, contact_id), state}
+
+    # Once the pilot has paused for this exact encounter, keep the established
+    # communications channel usable even if the real vessel flies beyond
+    # sensor range. Unrelated ships still require normal physical proximity.
+    response =
+      case voyage.pending_encounter do
+        %{contact_id: ^contact_id} ->
+          Traffic.hail_established(state.traffic, contact_id)
+
+        _ ->
+          Traffic.hail(state.traffic, voyage.position_km, contact_id)
+      end
+
+    {:reply, response, state}
   end
 
   def handle_call(:tick, _from, state) do
@@ -294,6 +312,33 @@ defmodule Core.Universe.Navigation do
         faction_ids: Enum.map(jurisdiction.claims, & &1.faction_id)
       }
     })
+  end
+
+  # Procedural contacts are genuinely positioned vessels in the shared
+  # traffic map, not fabricated UI notifications or per-client NPC clones.
+  # Their server-generated reverse route crosses the player's lane. For
+  # current playtesting the supervisor chooses chance=1.0; it can be tuned
+  # without changing the encounter protocol.
+  defp maybe_launch_cruise_contact(state, voyage) do
+    chance = state.procedural_contact_chance
+
+    if is_number(chance) and chance > 0 and chance <= 1 and
+         (chance == 1 or :rand.uniform() <= chance) do
+      serial = state.next_contact_serial
+      kind = Enum.at([:independent_trader, :patrol, :raider], :rand.uniform(3) - 1)
+      phase = 0.43 + :rand.uniform() * 0.14
+
+      case Traffic.launch_contact(state.traffic, voyage.origin_id,
+             voyage.destination_id, serial, kind, phase) do
+        {:ok, traffic} ->
+          %{state | traffic: traffic, next_contact_serial: serial + 1}
+
+        {:error, _reason} ->
+          state
+      end
+    else
+      state
+    end
   end
 
   defp reputations_for(state, player_id) do

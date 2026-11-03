@@ -542,3 +542,18 @@ validation remain deferred.
 - [ ] Run tests, build assets, and manually verify both displays.
 - [ ] Add authorized VR controls for choices only if/when the helmet is
   upgraded from a read-only viewer to an authenticated input device.
+
+### Reliable procedural SOL encounter traffic (2026-11-03)
+
+- [x] Retain the six existing scheduled traffic ships.
+- [x] Launch a real, shared, server-owned vessel along a converging lane for
+  the current playtest's interplanetary voyages; randomize type and phase.
+- [x] Prevent population growth beyond 32 added vessels; expire each after
+  15 minutes while retaining scheduled ships.
+- [x] Preserve a pending pilot's established hail connection after physical
+  sensor separation, without permitting arbitrary remote hails.
+- [x] Add regression tests for a fresh corridor with no existing fleet,
+  bounded spawning, contact selection and travel resumption.
+- [ ] Execute tests and verify Earth–Venus popup on laptop/paired headset.
+- [ ] Tune actual encounter chance, route density, sector/faction hostility,
+  and implement shared tactical combat interception.

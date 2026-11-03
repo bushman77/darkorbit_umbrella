@@ -108,7 +108,9 @@ defmodule DarkorbitWeb.WorldChannelTest do
       duration_ms: duration_ms}}
 
     server = Module.concat(SessionManager, Core.Universe.Navigation)
-    for _ <- 1..ceil(duration_ms / 1_000) do
+    # Each resolved encounter holds travel for one tick; allow additional
+    # ticks for sequential traffic contacts before asserting orbital arrival.
+    for _ <- 1..(ceil(duration_ms / 1_000) + 12) do
       assert :ok = Core.Universe.Navigation.tick(server)
       assert {:ok, navigation} = Core.Universe.Navigation.snapshot(server, account.id)
 
