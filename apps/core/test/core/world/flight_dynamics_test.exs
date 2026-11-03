@@ -78,6 +78,42 @@ defmodule Core.World.FlightDynamicsTest do
     assert final.velocity.y > 0
   end
 
+  test "assisted throttle approaches target speed over ticks and brakes progressively" do
+    map = MapDefinition.starting_map()
+    {:ok, full} = FlightDynamics.controls(ship(), %{throttle: 1.0, mode: "cruise"}, 0)
+    first = FlightDynamics.step(full, map, 0.1, 1)
+    second = FlightDynamics.step(first, map, 0.1, 2)
+
+    # At 200 u/s maximum, cruise accelerates 150 u/s^2: 15 u/s per tick.
+    assert_in_delta first.cruise_speed, 15.0, 1.0e-8
+    assert_in_delta second.cruise_speed, 30.0, 1.0e-8
+    assert second.cruise_speed < second.speed
+
+    {:ok, idle} = FlightDynamics.controls(second, %{throttle: 0.0}, 2)
+    braking = FlightDynamics.step(idle, map, 0.1, 3)
+    assert braking.cruise_speed > 0.0
+    assert braking.cruise_speed < second.cruise_speed
+    assert_in_delta braking.cruise_speed, 6.0, 1.0e-8
+
+    stopped = FlightDynamics.step(braking, map, 0.1, 4)
+    assert stopped.cruise_speed == 0.0
+    assert stopped.velocity == %{x: 0.0, y: -0.0, z: 0.0}
+  end
+
+  test "Newtonian mode coasts when the wheel selects zero thrust" do
+    map = MapDefinition.starting_map()
+    {:ok, launched} =
+      FlightDynamics.controls(ship(), %{throttle: 1.0, mode: "newtonian"}, 0)
+    moving = FlightDynamics.step(launched, map, 0.1, 1)
+    {:ok, neutral} =
+      FlightDynamics.controls(moving, %{throttle: 0.0, mode: "newtonian"}, 1)
+    coast = FlightDynamics.step(neutral, map, 0.1, 2)
+
+    assert coast.position.y < moving.position.y
+    assert_in_delta coast.velocity.y, moving.velocity.y, 1.0e-8
+    assert_in_delta coast.velocity.x, moving.velocity.x, 1.0e-8
+  end
+
   test "accelerating after turning follows the current heading, never the spawn heading" do
     map = MapDefinition.starting_map()
     {:ok, launched} = FlightDynamics.controls(ship(), %{throttle: 1.0}, 0)
