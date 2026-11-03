@@ -336,6 +336,22 @@ validation remain deferred.
   faction relationships, piracy and neutral traffic.
 - [ ] Ephemeris/orbital positions, credible transfer paths, game-time scaling.
 
+### Living universe / first neutral contact (2026-11-03)
+
+- [x] Add an independent Earth–Mars commercial freighter with stable runtime
+  identity, scheduled route, reason for travel, manifest and return cargo.
+- [x] Advance civilian traffic on the system clock without requiring players.
+- [x] Detect nearby vessels using server-side compressed-SOL distance and
+  expose contacts to the correct authenticated pilot only.
+- [x] Display sensor contacts in the Atlas and allow server-validated
+  non-hostile hailing without changing cargo or itinerary.
+- [x] Keep pilot navigation, sector combat and tactical NPC spawning separate.
+- [ ] Make traffic, missions, cargo and voyage position survive server restarts.
+- [ ] Instantiate contacts as shared local tactical encounters with relative
+  entry positions, extraction boundaries and reconciliation on exit.
+- [ ] Add physical outcomes: trade, rescue, piracy, faction response and
+  persistent cargo-delivery consequences.
+
 ### Sub-light interplanetary cruise V2 (2026-11-02)
 
 - [x] Explicit `:conventional` vs `:interplanetary_cruise` propulsion states.
