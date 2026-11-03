@@ -58,6 +58,14 @@ defmodule Core.World do
     end
   end
 
+  @doc "Authenticated, in-range communications with a strategic SOL contact."
+  @spec solar_hail(pos_integer(), term(), keyword()) :: {:ok, map()} | {:error, term()}
+  def solar_hail(session_id, contact_id, opts \\ []) do
+    with {:ok, session} <- fetch_session(Keyword.get(opts, :sessions, SessionManager), session_id) do
+      SolarNavigation.hail(solar_navigation_server(opts), session.player_id, contact_id)
+    end
+  end
+
   defp solar_navigation_server(opts) do
     Keyword.get(opts, :solar_navigation_server,
       Module.concat(Keyword.get(opts, :sessions, SessionManager), SolarNavigation))
