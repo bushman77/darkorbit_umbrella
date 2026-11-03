@@ -168,8 +168,8 @@ defmodule Core.Universe.NavigationTest do
     assert {:ok, departed} = Navigation.snapshot(server, 910)
     assert departed.encounter == nil
     assert departed.status == :traveling
-    assert {:error, :contact_out_of_range} =
-      Navigation.hail(server, 910, vessel_id)
+    # Encounter range is intentionally much closer than sensor/hail range.
+    assert {:ok, _still_in_sensor_range} = Navigation.hail(server, 910, vessel_id)
   end
 
   test "simultaneous pilots advance the same one-second clock with different routes", %{server: server} do
