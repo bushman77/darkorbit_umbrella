@@ -4,6 +4,8 @@ import {visualLaserRays} from "./laser_burst.mjs"
 import {laserFeedback} from "./laser_feedback.mjs"
 
 const STORAGE_KEY = "darkorbit:pilot_hmd_credential"
+const GAP_KEY = "darkorbit:pilot_hmd_eye_gap"
+const EYE_SEP_KEY = "darkorbit:pilot_hmd_eye_sep"
 const key = value => String(value)
 
 // Display-only companion. Never joins WorldChannel or sends flight commands.
@@ -14,7 +16,17 @@ export class HelmetClient {
     this.messageNode = root.querySelector("#helmet-message")
     this.pairCode = root.dataset.pairCode || null
     this.credential = localStorage.getItem(STORAGE_KEY)
+    // A remembered helmet must win over an old one-time QR invitation.
+    // Otherwise scanning the QR again repeatedly attempts a consumed code.
+    if (this.credential && this.pairCode) {
+      this.pairCode = null
+      window.history.replaceState({}, "", "/helmet")
+    }
     this.mode = "standby"
+    this.immersiveReady = false
+    this.windowed = false
+    this.eyeGapPx = Math.max(0, Math.min(80, Number(localStorage.getItem(GAP_KEY)) || 0))
+    this.eyeSepMm = Math.max(40, Math.min(85, Number(localStorage.getItem(EYE_SEP_KEY)) || 64))
     this.entities = new Map()
     this.selfId = null
     this.selectedTargetId = null
@@ -26,12 +38,7 @@ export class HelmetClient {
   }
 
   start() {
-    const fullscreen = this.root.querySelector("#helmet-fullscreen")
-    fullscreen?.addEventListener("click", async () => {
-      try { await document.documentElement.requestFullscreen() } catch (_error) { /* optional */ }
-      try { await screen.orientation?.lock?.("landscape") } catch (_error) { /* optional */ }
-      fullscreen.hidden = true
-    })
+    this.setupImmersiveControls()
 
     if (!this.pairCode && !this.credential) {
       this.message("Open the Pilot HMD panel in your laptop's Atlas and scan its QR code.")
@@ -66,6 +73,7 @@ export class HelmetClient {
       this.stop()
       this.message("Helmet link interrupted. Reconnecting…")
     })
+    this.socket.onError(() => this.message("Socket unavailable. Check the phone's network connection or headset registration."))
     this.channel.join()
       .receive("ok", ({mode, player_id, credential}) => {
         if (credential) {
@@ -77,23 +85,110 @@ export class HelmetClient {
         this.selfId = key(player_id)
         this.setMode(mode)
       })
-      .receive("error", ({reason}) => this.message("Helmet join rejected: " + (reason || "unknown")))
-    window.addEventListener("resize", () => this.resize())
+      .receive("error", ({reason}) => {
+        // Do not endlessly retry a spent QR invitation. Fresh pairing must
+        // begin from the laptop's open Atlas HMD panel.
+        const hint = reason === "invalid_pairing" ?
+          "QR invitation already used or no longer open. If paired, open /helmet on this phone; otherwise rescan a new Atlas QR." :
+          "Helmet join rejected: " + (reason || "unknown")
+        this.message(hint)
+        this.channel.leave()
+      })
+    window.addEventListener("resize", () => {
+      this.resize()
+      if (this.mode === "combat" && this.immersiveReady && !this.running) this.startRendering()
+    })
+    window.addEventListener("orientationchange", () => this.resize())
+    window.visualViewport?.addEventListener("resize", () => this.resize())
     document.addEventListener("visibilitychange", () => {
       if (document.hidden) {
         this.running = false
         this.report(false)
-      } else if (this.mode === "combat") {
+      } else if (this.mode === "combat" && this.immersiveReady) {
         this.startRendering()
       }
     })
     setInterval(() => this.report(this.running && this.frameCount > 0 && !document.hidden), 5000)
   }
 
+  setupImmersiveControls() {
+    const setup = this.root.querySelector("#helmet-setup")
+    const hint = this.root.querySelector("#helmet-fullscreen-hint")
+    const fullscreen = this.root.querySelector("#helmet-fullscreen")
+    const windowed = this.root.querySelector("#helmet-windowed")
+    const gap = this.root.querySelector("#helmet-eye-gap")
+    const sep = this.root.querySelector("#helmet-eye-sep")
+
+    if (gap) gap.value = String(this.eyeGapPx)
+    if (sep) sep.value = String(this.eyeSepMm)
+    this.updateAlignmentLabels()
+
+    gap?.addEventListener("input", () => {
+      this.eyeGapPx = Math.max(0, Math.min(80, Number(gap.value) || 0))
+      localStorage.setItem(GAP_KEY, String(this.eyeGapPx))
+      this.applyAlignment()
+    })
+    sep?.addEventListener("input", () => {
+      this.eyeSepMm = Math.max(40, Math.min(85, Number(sep.value) || 64))
+      localStorage.setItem(EYE_SEP_KEY, String(this.eyeSepMm))
+      this.applyAlignment()
+    })
+
+    fullscreen?.addEventListener("click", async () => {
+      if (!this.root.requestFullscreen) {
+        if (hint) hint.textContent = "Fullscreen is unavailable in this browser. Try Chrome or Samsung Internet, or continue windowed."
+        return
+      }
+      try {
+        // Must execute within the direct tap: mobile browsers do not grant
+        // fullscreen automatically when a QR navigation loads the page.
+        await this.root.requestFullscreen()
+        this.windowed = false
+        this.immersiveReady = true
+        if (setup) setup.hidden = true
+        try { await screen.orientation?.lock?.("landscape") } catch (_error) { /* rotate manually */ }
+        this.resize()
+        if (this.mode === "combat") this.startRendering()
+      } catch (_error) {
+        if (hint) hint.textContent = "Fullscreen was blocked. Open in Chrome/Samsung Internet, or use Continue without fullscreen."
+      }
+    })
+    windowed?.addEventListener("click", () => {
+      this.windowed = true
+      this.immersiveReady = true
+      if (setup) setup.hidden = true
+      if (this.mode === "combat") this.startRendering()
+    })
+    document.addEventListener("fullscreenchange", () => {
+      this.resize()
+      if (document.fullscreenElement === this.root) {
+        this.immersiveReady = true
+        if (setup) setup.hidden = true
+        if (this.mode === "combat") this.startRendering()
+      } else if (!this.windowed && this.immersiveReady) {
+        this.immersiveReady = false
+        this.stop()
+        if (setup) setup.hidden = false
+      }
+    })
+  }
+
+  updateAlignmentLabels() {
+    const gap = this.root.querySelector("#helmet-eye-gap-value")
+    const sep = this.root.querySelector("#helmet-eye-sep-value")
+    if (gap) gap.textContent = this.eyeGapPx + "px"
+    if (sep) sep.textContent = this.eyeSepMm + "mm"
+  }
+
+  applyAlignment() {
+    this.updateAlignmentLabels()
+    this.view?.setHelmetAlignment({eyeGapPx: this.eyeGapPx, eyeSep: this.eyeSepMm / 1000})
+  }
+
   setMode(mode) {
     this.mode = mode === "combat" ? "combat" : "standby"
     if (this.mode === "combat") {
-      this.startRendering()
+      if (this.immersiveReady) this.startRendering()
     } else {
       this.stop()
       this.message("")
@@ -101,11 +196,18 @@ export class HelmetClient {
   }
 
   startRendering() {
-    if (document.hidden || this.running) return
+    if (document.hidden || this.running || !this.immersiveReady) return
+    if (window.innerWidth < window.innerHeight) {
+      this.canvas.hidden = true
+      this.message("Rotate the phone to landscape for side-by-side headset alignment.")
+      this.report(false)
+      return
+    }
     if (!this.view) {
       try {
         this.view = new StereoSpaceView(this.canvas)
         this.view.setMode("sbs")
+        this.applyAlignment()
       } catch (_error) {
         this.message("This phone's browser could not initialize WebGL.")
         this.report(false)
@@ -209,6 +311,9 @@ export class HelmetClient {
     if (!this.messageNode) return
     this.messageNode.textContent = value || ""
     this.messageNode.hidden = !value
+    const setup = this.root.querySelector("#helmet-setup")
+    const hint = this.root.querySelector("#helmet-fullscreen-hint")
+    if (value && setup && !setup.hidden && hint) hint.textContent = value
   }
 }
 
