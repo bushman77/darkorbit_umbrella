@@ -41,7 +41,8 @@ defmodule DarkorbitWeb.WorldChannelTest do
 
   test "runtime configuration starts all planetary maps, not only legacy Sector 1-1" do
     expected = %{
-      "1-1" => "earth",
+      "1-1" => "earth", # isolated legacy combat test fixture
+      "sol:earth" => "earth",
       "sol:mercury" => "mercury",
       "sol:venus" => "venus",
       "sol:mars" => "mars",
