@@ -17,6 +17,7 @@ import {MinimapRenderer} from "./minimap_renderer.mjs"
 import {PointerNavigation} from "./pointer_navigation.mjs"
 import {StereoSpaceView} from "./stereo_view.js"
 import {HelmetControl} from "./helmet_control.mjs"
+import {helmetAlignmentKeyIntent} from "./helmet_alignment_keys.mjs"
 import {NavigationComputer} from "./navigation_computer.mjs"
 import {FlightControls} from "./flight_controls.mjs"
 import {smoothAttitude} from "./attitude_interpolation.mjs"
@@ -127,6 +128,8 @@ class SpaceClient {
     window.addEventListener("keydown", event => this.navComputer.handleKey(event))
     this.root.querySelector("#display-mode")?.addEventListener("change", event => this.setDisplayMode(event.target.value))
     window.addEventListener("keydown", event => this.handleDisplayModeKey(event))
+    // Capture before ordinary gameplay handlers or browser reload behavior.
+    window.addEventListener("keydown", event => this.handleHelmetAlignmentKey(event), true)
     if (!this.setDisplayMode("3d")) return
     this.canvas.addEventListener("pointerdown", () => this.canvas.focus({preventScroll: true}))
     window.addEventListener("resize", () => this.resize())
@@ -903,6 +906,17 @@ class SpaceClient {
     const rect = this.canvas.getBoundingClientRect()
     const dpr = Math.min(window.devicePixelRatio || 1, 2)
     this.stereoView?.resize(rect.width, rect.height, dpr)
+  }
+
+  handleHelmetAlignmentKey(event) {
+    const intent = helmetAlignmentKeyIntent(event, {
+      active: !this.navComputer?.isOpen && this.helmet?.canAdjustAlignment(),
+      typing: gameplayTypingTarget(event.target),
+    })
+    if (!intent) return
+    event.preventDefault()
+    event.stopPropagation()
+    this.helmet.adjustAlignment(intent.axis, intent.direction)
   }
 
   handleDisplayModeKey(event) {
