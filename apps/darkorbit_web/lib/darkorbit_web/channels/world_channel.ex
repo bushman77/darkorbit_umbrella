@@ -216,6 +216,7 @@ defmodule DarkorbitWeb.WorldChannel do
              :combat_engaged,
              :combat_disengaged,
              :laser_fired,
+             :planetary_proximity_changed,
              :entity_destroyed
            ] do
     :ok = push(socket, Atom.to_string(event), payload)
