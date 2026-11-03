@@ -916,6 +916,14 @@ class SpaceClient {
     if (!intent) return
     event.preventDefault()
     event.stopPropagation()
+
+    // Holding Left/Right is convenient inside a headset. Rate-limit repeat
+    // packets instead of flooding Phoenix on a fast keyboard repeat setting.
+    if (intent.axis === "gap") {
+      const now = performance.now()
+      if (event.repeat && now - (this.lastHelmetArrowAt || 0) < 90) return
+      this.lastHelmetArrowAt = now
+    }
     this.helmet.adjustAlignment(intent.axis, intent.direction)
   }
 
