@@ -21,7 +21,9 @@ import {HelmetControl} from "./helmet_control.mjs"
 import {helmetAlignmentKeyIntent} from "./helmet_alignment_keys.mjs"
 import {NavigationComputer} from "./navigation_computer.mjs"
 import {FlightControls} from "./flight_controls.mjs"
-import {MouseSteering, validMouseSensitivity} from "./mouse_steering.mjs"
+import {
+  MouseSteering, validMouseSensitivity, MOUSE_STEERING_IDLE_MS,
+} from "./mouse_steering.mjs"
 import {smoothAttitude} from "./attitude_interpolation.mjs"
 import {smoothOrientation, orientationTelemetry} from "./orientation_interpolation.mjs"
 import {SpaceLaserTrigger} from "./space_laser_trigger.mjs"
@@ -58,6 +60,7 @@ class SpaceClient {
     this.mouseSteeringSensitivity = validMouseSensitivity(savedSensitivity)
       ? savedSensitivity : 1
     this.mouseSteering = new MouseSteering({sensitivity: this.mouseSteeringSensitivity})
+    this.mouseIdleTimer = null
     this.mouseCaptureLost = false
     this.entities = new Map()
     this.pilots = new Map()
@@ -846,11 +849,13 @@ class SpaceClient {
   frame(time) {
     const deltaSeconds = Math.min((time - this.lastFrame) / 1000, 0.1)
     this.lastFrame = time
-    this.interpolate(deltaSeconds)
+    // Expire mouse commands before advancing the visible cockpit. The
+    // independent idle timer can stop them between rendered frames as well.
     if (this.mouseSteeringEnabled && document.pointerLockElement === this.canvas) {
       const expired = this.mouseSteering.expire(time)
       if (expired) this.flightControls?.setMouseSteering(expired)
     }
+    this.interpolate(deltaSeconds)
     this.flightControls?.heartbeat(time)
     this.spaceLaser?.update(time)
     this.draw(time)
@@ -1031,6 +1036,20 @@ class SpaceClient {
     this.stereoView?.resize(rect.width, rect.height, dpr)
   }
 
+  scheduleMouseStop() {
+    window.clearTimeout(this.mouseIdleTimer)
+    // Mouse movement cannot emit its own "stopped" event. An independent
+    // timer sends neutral without waiting for the next animation frame.
+    this.mouseIdleTimer = window.setTimeout(() => {
+      this.mouseIdleTimer = null
+      if (!this.mouseSteeringEnabled ||
+          document.pointerLockElement !== this.canvas ||
+          !this.flightControls?.active()) return
+      const expired = this.mouseSteering.expire(performance.now())
+      if (expired) this.flightControls.setMouseSteering(expired)
+    }, MOUSE_STEERING_IDLE_MS)
+  }
+
   setupMouseSteering() {
     const toggle = this.root.querySelector("#nav-mouse-steering")
     const slider = this.root.querySelector("#nav-mouse-sensitivity")
@@ -1082,10 +1101,18 @@ class SpaceClient {
       if (!this.mouseSteeringEnabled || document.pointerLockElement !== this.canvas ||
           this.navComputer?.isOpen || this.inSystemCruise() ||
           !this.flightControls.active()) return
+      // Zero-delta browser events must not extend steering beyond the
+      // last physical movement. In particular, do not restart the timer.
+      if (!Number.isFinite(event.movementX) ||
+          !Number.isFinite(event.movementY) ||
+          (event.movementX === 0 && event.movementY === 0)) return
       const axes = this.mouseSteering.move(event.movementX, event.movementY)
       this.flightControls.setMouseSteering(axes)
+      this.scheduleMouseStop()
     })
     document.addEventListener("pointerlockchange", () => {
+      window.clearTimeout(this.mouseIdleTimer)
+      this.mouseIdleTimer = null
       const captured = this.mouseSteeringEnabled &&
         document.pointerLockElement === this.canvas
       if (captured) {
@@ -1142,6 +1169,8 @@ class SpaceClient {
   }
 
   exitMouseSteering({silent = false} = {}) {
+    window.clearTimeout(this.mouseIdleTimer)
+    this.mouseIdleTimer = null
     this.mouseSteering.release()
     this.flightControls?.clearMouseSteering({silent: true})
     this.flightControls?.setMouseMode(false, {silent})
