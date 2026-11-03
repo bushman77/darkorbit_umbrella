@@ -570,7 +570,11 @@ class SpaceClient {
     const nextId = typeof encounter?.id === "string" ? encounter.id : null
     if (nextId !== this.encounterDisplayedId) {
       this.encounterDisplayedId = nextId
-      this.encounterDismissedId = null
+      // A dismissed ship should not repeatedly reopen the panel if its
+      // proximity briefly crosses the sensor boundary and later returns.
+      if (nextId && nextId !== this.encounterDismissedId) {
+        this.encounterDismissedId = null
+      }
       const output = this.root.querySelector("#solar-encounter-message")
       if (output) {
         output.textContent = nextId
