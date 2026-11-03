@@ -24,12 +24,23 @@ defmodule Darkorbit.World do
   def region_for_player(user_id) when is_integer(user_id) and user_id > 0 do
     server = Module.concat(SessionManager, SolarNavigation)
 
-    with {:ok, navigation} <- SolarNavigation.snapshot(server, user_id),
-         {:ok, entry} <- OrbitalEntry.entry(
-           navigation.arrival_origin_id, navigation.location_id,
-           user_id, navigation.voyage_number
-         ) do
-      {:ok, entry}
+    with {:ok, navigation} <- SolarNavigation.snapshot(server, user_id) do
+      # Retain the original Sector 1-1 join fixture for fresh Earth accounts;
+      # it is still used by existing combat/channel integration tests. Actual
+      # interplanetary arrivals get their direction-derived orbital entry.
+      if navigation.location_id == "earth" and
+           navigation.arrival_origin_id == nil do
+        {:ok, %{
+          map_id: "1-1",
+          position: MapDefinition.starting_map().spawn,
+          attitude: %{yaw: 0.0, pitch: 0.0, roll: 0.0}
+        }}
+      else
+        OrbitalEntry.entry(
+          navigation.arrival_origin_id, navigation.location_id,
+          user_id, navigation.voyage_number
+        )
+      end
     end
   end
 
