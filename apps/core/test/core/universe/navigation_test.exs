@@ -139,6 +139,39 @@ defmodule Core.Universe.NavigationTest do
     assert hd(after_tick.contacts).distance_km > hd(before.contacts).distance_km
   end
 
+  test "Earth-to-Venus cruise discovers a live courier, announces once and supports hail", %{server: server} do
+    assert {:ok, %{encounter: nil}} = Navigation.set_course(server, 910, "venus")
+
+    for _ <- 1..109, do: assert(:ok = Navigation.tick(server))
+    assert {:ok, crossing} = Navigation.snapshot(server, 910)
+    assert crossing.status == :traveling
+    assert %{call_sign: "Vesper-02", contact_id: vessel_id,
+             mode: :strategic_flyby, distance_km: separation} = crossing.encounter
+    assert separation < 650_000
+
+    assert_receive {"sol", :solar_encounter_started,
+      %{player_id: 910, encounter: %{contact_id: ^vessel_id,
+                                      call_sign: "Vesper-02"}}}
+    assert {:ok, reply} = Navigation.hail(server, 910, vessel_id)
+    assert reply.call_sign == "Vesper-02"
+    assert reply.cargo == %{"medical_supplies" => 48}
+
+    # A contact is a real vessel and is never duplicated or removed merely
+    # because the pilot encounters it.
+    {:ok, other_player} = Navigation.snapshot(server, 911)
+    assert other_player.status == :idle
+    refute other_player.encounter
+    for _ <- 1..5, do: assert(:ok = Navigation.tick(server))
+    refute_receive {"sol", :solar_encounter_started, %{player_id: 910}}, 0
+
+    for _ <- 1..35, do: assert(:ok = Navigation.tick(server))
+    assert {:ok, departed} = Navigation.snapshot(server, 910)
+    assert departed.encounter == nil
+    assert departed.status == :traveling
+    assert {:error, :contact_out_of_range} =
+      Navigation.hail(server, 910, vessel_id)
+  end
+
   test "simultaneous pilots advance the same one-second clock with different routes", %{server: server} do
     assert {:ok, mars} = Navigation.set_course(server, 101, "mars")
     assert {:ok, pluto} = Navigation.set_course(server, 202, "pluto")
