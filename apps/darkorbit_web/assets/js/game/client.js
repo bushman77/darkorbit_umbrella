@@ -92,6 +92,10 @@ class SpaceClient {
     })
     window.addEventListener("keydown", event => this.flightControls.keyDown(event))
     window.addEventListener("keyup", event => this.flightControls.keyUp(event))
+    // Only the cockpit hit canvas owns flight input; menus/Atlas retain
+    // ordinary scrolling and right-click behavior.
+    this.canvas.addEventListener("wheel", event => this.flightControls.wheel(event),
+      {passive: false})
     window.addEventListener("blur", () => {
       this.flightControls.release()
       this.spaceLaser?.release()
@@ -144,7 +148,10 @@ class SpaceClient {
         return true
       },
     }).attach()
-    this.canvas.addEventListener("contextmenu", event => this.handleTargetPointer(event))
+    this.canvas.addEventListener("pointerdown", event => this.handleLaserPointerDown(event))
+    this.canvas.addEventListener("contextmenu", event => {
+      if (!this.navComputer?.isOpen) event.preventDefault()
+    })
     this.spaceLaser = new SpaceLaserTrigger({
       active: () => !this.navComputer?.isOpen && !this.inSystemCruise() &&
         this.channel?.state === "joined" &&
@@ -153,19 +160,13 @@ class SpaceClient {
       nextAttackTick: () => Number(this.entities.get(this.selfId)?.nextAttackTick) || 0,
       fire: done => this.fireReadyWeapon(done),
     })
-    window.addEventListener("keyup", event => {
-      if (event.code !== "Space") return
-      this.spaceLaser.release()
-      // Prevent HTML buttons from receiving a synthetic click on Space keyup.
-      if (!this.navComputer?.isOpen && !gameplayTypingTarget(event.target) &&
-          !event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey) {
-        event.preventDefault()
-      }
-    }, true)
+    window.addEventListener("pointerup", event => {
+      if (event.button === 2) this.spaceLaser.release()
+    })
+    window.addEventListener("pointercancel", () => this.spaceLaser.release())
     for (const slot of this.root.querySelectorAll("[data-hotbar-slot]")) {
       slot.addEventListener("click", () => this.activateHotbarSlot(Number(slot.dataset.hotbarSlot)))
     }
-    // Capture Space before a focused HTML control can activate itself.
     window.addEventListener("keydown", event => this.handleCombatKey(event), true)
 
     // New sessions begin in the SOL system Atlas, not in the combat
@@ -466,9 +467,14 @@ class SpaceClient {
     return true
   }
 
-  handleTargetPointer(event) {
+  handleLaserPointerDown(event) {
+    if (event.button !== 2 || this.navComputer?.isOpen || this.inSystemCruise() ||
+        this.channel?.state !== "joined" ||
+        this.entities.get(this.selfId)?.status === "destroyed") return
+
     event.preventDefault()
-    this.selectTargetAtPointer({clientX: event.clientX, clientY: event.clientY})
+    this.canvas.focus({preventScroll: true})
+    this.spaceLaser?.press()
   }
 
   selectTargetAtPointer(pointer) {
@@ -482,16 +488,7 @@ class SpaceClient {
 
   handleCombatKey(event) {
     if (this.navComputer?.isOpen) return
-    if (this.inSystemCruise()) {
-      if (event.code === "Space") event.preventDefault()
-      return
-    }
-    if (event.code === "Space" && !gameplayTypingTarget(event.target) &&
-        !event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey) {
-      event.preventDefault()
-      if (!event.repeat) this.spaceLaser?.press()
-      return
-    }
+    if (this.inSystemCruise()) return
     if (event.defaultPrevented) return
     const intent = combatKeyIntent(event)
     if (!intent) return
