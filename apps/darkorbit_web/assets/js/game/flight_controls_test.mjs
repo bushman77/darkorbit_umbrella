@@ -455,3 +455,38 @@ test("Atlas, blur and autopilot restore keyboard-only turn profile", () => {
   flight.setMouseMode(false, {silent: true})
   assert.equal(flight.payload().mouse_steering, false)
 })
+
+test("mouse stop emits neutral immediately even inside 50ms motion rate limiter", () => {
+  let time = 1000
+  const events = []
+  const flight = new FlightControls({send: payload => events.push(payload), now: () => time})
+  flight.setMouseMode(true)
+  flight.setMouseSteering({yaw: 1, pitch: 0.75})
+  const before = events.length
+  time += 7
+  // Fast-stop commands cannot be held pending until a later heartbeat.
+  assert.equal(flight.setMouseSteering({yaw: 0, pitch: 0}), true)
+  assert.equal(events.length, before + 1)
+  assert.equal(events.at(-1).yaw, 0)
+  assert.equal(events.at(-1).pitch, 0)
+  assert.equal(events.at(-1).mouse_steering, true)
+  assert.equal(flight.mouseDirty, false)
+})
+
+test("neutral mouse stop preserves held keyboard flight and mouse wheel throttle", () => {
+  let time = 1000
+  const events = []
+  const flight = new FlightControls({send: payload => events.push(payload), now: () => time})
+  flight.setMouseMode(true)
+  flight.wheel(wheel(-120))
+  time += 100
+  flight.setMouseSteering({yaw: 1, pitch: 0.6})
+  flight.keyDown(press("KeyA"))
+  time += 7
+  flight.setMouseSteering({yaw: 0, pitch: 0})
+  assert.equal(events.at(-1).yaw, -1)
+  assert.equal(events.at(-1).pitch, 0)
+  assert.equal(events.at(-1).throttle, 0.05)
+  flight.keyUp(press("KeyA"))
+  assert.equal(events.at(-1).yaw, 0)
+})
