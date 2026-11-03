@@ -71,7 +71,7 @@ defmodule Core.World do
   @spec solar_resolve_encounter(pos_integer(), term(), term(), keyword()) ::
           {:ok, map()} | {:error, term()}
   def solar_resolve_encounter(session_id, encounter_id, choice, opts \\ []) do
-    with {:ok, session} <- fetch_session(Keyword.get(opts, :sessions, SessionManager)) do
+    with {:ok, session} <- fetch_session(Keyword.get(opts, :sessions, SessionManager), session_id) do
       SolarNavigation.resolve_encounter(
         solar_navigation_server(opts), session.player_id, encounter_id, choice)
     end
