@@ -2,18 +2,26 @@ defmodule DarkorbitWeb.WorldChannel do
   use DarkorbitWeb, :channel
 
   alias Darkorbit.World
-
-  @starting_map "1-1"
+  alias Core.Universe.OrbitalEntry
 
   @impl true
   def join("world:" <> map_id, _payload,
-           %{assigns: %{socket_role: :pilot}} = socket) when map_id == @starting_map do
+           %{assigns: %{socket_role: :pilot}} = socket) do
     player_id = socket.assigns.current_player_id
 
-    with :ok <- World.subscribe(map_id),
-         {:ok, status} <- World.player_status(player_id, 1),
-         {:ok, session} <- World.connect(player_id, 1) do
-      finish_join(socket, map_id, session, status)
+    with {:ok, region} <- World.region_for_player(player_id) do
+      if region.map_id != map_id do
+        {:error, %{reason: "region_redirect", map_id: region.map_id}}
+      else
+        with :ok <- World.subscribe(map_id),
+             :ok <- World.subscribe("sol"),
+             {:ok, status} <- World.player_status(player_id, 1),
+             {:ok, session} <- World.connect(player_id, 1, map_id: map_id) do
+          finish_join(socket, map_id, session, status)
+        else
+          {:error, reason} -> {:error, %{reason: error_reason(reason)}}
+        end
+      end
     else
       {:error, reason} -> {:error, %{reason: error_reason(reason)}}
     end
@@ -178,6 +186,17 @@ defmodule DarkorbitWeb.WorldChannel do
                   %{assigns: %{current_player_id: current_player_id}} = socket)
       when player_id == current_player_id do
     :ok = push(socket, "solar_navigation_updated", payload)
+
+    # World transition is a server-owned consequence of completing an actual
+    # SOL voyage. Client never selects map identity or spawn coordinates.
+    navigation = payload.navigation
+    if navigation.status == :idle do
+      region_map = OrbitalEntry.map_id(navigation.location_id)
+      if region_map && region_map != socket.assigns.map_id do
+        :ok = push(socket, "world_region_changed", %{map_id: region_map})
+      end
+    end
+
     {:noreply, socket}
   end
 
