@@ -127,12 +127,15 @@ export class HelmetClient {
     window.visualViewport?.addEventListener("resize", () => this.resize())
     document.addEventListener("visibilitychange", () => {
       if (document.hidden) {
+        // Best-effort write before the OS backgrounds the browser.
+        this.persistCalibration()
         this.running = false
         this.report(false)
       } else if (this.mode === "combat" && this.immersiveReady) {
         this.startRendering()
       }
     })
+    window.addEventListener("pagehide", () => this.persistCalibration())
     setInterval(() => {
       this.report(this.running && this.frameCount > 0 && !document.hidden)
       if (localStorage.getItem(CALIBRATION_DIRTY_KEY) === "1" &&
