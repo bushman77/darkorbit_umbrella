@@ -82,3 +82,29 @@ Phone landscape, lens alignment and frame rate require hardware testing.
 The remote repository edits were not run through an Elixir compiler or a real
 Galaxy S21 during implementation. Verify migration, Phoenix joins, browser
 assets, fullscreen and device performance locally.
+
+
+## Troubleshooting: phone says "Socket unavailable"
+
+Phoenix may be rejecting a saved phone credential even though the helmet page
+loads over HTTP. Check the server log for
+\`REFUSED CONNECTION TO DarkorbitWeb.UserSocket\` with \`helmet_token\`
+and a prior database lookup of \`helmet_devices.credential_hash\`. That
+means the stored credential was not authenticated; it is not proof of a bad
+stereo renderer or a LAN connection failure.
+
+The phone first verifies an existing credential via
+\`POST /helmet/verify\` (Bearer authorization header, no URL token).
+A stale credential is discarded **on the phone only**; the user sees an
+explicit recovery instruction. If a fresh QR invitation is already open,
+the phone can immediately try it instead. This does not expire valid
+registrations, and ordinary network errors never erase valid credentials.
+
+For a stale registration, open the laptop's **Atlas → PILOT HMD** panel,
+choose **Forget headset**, then scan the new QR invitation. If the
+headset is merely offline, leave the registration intact and reopen
+\`/helmet\` on the same phone/browser instead.
+
+Tests:
+\`mix test test/darkorbit_web/controllers/helmet_controller_test.exs\`
+from \`apps/darkorbit_web\`.
