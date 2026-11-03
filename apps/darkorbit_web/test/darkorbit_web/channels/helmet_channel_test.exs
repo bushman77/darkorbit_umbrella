@@ -19,8 +19,10 @@ defmodule DarkorbitWeb.HelmetChannelTest do
   test "the Atlas pairing code authorizes exactly one persistent read-only helmet" do
     account = verified_player_account_fixture()
     {:ok, pilot} = connect(UserSocket, %{"token" => GameAuth.socket_token(account)})
-    {:ok, %{status: %{paired: false}}, control} =
+    {:ok, %{status: %{paired: false}, network_hosts: hosts}, control} =
       subscribe_and_join(pilot, HelmetChannel, "helmet:control:#{account.id}")
+    assert is_list(hosts)
+    refute Enum.any?(hosts, &(&1 in ["localhost", "127.0.0.1"]))
 
     ref = push(control, "open_pairing", %{})
     assert_reply ref, :ok, %{code: code}
