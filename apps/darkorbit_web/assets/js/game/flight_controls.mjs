@@ -86,7 +86,10 @@ export class FlightControls {
     this.mouseAxes = {yaw, pitch}
     this.mouseDirty = true
     const now = this.now()
-    if (now - this.lastMouseEmit >= 50) {
+    // A neutral mouse release is safety-critical and must never sit behind
+    // the 50ms motion-update throttle. Send zero to Phoenix immediately.
+    const stopping = yaw === 0 && pitch === 0
+    if (stopping || now - this.lastMouseEmit >= 50) {
       this.emit()
       this.lastMouseEmit = now
       this.mouseDirty = false
