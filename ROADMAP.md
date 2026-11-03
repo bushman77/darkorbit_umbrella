@@ -352,6 +352,25 @@ validation remain deferred.
 - [ ] Add physical outcomes: trade, rescue, piracy, faction response and
   persistent cargo-delivery consequences.
 
+### Planetary cockpit visualization V1 (2026-11-03)
+
+- [x] Server-authored planetary visual metadata, including true mean
+  radii and an explicit visual-only approach/orbit preview stage.
+- [x] Three.js camera-relative planet rendering with physically correct
+  apparent angular diameter, cloud textures, lighting and atmosphere,
+  without widening tactical camera clipping or sector bounds.
+- [x] In both standard 3D and SBS, show the actual SOL destination
+  growing through cruise and large on arrival (Venus 65° of 70° FOV).
+- [x] Keep the planet at a stable world bearing when the ship turns;
+  provide a visible cockpit label explaining the preview.
+- [x] Add server geometry/navigation and client projection/render tests.
+- [ ] Replace visual staging with server-owned, physically meaningful
+  planet-centered orbital frames and safe 3D approach spawn positions.
+- [ ] Make local ship thrust change its true planet-relative position
+  and visible altitude; implement planetary collision/atmosphere rules.
+- [ ] Preserve simultaneous multiplayer observers, tactical traffic,
+  and clean entry/exit between SOL cruise and local orbital flight.
+
 ### Sub-light interplanetary cruise V2 (2026-11-02)
 
 - [x] Explicit `:conventional` vs `:interplanetary_cruise` propulsion states.
