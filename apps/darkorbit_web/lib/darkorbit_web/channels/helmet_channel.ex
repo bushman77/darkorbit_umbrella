@@ -6,7 +6,7 @@ defmodule DarkorbitWeb.HelmetChannel do
   use DarkorbitWeb, :channel
 
   alias Darkorbit.World
-  alias DarkorbitWeb.HelmetManager
+  alias DarkorbitWeb.{HelmetManager, HelmetNetwork}
 
   @map_id "1-1"
 
@@ -14,8 +14,10 @@ defmodule DarkorbitWeb.HelmetChannel do
   def join("helmet:control:" <> id, _params,
            %{assigns: %{socket_role: :pilot, current_player_id: player_id}} = socket) do
     if id == Integer.to_string(player_id) do
-      {:ok, %{status: HelmetManager.status(player_id)},
-       assign(socket, :helmet_role, :controller)}
+      {:ok, %{
+        status: HelmetManager.status(player_id),
+        network_hosts: HelmetNetwork.hosts()
+      }, assign(socket, :helmet_role, :controller)}
     else
       {:error, %{reason: "forbidden"}}
     end
