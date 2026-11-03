@@ -135,6 +135,26 @@ defmodule Core.WorldTest do
       World.move(session.id, %{x: 1_200, y: 1_200}, opts)
   end
 
+  @tag no_initial_encounter: true
+  test "SOL traffic hails require the active pilot's authenticated session", context do
+    assert {:ok, session} = World.connect(1_043, context.stats, context.world_options)
+    assert {:error, :session_not_found} =
+      World.solar_hail(-1, "traffic:sol:meridian-01", context.world_options)
+
+    assert {:ok, navigation} = World.solar_snapshot(session.id, context.world_options)
+    assert [%{id: "traffic:sol:meridian-01"}] = navigation.contacts
+    assert {:ok, response} =
+      World.solar_hail(session.id, "traffic:sol:meridian-01", context.world_options)
+    assert response.disposition == :neutral
+    assert response.cargo == %{"industrial_machinery" => 120}
+
+    assert {:error, :unknown_contact} =
+      World.solar_hail(session.id, "fake:freighter", context.world_options)
+    assert :ok = World.disconnect(session.id, context.world_options)
+    assert {:error, :session_not_found} =
+      World.solar_hail(session.id, "traffic:sol:meridian-01", context.world_options)
+  end
+
   test "server-owned course advances ordered waypoints and finishes", context do
     assert {:ok, session} = World.connect(:route_pilot, context.stats, context.world_options)
     opts = context.world_options
