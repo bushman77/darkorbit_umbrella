@@ -1,6 +1,6 @@
 import * as THREE from "three"
 import {pointerNdc, toScene, toWorld} from "./stereo_math.mjs"
-import {stereoViewports} from "./stereo_viewport.mjs"
+import {stereoViewports, inwardStereoProjectionOffset} from "./stereo_viewport.mjs"
 import {cockpitHudFit, HUD_GEOMETRY} from "./stereo_layout.mjs"
 import {flightBasis, degrees} from "./flight_basis.mjs"
 import {orientationTelemetry} from "./orientation_interpolation.mjs"
@@ -178,7 +178,7 @@ export class StereoSpaceView {
   }
 
   setHelmetAlignment({eyeGapPx = this.eyeGapPx, eyeSep = this.stereo.eyeSep} = {}) {
-    this.eyeGapPx = Math.min(80, Math.max(0, Math.round(Number(eyeGapPx) || 0)))
+    this.eyeGapPx = Math.min(80, Math.max(-160, Math.round(Number(eyeGapPx) || 0)))
     this.stereo.eyeSep = Math.min(0.09, Math.max(0.035, Number(eyeSep) || 0.064))
     this.resize(this.size.width, this.size.height, this.size.dpr)
   }
@@ -407,6 +407,13 @@ export class StereoSpaceView {
     const {width, height} = this.size
     if (this.mode === "sbs") {
       const {left, right} = stereoViewports(width, height, this.eyeGapPx)
+
+      // When the physical center strip reaches zero, ArrowLeft still brings
+      // the apparent two images together by changing their optical projection
+      // centers. Scissoring keeps each eye in its own half of the display.
+      const shift = inwardStereoProjectionOffset(this.eyeGapPx, left.width)
+      this.stereo.cameraL.projectionMatrix.elements[8] -= shift
+      this.stereo.cameraR.projectionMatrix.elements[8] += shift
       // Clear the center strip instead of leaving stale pixels from a prior frame.
       this.renderer.setScissorTest(false)
       this.renderer.clear(true, true, true)
