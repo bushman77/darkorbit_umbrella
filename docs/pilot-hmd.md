@@ -17,7 +17,14 @@ through the existing Three.js StereoSpaceView (no video stream).
    another entry or type a reachable address if the suggestion is wrong.
    Phone and laptop must reach the same server. Scan with the phone;
    no second approval step is needed.
-5. On the phone, tap once for fullscreen and optional landscape lock.
+5. On the phone, rotate to landscape and tap **ENTER FULLSCREEN VR**.
+   Android's browser requires this tap; QR navigation cannot request fullscreen
+   automatically. If the browser blocks fullscreen, the page offers a windowed
+   fallback. The stereo display stays black in Atlas/standby.
+6. If the two headset images do not fuse comfortably, open **Lens alignment
+   settings** before entering VR. Adjust the center gap and eye separation.
+   Values are remembered on the phone and SBS uses separate, nonoverlapping
+   eye viewports. Exiting fullscreen returns to the setup controls.
 
 The QR code contains a random **single-use invitation**, not the pilot's normal
 socket token, world topic, or account credentials. The invitation remains valid
@@ -40,6 +47,10 @@ without scanning again. Pilot **Forget headset** invalidates that credential.
   phone cannot continue receiving world updates after the controlling session closes.
 - Helmet clients have no Core.World session and cannot call movement, combat or
   navigation commands. WorldChannel explicitly requires a pilot-role socket.
+- Re-scanning an old QR on a previously registered phone must use the persistent
+  local helmet credential rather than attempting the consumed invitation.
+  A refused new pairing code means it was used, cancelled or the Atlas panel
+  was closed. Reopen the panel and scan a fresh code if not already paired.
 
 The Atlas manager reports separate pairing, connection, rendering, and mode
 states. The phone reports rendering health rather than claiming it is physically
