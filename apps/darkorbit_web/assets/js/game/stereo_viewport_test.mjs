@@ -1,6 +1,6 @@
 import test from "node:test"
 import assert from "node:assert/strict"
-import {stereoViewports} from "./stereo_viewport.mjs"
+import {stereoViewports, inwardStereoProjectionOffset} from "./stereo_viewport.mjs"
 
 test("equal landscape eyes do not overlap and retain correct per-eye aspect", () => {
   const layout = stereoViewports(2400, 1080, 0)
@@ -28,4 +28,19 @@ test("odd-width and extreme inputs never overlap the eye viewports", () => {
     assert.equal(layout.right.x + layout.right.width, width)
     assert.ok(Math.abs(layout.left.width - layout.right.width) <= 1)
   }
+})
+
+test("negative center alignment shifts both eye projections inward without overlapping viewports", () => {
+  const viewports = stereoViewports(1080, 420, -60)
+  assert.equal(viewports.gap, 0)
+  assert.equal(viewports.left.width, 540)
+  assert.equal(viewports.left.width, viewports.right.x)
+  assert.equal(viewports.right.x + viewports.right.width, 1080)
+
+  // A signed gap of -60 shifts each view in by 30 pixels:
+  // 30px / 540px * 2 = 1/9 of normalized device coordinates.
+  assert.ok(Math.abs(inwardStereoProjectionOffset(-60, viewports.left.width) - 1 / 9) < 1e-12)
+  assert.equal(inwardStereoProjectionOffset(0, viewports.left.width), 0)
+  assert.equal(inwardStereoProjectionOffset(40, viewports.left.width), 0)
+  assert.equal(inwardStereoProjectionOffset(-2, viewports.left.width), 2 / 540)
 })
