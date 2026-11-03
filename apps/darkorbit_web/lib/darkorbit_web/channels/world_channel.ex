@@ -200,6 +200,18 @@ defmodule DarkorbitWeb.WorldChannel do
     {:noreply, socket}
   end
 
+  # A close pass is private to the pilot whose SOL path intersects a
+  # persistent vessel. Never broadcast another pilot's encounter details.
+  def handle_info({:solar_encounter_started, %{player_id: player_id} = payload},
+                  %{assigns: %{current_player_id: current_player_id}} = socket)
+      when player_id == current_player_id do
+    :ok = push(socket, "solar_encounter_started", payload)
+    {:noreply, socket}
+  end
+
+  def handle_info({:solar_encounter_started, _payload}, socket),
+    do: {:noreply, socket}
+
   def handle_info({:solar_navigation_updated, _payload}, socket),
     do: {:noreply, socket}
 
