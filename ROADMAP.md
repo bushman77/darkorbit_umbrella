@@ -415,3 +415,18 @@ validation remain deferred.
 - [ ] Add permanent stations, asteroid fields and contextual traffic
   in the respective planetary regions.
 
+
+### Fatal planetary impact V1 (2026-11-03)
+
+- [x] Replace the old harmless orbital-volume clamp with a server-owned
+  lethal impact boundary at 1.08× the planet's actual mean radius.
+- [x] Use swept 3D segment-sphere intersection to prevent high-speed
+  tunnelling during manual flight or local plotted autopilot.
+- [x] Zero hull, shields and momentum; mark destroyed and clear targets,
+  waypoints and NPC pursuit; broadcast a single planetary-death event.
+- [x] Show a planet-named crash message and release pointer lock on death.
+- [x] Add pure and live map integration tests for normal approach,
+  first impact, fast through-crossing and safety of other flight modes.
+- [ ] Add escalating proximity/collision alerts and gravitational effects.
+- [ ] Implement controlled respawn or rescue/recovery workflow for pilots.
+- [ ] Enable consistent collision behavior in Earth's migrated orbital map.
