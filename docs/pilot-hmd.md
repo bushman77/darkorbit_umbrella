@@ -11,9 +11,12 @@ through the existing Three.js StereoSpaceView (no video stream).
 2. Start the game and sign in on the laptop.
 3. Open the Solar Atlas (M), then **PILOT HMD**. This is the only UI that creates
    a QR pairing invitation.
-4. Ensure the displayed headset URL uses the laptop's network-reachable address,
-   not localhost. Phone and laptop must reach the same server. Scan with the
-   phone. There is no second approval step.
+4. The Atlas automatically suggests a laptop LAN address for the QR link,
+   even when you opened the game at localhost. It prefers Wi-Fi, then wired
+   LAN, and shows other available IPs in the pairing address field. Choose
+   another entry or type a reachable address if the suggestion is wrong.
+   Phone and laptop must reach the same server. Scan with the phone;
+   no second approval step is needed.
 5. On the phone, tap once for fullscreen and optional landscape lock.
 
 The QR code contains a random **single-use invitation**, not the pilot's normal
@@ -51,10 +54,12 @@ From the umbrella root:
     mix assets.build
     DARKORBIT_LAN_HMD=1 iex -S mix phx.server
 
-In development, DARKORBIT_LAN_HMD=1 intentionally enables LAN binding; without it
-Phoenix stays on loopback. Prefer a trusted private hotspot, not a shared or
-untrusted Wi-Fi network. Use the LAN host/IP in the
-Atlas headset URL, including port. Avoid exposing these bearer tokens over an
+In development, DARKORBIT_LAN_HMD=1 intentionally enables LAN binding; without
+it Phoenix stays on loopback. Prefer a trusted private hotspot, not a shared
+or untrusted Wi-Fi network. You can override auto-discovery by setting
+DARKORBIT_HMD_HOST to the preferred laptop hostname or IPv4 address.
+The QR link uses the current page's scheme and port with that host. If there
+are no usable LAN interfaces, manually enter the reachable URL in the Atlas. Avoid exposing these bearer tokens over an
 untrusted network: deploy HTTPS/WSS for networks beyond a trusted local setup.
 Phone landscape, lens alignment and frame rate require hardware testing.
 
