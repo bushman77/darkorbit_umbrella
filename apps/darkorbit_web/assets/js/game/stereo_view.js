@@ -83,7 +83,6 @@ export class StereoSpaceView {
     // The spherical planet is visually scaled by its angular diameter.
     // It must not inherit the tactical map's 3,000-unit clipping limits.
     this.planetaryBody = new PlanetaryBody(THREE, this.scene)
-    this.addSpaceLandmarks()
     this.addCockpit()
     this.beamGroup = new THREE.Group()
     this.scene.add(this.beamGroup)
@@ -110,27 +109,6 @@ export class StereoSpaceView {
     // Stars are an infinitely distant backdrop, never in front of a planet.
     stars.renderOrder = -100
     this.scene.add(stars)
-  }
-
-  addSpaceLandmarks() {
-    const asteroidMaterial = new THREE.MeshStandardMaterial({
-      color: 0x655b68, roughness: 0.94, flatShading: true,
-    })
-    const landmarks = [
-      {x: 1250, y: 1550, z: 240, size: 5.5},
-      {x: 1800, y: 1750, z: -210, size: 8},
-      {x: 860, y: 2100, z: 500, size: 4},
-      {x: 1500, y: 700, z: -400, size: 6},
-    ]
-    for (const marker of landmarks) {
-      const where = toScene(marker)
-      const rock = new THREE.Mesh(
-        new THREE.IcosahedronGeometry(marker.size, 1),
-        asteroidMaterial,
-      )
-      rock.position.set(where.x, where.y, where.z)
-      this.scene.add(rock)
-    }
   }
 
   addCockpit() {
@@ -408,8 +386,9 @@ export class StereoSpaceView {
     const active = feedback && time - feedback.at < LASER_FEEDBACK_MS
     this.sight?.material?.color?.setHex(active ?
       feedback.hit ? 0x79ff9b : 0xff7272 : 0x78e6fc)
-    this.setCamera(client.entities.get(client.selfId))
-    this.planetaryBody.update(client.navComputer?.solarNavigation, this.camera, time)
+    const ownShip = client.entities.get(client.selfId)
+    this.setCamera(ownShip)
+    this.planetaryBody.update(client.navComputer?.solarNavigation, this.camera, time, ownShip)
     this.syncShips(client)
     this.syncBeams(client, time)
     this.updateHud(client, time)
