@@ -25,6 +25,7 @@ import {LiveSocket} from "phoenix_live_view"
 import {hooks as colocatedHooks} from "phoenix-colocated/darkorbit_web"
 import topbar from "../vendor/topbar"
 import {startGameClient} from "./game/client"
+import {startHelmetClient} from "./game/helmet_client.mjs"
 
 const setTheme = theme => {
   if (theme === "system") {
@@ -64,6 +65,7 @@ liveSocket.connect()
 window.liveSocket = liveSocket
 
 startGameClient()
+startHelmetClient()
 
 // The lines below enable quality of life phoenix_live_reload
 // development features:
