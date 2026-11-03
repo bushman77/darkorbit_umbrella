@@ -154,6 +154,15 @@ keyboard pitch/yaw taking priority on any held axis. The feature defaults off
 so the original cockpit behavior is unchanged until deliberately enabled.
 Browser support for Pointer Lock is required for the optional mode.
 
+Mouse steering now buffers the browser's uneven mousemove event bursts, ignores
+zero-delta packets, and eases the yaw/pitch input back to neutral after a short
+idle grace period instead of cutting it off abruptly. If Firefox releases
+pointer lock (for example after Esc, switching windows or opening Atlas),
+the cockpit explicitly displays **MOUSE STEERING PAUSED · CLICK COCKPIT TO
+RESUME**. Click inside the cockpit once to recapture; this is a browser
+security restriction and cannot be bypassed by automatically locking again.
+The saved Atlas mouse setting and sensitivity are unchanged.
+
 See [SBS flight and navigation notes](docs/sbs-3d.md).
 
 ### Rebuild the 3D cockpit JavaScript after changes
