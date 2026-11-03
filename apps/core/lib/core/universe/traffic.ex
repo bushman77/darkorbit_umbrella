@@ -20,29 +20,65 @@ defmodule Core.Universe.Traffic do
   @cruise_speed_km_s 42_000.0
   @freighter_id "traffic:sol:meridian-01"
 
+  @doc """
+  Persistent scheduled ships. Their routes/initial phases are world data, not
+  entities spawned on demand when a player is nearby. Different launch times
+  produce different encounter opportunities without a per-player RNG spawn.
+  """
   @spec seed() :: %{String.t() => map()}
   def seed do
-    vessel = %{
-      id: @freighter_id,
-      call_sign: "Meridian-01",
-      kind: :commercial_freighter,
-      faction_id: "independent",
-      disposition: :neutral,
-      purpose: :scheduled_delivery,
-      state: :in_transit,
-      origin_id: "earth",
-      destination_id: "mars",
-      location_id: "earth",
-      cargo: %{"industrial_machinery" => 120},
-      cruise_speed_km_s: @cruise_speed_km_s,
-      voyage_number: 1,
-      elapsed_ms: 0,
-      dwell_remaining_ms: 0,
-      distance_km: Sol.cruise_distance_km("earth", "mars"),
-      position_km: position!("earth")
-    }
+    routes = [
+      # Preserve the original freighter and its published cargo/route.
+      {"meridian-01", "Meridian-01", :commercial_freighter, :neutral,
+       "earth", "mars", 0.0, :scheduled_delivery,
+       %{"industrial_machinery" => 120}, %{"refined_minerals" => 85}},
+      # Begins > 2M game-km from Earth, but is catchable mid Earth→Venus.
+      {"vesper-02", "Vesper-02", :courier, :neutral,
+       "earth", "venus", 0.22, :express_delivery,
+       %{"medical_supplies" => 48}, %{"civilian_mail" => 120}},
+      {"wayfinder-04", "Wayfinder-04", :survey_vessel, :neutral,
+       "earth", "mars", 0.22, :scientific_survey,
+       %{"survey_equipment" => 25}, %{"rock_samples" => 18}},
+      {"sentinel-07", "Sentinel-07", :patrol, :neutral,
+       "venus", "mercury", 0.40, :sector_patrol,
+       %{"patrol_supplies" => 40}, %{"patrol_supplies" => 40}},
+      {"aurora-12", "Aurora-12", :commercial_freighter, :neutral,
+       "mars", "jupiter", 0.43, :scheduled_delivery,
+       %{"spare_parts" => 72}, %{"rare_ores" => 26}},
+      {"sable-18", "Sable-18", :independent_trader, :neutral,
+       "jupiter", "saturn", 0.37, :trade_route,
+       %{"hydrogen_cells" => 65}, %{"research_data" => 21}}
+    ]
 
-    %{vessel.id => Map.put(vessel, :duration_ms, duration(vessel))}
+    Map.new(routes, fn
+      {suffix, name, kind, disposition, from, to, progress, purpose, outbound, inbound} ->
+        vessel = %{
+          id: "traffic:sol:" <> suffix,
+          call_sign: name,
+          kind: kind,
+          faction_id: "independent",
+          disposition: disposition,
+          purpose: purpose,
+          state: :in_transit,
+          origin_id: from,
+          destination_id: to,
+          home_origin_id: from,
+          home_destination_id: to,
+          location_id: from,
+          cargo: outbound,
+          outbound_cargo: outbound,
+          return_cargo: inbound,
+          cruise_speed_km_s: @cruise_speed_km_s,
+          voyage_number: 1,
+          elapsed_ms: 0,
+          dwell_remaining_ms: 0,
+          distance_km: Sol.cruise_distance_km(from, to),
+          position_km: position!(from)
+        }
+        vessel = Map.put(vessel, :duration_ms, duration(vessel))
+        vessel = advance_vessel(vessel, trunc(vessel.duration_ms * progress))
+        {vessel.id, vessel}
+    end)
   end
 
   @spec advance(map(), non_neg_integer()) :: map()
@@ -99,8 +135,10 @@ defmodule Core.Universe.Traffic do
             purpose: vessel.purpose,
             state: vessel.state,
             cargo: vessel.cargo,
-            message: "Meridian-01, independent freight service. " <>
-              "Scheduled cargo delivery in progress. No assistance requested."
+            message: vessel.call_sign <> ", independent service. " <>
+              "Operating " <> Atom.to_string(vessel.purpose) <>
+              " between " <> vessel.origin_id <> " and " <> vessel.destination_id <>
+              ". No assistance requested."
           }}
         else
           {:error, :contact_out_of_range}
@@ -143,9 +181,12 @@ defmodule Core.Universe.Traffic do
 
     if remaining == 0 do
       origin_id = vessel.location_id
-      destination_id = if origin_id == "mars", do: "earth", else: "mars"
-      cargo = if origin_id == "mars",
-        do: %{"refined_minerals" => 85}, else: %{"industrial_machinery" => 120}
+      destination_id =
+        if origin_id == vessel.home_destination_id,
+          do: vessel.home_origin_id, else: vessel.home_destination_id
+      cargo =
+        if origin_id == vessel.home_destination_id,
+          do: vessel.return_cargo, else: vessel.outbound_cargo
 
       outbound = %{vessel |
         state: :in_transit,
