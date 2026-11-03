@@ -830,6 +830,7 @@ class SpaceClient {
 
   applyPlanetaryWarning(warning, {announce = true} = {}) {
     const view = planetaryWarningView(warning)
+    this.planetaryWarningDisplay = view
     const nextLevel = view?.level || "clear"
     const nextPlanet = warning?.planet_id || null
     const changed = nextLevel !== this.planetaryWarningLevel ||
