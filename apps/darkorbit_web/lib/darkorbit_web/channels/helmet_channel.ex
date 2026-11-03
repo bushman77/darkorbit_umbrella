@@ -32,7 +32,8 @@ defmodule DarkorbitWeb.HelmetChannel do
               |> assign(:helmet_player_id, result.player_id)
               |> assign(:helmet_active, false)}
     else
-      {:error, reason} -> {:error, %{reason: Atom.to_string(reason)}}
+      {:error, reason} when is_atom(reason) -> {:error, %{reason: Atom.to_string(reason)}}
+      {:error, _reason} -> {:error, %{reason: "registration_failed"}}
     end
   end
 
@@ -143,6 +144,7 @@ defmodule DarkorbitWeb.HelmetChannel do
                                       current_player_id: player_id}}) do
     # A QR invitation is only valid while the controlling Atlas channel exists.
     HelmetManager.cancel_pairing(player_id)
+    HelmetManager.set_mode(player_id, :standby)
     :ok
   end
 
