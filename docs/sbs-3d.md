@@ -630,3 +630,29 @@ its small map and first-login spawn for regression compatibility;
 a *return* voyage to Earth does receive a direction-derived position.
 Server restarts reset in-memory voyages and destination metadata.
 
+
+
+## Planetary approach warning bands (2026-11-03)
+
+`Core.World.PlanetaryProximity` derives the warning zone from each
+pilot's server-owned 3D orbital-map position and planet exclusion radius,
+not the screen-space sphere. Clear → CAUTION occurs inside
+**1.55× the lethal boundary**, then CRITICAL inside **1.20×**, while
+the swept `PlanetaryCollision` check still destroys a ship on
+crossing the **1.00× lethal boundary**. These are gameplay bands, not
+real-world atmospheric thresholds.
+
+The authoritative map broadcasts
+`planetary_proximity_changed` **only on level transitions**; each
+`world_state` snapshot also includes a `planetary_warnings` list
+with `entity_id`, `planet_id`, warning level and clearance_km
+for actively threatened living ships. This lets pilots joining a
+zone late see the existing warning without a fake event. The channel
+relays updates, while the cockpit accepts only the warning belonging
+to its own authenticated pilot. Retreat clears it automatically.
+
+The standard 3D cockpit displays amber/red text and current distance
+to the lethal boundary. SBS renders the same warning in the in-world
+stereoscopic instrument texture instead of a central flat overlay.
+Changes of severity are announced to accessibility tools; continuous
+distance changes do not trigger repetitive spoken notifications.
