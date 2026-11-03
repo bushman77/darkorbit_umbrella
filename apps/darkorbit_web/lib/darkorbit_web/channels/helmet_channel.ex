@@ -5,7 +5,7 @@ defmodule DarkorbitWeb.HelmetChannel do
   """
   use DarkorbitWeb, :channel
 
-  alias Darkorbit.World
+  alias Darkorbit.{Helmets, World}
   alias DarkorbitWeb.{HelmetManager, HelmetNetwork}
 
   @map_id "1-1"
@@ -29,7 +29,7 @@ defmodule DarkorbitWeb.HelmetChannel do
     case HelmetManager.viewer_online(self(), player_id, device_id) do
       {:ok, mode} ->
         send(self(), {:helmet_mode, mode})
-        {:ok, %{mode: mode, player_id: player_id},
+        {:ok, %{mode: mode, player_id: player_id, calibration: Helmets.calibration(device_id)},
          socket |> assign(:helmet_role, :viewer)
                 |> assign(:helmet_active, false)}
       {:error, reason} -> {:error, %{reason: Atom.to_string(reason)}}
@@ -73,6 +73,18 @@ defmodule DarkorbitWeb.HelmetChannel do
 
     case HelmetManager.adjust_alignment(player_id, dimension, direction) do
       :ok -> {:reply, {:ok, %{axis: axis, direction: direction}}, socket}
+      {:error, reason} -> {:reply, {:error, %{reason: Atom.to_string(reason)}}, socket}
+    end
+  end
+
+  # Browser saves only after input settles. This write is authenticated by
+  # the helmet socket's device ID, not any client-supplied player/device ID.
+  def handle_in("save_alignment", %{"eye_gap_px" => gap, "eye_sep_mm" => separation},
+                %{assigns: %{helmet_role: :viewer, helmet_device_id: device_id}} = socket)
+      when is_integer(gap) and gap in -160..80 and
+           is_integer(separation) and separation in 40..85 do
+    case Helmets.save_calibration(device_id, gap, separation) do
+      {:ok, saved} -> {:reply, {:ok, saved}, socket}
       {:error, reason} -> {:reply, {:error, %{reason: Atom.to_string(reason)}}, socket}
     end
   end
