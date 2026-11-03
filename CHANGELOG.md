@@ -464,3 +464,13 @@
   completion after resolution, and invalid client decisions.
 - No physical tactical encounter/combat or restart durability yet.
   Mix, npm, asset build and browser/HMD verification are still pending.
+
+### Encounter regression correction (2026-11-03)
+
+- Updated the two-pilot hold test to account for independent Mars-route traffic:
+  pilot 732 can also encounter a vessel, so attempting to resolve pilot 731's
+  courier ID correctly yields `:encounter_mismatch`, not `:no_pending_encounter`.
+- Verify pilot 732 can resolve its own contact and continue moving while pilot
+  731 remains paused. No runtime encounter behavior was changed.
+- User-reported initial run: 11/12 core navigation tests, 18/18 Phoenix
+  channel tests, and asset build succeeded. Revised test awaits execution.

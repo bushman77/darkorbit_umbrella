@@ -245,14 +245,20 @@ defmodule Core.Universe.NavigationTest do
 
     assert {:error, :encounter_decision_required} =
       Navigation.cancel_course(server, 731)
-    assert {:error, :no_pending_encounter} =
+    # Pilot 732 independently crossed another real vessel on the Mars route.
+    # A different pilot's encounter ID must not resolve that contact.
+    assert {:ok, other_before} = Navigation.snapshot(server, 732)
+    assert %{id: other_encounter_id} = other_before.pending_encounter
+    assert other_encounter_id != encounter_id
+    assert {:error, :encounter_mismatch} =
       Navigation.resolve_encounter(server, 732, encounter_id, :continue)
     assert {:error, :encounter_mismatch} =
       Navigation.resolve_encounter(server, 731, "forged:contact", :continue)
     assert {:error, :invalid_encounter_choice} =
       Navigation.resolve_encounter(server, 731, encounter_id, :fight)
 
-    assert {:ok, other_before} = Navigation.snapshot(server, 732)
+    assert {:ok, %{cruise_paused: false}} =
+      Navigation.resolve_encounter(server, 732, other_encounter_id, :continue)
     for _ <- 1..10, do: assert(:ok = Navigation.tick(server))
     assert {:ok, held} = Navigation.snapshot(server, 731)
     assert held.position_km == pilot.position_km
@@ -263,6 +269,7 @@ defmodule Core.Universe.NavigationTest do
     assert {:ok, other_after} = Navigation.snapshot(server, 732)
     assert other_after.elapsed_ms > other_before.elapsed_ms
     assert other_after.position_km != other_before.position_km
+    # Pilot 731 remains held even though pilot 732 resolved its own contact.
 
     assert {:ok, continued} =
       Navigation.resolve_encounter(server, 731, encounter_id, :continue)
