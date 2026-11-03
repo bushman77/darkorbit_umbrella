@@ -3,6 +3,7 @@ import {StereoSpaceView} from "./stereo_view.js"
 import {visualLaserRays} from "./laser_burst.mjs"
 import {laserFeedback} from "./laser_feedback.mjs"
 import {helmetSocketParams} from "./helmet_auth.mjs"
+import {adjustedHelmetAlignment} from "./helmet_alignment.mjs"
 
 const STORAGE_KEY = "darkorbit:pilot_hmd_credential"
 const GAP_KEY = "darkorbit:pilot_hmd_eye_gap"
@@ -63,6 +64,9 @@ export class HelmetClient {
     this.socket.connect()
     this.channel = this.socket.channel("helmet:viewer", {device_name: "Android VR headset"})
     this.channel.on("helmet_mode", ({mode}) => this.setMode(mode))
+    this.channel.on("helmet_alignment_adjust", ({axis, direction}) => {
+      this.adjustAlignmentFromPilot(axis, direction)
+    })
     this.channel.on("helmet_snapshot", ({map, player_id}) => {
       this.selfId = key(player_id)
       this.applyWorld(map)
@@ -100,6 +104,7 @@ export class HelmetClient {
       .receive("ok", ({mode, player_id}) => {
         this.selfId = key(player_id)
         this.setMode(mode)
+        this.reportAlignment()
       })
       .receive("error", ({reason}) => {
         this.message("Helmet viewer connection refused: " + (reason || "unknown"))
@@ -211,11 +216,13 @@ export class HelmetClient {
       this.eyeGapPx = Math.max(0, Math.min(80, Number(gap.value) || 0))
       localStorage.setItem(GAP_KEY, String(this.eyeGapPx))
       this.applyAlignment()
+      this.reportAlignment()
     })
     sep?.addEventListener("input", () => {
       this.eyeSepMm = Math.max(40, Math.min(85, Number(sep.value) || 64))
       localStorage.setItem(EYE_SEP_KEY, String(this.eyeSepMm))
       this.applyAlignment()
+      this.reportAlignment()
     })
 
     fullscreen?.addEventListener("click", async () => {
@@ -254,6 +261,34 @@ export class HelmetClient {
         this.stop()
         if (setup) setup.hidden = false
       }
+    })
+  }
+
+  adjustAlignmentFromPilot(axis, direction) {
+    if (this.mode !== "combat" || !this.immersiveReady || !this.running) return
+    const next = adjustedHelmetAlignment(
+      {eyeGapPx: this.eyeGapPx, eyeSepMm: this.eyeSepMm}, axis, direction)
+    if (!next) return
+
+    this.eyeGapPx = next.eyeGapPx
+    this.eyeSepMm = next.eyeSepMm
+    localStorage.setItem(GAP_KEY, String(this.eyeGapPx))
+    localStorage.setItem(EYE_SEP_KEY, String(this.eyeSepMm))
+
+    const gap = this.root.querySelector("#helmet-eye-gap")
+    const separation = this.root.querySelector("#helmet-eye-sep")
+    if (gap) gap.value = String(this.eyeGapPx)
+    if (separation) separation.value = String(this.eyeSepMm)
+
+    this.applyAlignment()
+    this.reportAlignment()
+  }
+
+  reportAlignment() {
+    if (this.channel?.state !== "joined") return
+    this.channel.push("alignment_state", {
+      eye_gap_px: Math.round(this.eyeGapPx),
+      eye_sep_mm: Math.round(this.eyeSepMm),
     })
   }
 
