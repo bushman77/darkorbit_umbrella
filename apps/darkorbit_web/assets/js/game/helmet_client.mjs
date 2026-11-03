@@ -2,6 +2,7 @@ import {Socket} from "phoenix"
 import {StereoSpaceView} from "./stereo_view.js"
 import {visualLaserRays} from "./laser_burst.mjs"
 import {laserFeedback} from "./laser_feedback.mjs"
+import {helmetSocketParams} from "./helmet_auth.mjs"
 
 const STORAGE_KEY = "darkorbit:pilot_hmd_credential"
 const GAP_KEY = "darkorbit:pilot_hmd_eye_gap"
@@ -25,7 +26,7 @@ export class HelmetClient {
     this.mode = "standby"
     this.immersiveReady = false
     this.windowed = false
-    this.eyeGapPx = Math.max(0, Math.min(80, Number(localStorage.getItem(GAP_KEY)) || 0))
+    this.eyeGapPx = Math.max(0, Math.min(80, Number(localStorage.getItem(GAP_KEY) ?? 8)))
     this.eyeSepMm = Math.max(40, Math.min(85, Number(localStorage.getItem(EYE_SEP_KEY)) || 64))
     this.entities = new Map()
     this.selfId = null
@@ -46,8 +47,7 @@ export class HelmetClient {
     }
 
     this.socket = new Socket("/socket", {
-      params: () => this.pairCode ?
-        {pair_code: this.pairCode} : {helmet_token: this.credential},
+      params: () => helmetSocketParams({pairCode: this.pairCode, credential: this.credential}),
     })
     this.socket.connect()
     this.channel = this.socket.channel("helmet:viewer", {device_name: "Android VR headset"})
