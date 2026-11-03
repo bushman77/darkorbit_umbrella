@@ -20,6 +20,7 @@ defmodule Core.World.MapServer do
   alias Core.World.Movement
   alias Core.World.Orientation
   alias Core.World.PlanetaryCollision
+  alias Core.World.PlanetaryProximity
   alias Core.World.Session
 
   def child_spec(opts) do
@@ -591,10 +592,10 @@ defmodule Core.World.MapServer do
     # Apply one authoritative swept planet test after either manual thrust
     # OR plotted autopilot movement. Even a single fast tick that enters and
     # exits the sphere must register a fatal impact.
-    {entities, impacts} =
+    {entities, impacts, proximity_changes} =
       state.entities
       |> Enum.sort_by(fn {id, _} -> inspect(id) end)
-      |> Enum.reduce({%{}, []}, fn {entity_id, entity}, {entities, impacts} ->
+      |> Enum.reduce({%{}, [], []}, fn {entity_id, entity}, {entities, impacts, changes} ->
         moved =
           cond do
             not Combat.alive?(entity) -> entity
@@ -604,15 +605,34 @@ defmodule Core.World.MapServer do
 
         case PlanetaryCollision.resolve(entity, moved, state.definition) do
           {:ok, safe} ->
-            {Map.put(entities, entity_id, safe), impacts}
+            change =
+              if Combat.alive?(safe) do
+                PlanetaryProximity.transition(
+                  entity_id,
+                  PlanetaryProximity.warning(entity.position, state.definition),
+                  PlanetaryProximity.warning(safe.position, state.definition),
+                  next_tick
+                )
+              end
+
+            changes = if change, do: [change | changes], else: changes
+            {Map.put(entities, entity_id, safe), impacts, changes}
 
           {:crashed, destroyed} ->
+            # A fatal collision is announced by :entity_destroyed, not an
+            # inaccurate 'all clear' or intermediate caution signal.
             {Map.put(entities, entity_id, destroyed),
-             [{entity, destroyed} | impacts]}
+             [{entity, destroyed} | impacts], changes}
         end
       end)
 
     state = %{state | entities: entities, tick: next_tick}
+
+    # Level changes only. Repeated position/clearance changes are available
+    # in the authoritative world snapshot without flooding channel events.
+    Enum.each(Enum.reverse(proximity_changes), fn change ->
+      broadcast(state, :planetary_proximity_changed, change)
+    end)
 
     state =
       impacts
@@ -1138,6 +1158,20 @@ defmodule Core.World.MapServer do
   defp valid_join_entry?(_definition, _entry), do: false
 
   defp public_state(state) do
+    proximity_warnings =
+      state.entities
+      |> Enum.sort_by(fn {id, _entity} -> inspect(id) end)
+      |> Enum.flat_map(fn {id, entity} ->
+        if Combat.alive?(entity) do
+          case PlanetaryProximity.warning(entity.position, state.definition) do
+            nil -> []
+            warning -> [Map.put(warning, :entity_id, id)]
+          end
+        else
+          []
+        end
+      end)
+
     entities =
       (Map.values(state.entities) ++ Map.values(state.npcs))
       |> Enum.sort_by(fn entity -> {entity_sort_order(entity), to_string(entity.id)} end)
@@ -1150,6 +1184,7 @@ defmodule Core.World.MapServer do
         do: state.definition.planet.body_id, else: "earth"),
       tick: state.tick,
       tick_ms: state.tick_ms,
+      planetary_warnings: proximity_warnings,
       boundaries: %{width: state.definition.width, height: state.definition.height},
       volume: %{altitude_min: state.definition.altitude_min,
                 altitude_max: state.definition.altitude_max},
