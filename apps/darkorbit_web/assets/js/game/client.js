@@ -422,6 +422,17 @@ class SpaceClient {
 
   applySolarNavigation(navigation) {
     this.navComputer.setSolarNavigation(navigation)
+    const body = navigation?.planetary_view
+    const planetaryStatus = this.root.querySelector("#planetary-view-status")
+    if (planetaryStatus) {
+      const valid = body?.visual_only === true &&
+        typeof body.body_id === "string" && Number.isFinite(body.angular_diameter_deg)
+      planetaryStatus.hidden = !valid
+      if (valid) {
+        const stage = body.stage === "approach_preview" ? "APPROACH" : "ORBITAL STAGING"
+        planetaryStatus.textContent = `SOL · ${body.body_id.toUpperCase()} · ${stage} · ${body.angular_diameter_deg.toFixed(1)}° APPARENT · VISUAL PREVIEW`
+      }
+    }
     const active=this.inSystemCruise()
     this.root.dataset.propulsionMode=active?"interplanetary_cruise":"conventional"
     const label=this.root.querySelector("#propulsion-status")
