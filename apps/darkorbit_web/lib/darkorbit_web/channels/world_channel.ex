@@ -254,7 +254,8 @@ defmodule DarkorbitWeb.WorldChannel do
   # failure path is authorized by the map's real destroyed ship state.
   def handle_info({:entity_destroyed,
                    %{entity: %{kind: :player, player_id: player_id}} = payload},
-                  %{assigns: %{current_player_id: player_id}} = socket) do
+                  %{assigns: %{current_player_id: current_player_id}} = socket)
+      when player_id == current_player_id do
     case World.solar_snapshot(socket.assigns.world_session_id) do
       {:ok, %{tactical_encounter: %{id: encounter_id}}} ->
         _ = World.solar_finish_tactical(
