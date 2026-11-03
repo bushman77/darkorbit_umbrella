@@ -3,7 +3,7 @@ import {StereoSpaceView} from "./stereo_view.js"
 import {visualLaserRays} from "./laser_burst.mjs"
 import {laserFeedback} from "./laser_feedback.mjs"
 import {helmetSocketParams} from "./helmet_auth.mjs"
-import {adjustedHelmetAlignment} from "./helmet_alignment.mjs"
+import {adjustedHelmetAlignment, HELMET_GAP_MIN, HELMET_GAP_MAX} from "./helmet_alignment.mjs"
 
 const STORAGE_KEY = "darkorbit:pilot_hmd_credential"
 const GAP_KEY = "darkorbit:pilot_hmd_eye_gap"
@@ -23,7 +23,7 @@ export class HelmetClient {
     this.mode = "standby"
     this.immersiveReady = false
     this.windowed = false
-    this.eyeGapPx = Math.max(0, Math.min(80, Number(localStorage.getItem(GAP_KEY) ?? 8)))
+    this.eyeGapPx = Math.max(HELMET_GAP_MIN, Math.min(HELMET_GAP_MAX, Number(localStorage.getItem(GAP_KEY) ?? 8)))
     this.eyeSepMm = Math.max(40, Math.min(85, Number(localStorage.getItem(EYE_SEP_KEY)) || 64))
     this.entities = new Map()
     this.selfId = null
@@ -213,7 +213,7 @@ export class HelmetClient {
     this.updateAlignmentLabels()
 
     gap?.addEventListener("input", () => {
-      this.eyeGapPx = Math.max(0, Math.min(80, Number(gap.value) || 0))
+      this.eyeGapPx = Math.max(HELMET_GAP_MIN, Math.min(HELMET_GAP_MAX, Number(gap.value) || 0))
       localStorage.setItem(GAP_KEY, String(this.eyeGapPx))
       this.applyAlignment()
       this.reportAlignment()
