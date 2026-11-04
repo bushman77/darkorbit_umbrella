@@ -60,7 +60,7 @@ defmodule Darkorbit.Umbrella.MixProject do
       precommit: [
         "compile --warnings-as-errors",
         "deps.unlock --unused",
-        "format",
+        "format --check-formatted",
         "test"
       ]
     ]
