@@ -669,3 +669,22 @@
 ### Mix precommit callback grouping (2026-11-03)
 
 - Reordered only the two private laser-burst helper functions below the contiguous `handle_call/3` callback clauses in `Core.World.MapServer`. This removes Elixir's callback-clause grouping warning under `--warnings-as-errors` without changing gameplay, calculations, or routing. Mix verification remains required on the workstation.
+
+### Deterministic courier test and clean helmet test teardown (2026-11-03)
+
+- Fixed the Earth→Venus courier close-pass test's unit conversion:
+  `Traffic.advance/2` uses milliseconds, while SOL cruise speed is
+  in game-km/second. The test had accidentally multiplied its player's
+  journey distance by 1,000, causing the arrival guard to suppress the
+  encounter. The actual simulated ships pass about 2,708 game-km apart,
+  within the 650,000 game-km encounter radius; production traffic and
+  encounter behavior remain unchanged.
+- Replaced deprecated literal-charlist syntax in HelmetNetwork tests with
+  `~c""`, and avoided floating-point signed-zero pattern warnings in
+  the world volume test.
+- Synchronized HelmetChannel test socket shutdown/revocation before the
+  Ecto SQL sandbox owner exits. This addresses the observed intermittent
+  HelmetManager post-test database disconnect and uses the previously
+  unused remembered helmet channel reference.
+- No combat, merchant AI, shield, equipment, or flight behavior changed.
+  Mix verification still required on the workstation.

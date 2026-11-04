@@ -161,7 +161,13 @@ defmodule DarkorbitWeb.HelmetChannelTest do
     ref = push(control, "adjust_alignment", %{"axis" => "gap", "direction" => 1})
     assert_reply ref, :error, %{reason: "not_in_cockpit"}
 
+    # ChannelTest leave is asynchronous. Observe termination before the
+    # sandbox owner exits, so the global HelmetManager cannot do a delayed
+    # database-backed status notification after the transaction closes.
+    first_viewer_pid = viewer.channel_pid
+    first_viewer_monitor = Process.monitor(first_viewer_pid)
     leave(viewer)
+    assert_receive {:DOWN, ^first_viewer_monitor, :process, ^first_viewer_pid, _}, 1_000
     assert {:ok, _device} = Helmets.authenticate(credential)
 
     # The remembered credential is valid after the first WebSocket leaves.
@@ -172,13 +178,22 @@ defmodule DarkorbitWeb.HelmetChannelTest do
       subscribe_and_join(remembered, HelmetChannel, "helmet:viewer")
     assert restored == %{eye_gap_px: -60, eye_sep_mm: 64}
 
+    remembered_pid = again.channel_pid
+    remembered_monitor = Process.monitor(remembered_pid)
     ref = push(control, "forget", %{})
     assert_reply ref, :ok
+    assert_push "helmet_revoked", %{}
+    assert_receive {:DOWN, ^remembered_monitor, :process, ^remembered_pid, _}, 1_000
     assert :error = Helmets.authenticate(credential)
     assert %{paired: false} = HelmetManager.status(account.id)
 
-    # Revocation stops the viewer channel; do not send a leave to a dead PID.
+    # Wait for controller terminate callbacks, which query device status
+    # through HelmetManager, before the SQL sandbox is released.
+    control_pid = control.channel_pid
+    control_monitor = Process.monitor(control_pid)
     leave(control)
+    assert_receive {:DOWN, ^control_monitor, :process, ^control_pid, _}, 1_000
+    assert %{paired: false, connected: false} = HelmetManager.status(account.id)
   end
 
   test "opening and closing the Atlas pairing panel controls invitation lifetime" do
@@ -201,6 +216,9 @@ defmodule DarkorbitWeb.HelmetChannelTest do
     assert :error = connect(UserSocket, %{"pair_code" => code})
 
     assert %{paired: false, pairing: false} = HelmetManager.status(account.id)
+    control_pid = control.channel_pid
+    control_monitor = Process.monitor(control_pid)
     leave(control)
+    assert_receive {:DOWN, ^control_monitor, :process, ^control_pid, _}, 1_000
   end
 end

@@ -21,7 +21,9 @@ defmodule Core.World.VolumeTest do
 
   test "volume validates altitude while keeping old XY destination input" do
     map = MapDefinition.starting_map()
-    assert {:ok, %Position{z: 0.0}} = Movement.destination(map, {1_000, 1_000})
+    assert {:ok, %Position{z: zero_altitude}} =
+      Movement.destination(map, {1_000, 1_000})
+    assert_in_delta zero_altitude, 0.0, 1.0e-9
     assert {:error, :outside_map} =
              Movement.destination(map, %{x: 1_000, y: 1_000, z: 3_001})
     assert {:error, :outside_map} =

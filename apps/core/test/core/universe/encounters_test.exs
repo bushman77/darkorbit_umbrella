@@ -23,9 +23,16 @@ defmodule Core.Universe.EncountersTest do
   test "the existing Earth-Venus courier is a real close-pass encounter" do
     # Courier began 22% into the route at its own independently advancing
     # 42k game-km/s. Player accelerates through that traffic at 65k km/s.
-    traffic = Traffic.advance(Traffic.seed(), 109_000)
-    cruise = voyage("venus", 109_000.0 * Sol.cruise_speed_km_s() /
-      Sol.cruise_distance_km("earth", "venus"))
+    elapsed_ms = 109_000
+    traffic = Traffic.advance(Traffic.seed(), elapsed_ms)
+    # Traffic.advance/2 accepts milliseconds, but SOL cruise speed is in
+    # game-km/second. Converting units matters: without / 1_000 the pilot
+    # makes the pilot appear to have traveled 1,000 times too far.
+    progress = elapsed_ms / 1_000 * Sol.cruise_speed_km_s() /
+      Sol.cruise_distance_km("earth", "venus")
+    assert progress > 0.05 and progress < 0.95
+
+    cruise = voyage("venus", progress)
 
     assert encounter = Encounters.nearest(traffic, cruise)
     assert encounter.contact_id == "traffic:sol:vesper-02"
