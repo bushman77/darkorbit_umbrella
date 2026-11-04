@@ -1271,4 +1271,84 @@ defmodule Core.WorldTest do
     assert actual.state == :in_transit
   end
 
+
+  @tag no_initial_encounter: true, no_auto_respawn: true
+  test "physical IDs and damaged hull survive the strategic-tactical handoff", context do
+    {:ok, full} = Core.Ships.Condition.initial(context.stats)
+    damaged = %{full | hull: full.hull - 1, shields: 0}
+    opts = Keyword.merge(context.world_options,
+      ship_instance_id: 42_001, combat_condition: damaged)
+    {:ok, session} = World.connect(9_741, context.stats, opts)
+
+    assert {:ok, %{ship_instance_id: 42_001, combat: ^damaged}} =
+             World.ship_condition(session.id, opts)
+    assert {:ok, _} = World.solar_set_course(session.id, "venus", opts)
+    for _ <- 1..85, do: assert(:ok = SolarNavigation.tick(@solar_navigation_server))
+    {:ok, held} = World.solar_snapshot(session.id, opts)
+    encounter_id = held.pending_encounter.id
+
+    assert {:ok, %{enemy: enemy}} = World.solar_enter_tactical(session.id, encounter_id, opts)
+    assert enemy.strategic_vessel_id == held.pending_encounter.contact_id
+    assert {:ok, %{tactical_encounter: nil}} =
+             World.solar_finish_tactical(session.id, encounter_id, :retreat, opts)
+    assert {:ok, %{ship_instance_id: 42_001, combat: ^damaged}} =
+             World.ship_condition(session.id, opts)
+  end
+
+  @tag no_initial_encounter: true, no_auto_respawn: true
+  test "failed persistence retains tactical evidence and exclusive vessel claim", context do
+    opts = context.world_options
+    {:ok, session} = World.connect(9_742, context.stats, opts)
+    assert {:ok, _} = World.solar_set_course(session.id, "venus", opts)
+    for _ <- 1..85, do: assert(:ok = SolarNavigation.tick(@solar_navigation_server))
+    {:ok, held} = World.solar_snapshot(session.id, opts)
+    encounter_id = held.pending_encounter.id
+
+    assert {:ok, %{enemy: enemy}} = World.solar_enter_tactical(session.id, encounter_id, opts)
+    assert {:error, :tactical_encounter_active} = World.disconnect(session.id, opts)
+
+    failing = Keyword.put(opts, :persist_player_condition,
+      fn _ -> {:error, :storage_unavailable} end)
+    assert {:error, :storage_unavailable} =
+             World.solar_finish_tactical(session.id, encounter_id, :retreat, failing)
+
+    [{map_server, _}] = Registry.lookup(@registry, {:world_map, "1-1"})
+    pending = :sys.get_state(map_server).solar_tactical[session.entity_id]
+    assert pending.prepared.outcome == :retreat
+    assert pending.prepared.report.npc.contact_id == enemy.strategic_vessel_id
+    assert :sys.get_state(@solar_navigation_server).tactical_claims != %{}
+    assert {:error, :tactical_settlement_conflict} =
+             World.solar_finish_tactical(session.id, encounter_id, :surrender, opts)
+
+    assert {:ok, %{tactical_encounter: nil}} =
+             World.solar_finish_tactical(session.id, encounter_id, :retreat, opts)
+    assert :sys.get_state(map_server).solar_tactical == %{}
+    assert :sys.get_state(@solar_navigation_server).tactical_claims == %{}
+    assert :ok = World.disconnect(session.id, opts)
+  end
+
+  @tag no_initial_encounter: true, no_auto_respawn: true
+  test "strategic settlement is idempotent if tactical map cleanup is delayed", context do
+    opts = context.world_options
+    {:ok, session} = World.connect(9_743, context.stats, opts)
+    assert {:ok, _} = World.solar_set_course(session.id, "venus", opts)
+    for _ <- 1..85, do: assert(:ok = SolarNavigation.tick(@solar_navigation_server))
+    {:ok, held} = World.solar_snapshot(session.id, opts)
+    encounter_id = held.pending_encounter.id
+
+    assert {:ok, _} = World.solar_enter_tactical(session.id, encounter_id, opts)
+    assert {:ok, verified} = Core.World.MapServer.prepare_solar_tactical(
+      @registry, "1-1", session.id, session.entity_id, encounter_id, :retreat)
+    assert {:ok, %{tactical_encounter: nil}} =
+             SolarNavigation.finish_tactical(@solar_navigation_server, session.entity_id,
+               encounter_id, :retreat, verified.npc)
+
+    assert {:ok, %{tactical_encounter: nil}} =
+             World.solar_finish_tactical(session.id, encounter_id, :retreat, opts)
+    [{map_server, _}] = Registry.lookup(@registry, {:world_map, "1-1"})
+    assert :sys.get_state(map_server).solar_tactical == %{}
+    assert :sys.get_state(@solar_navigation_server).tactical_claims == %{}
+  end
+
+
 end
