@@ -77,3 +77,32 @@ ships using browser or WebKitGTK network diagnostics.
 At scale, a future refinement should calculate map deltas once per
 MapServer tick instead of once per subscribed channel to reduce
 CPU use, while retaining per-subscriber resync and privacy filtering.
+
+## Adaptive replication and deduplication (SBS network pass 2)
+
+The existing `delta_v1` wire format remains unchanged. `WorldChannel`
+performs these **server-side, presentation-only** optimizations:
+
+- Own ship and any actor within 5,000 tactical units: ship motion at 10 Hz
+  (assuming the usual 100 ms simulation tick).
+- More distant actors: ship motion at approximately 2 Hz. Combat condition,
+  targets, status, navigation changes, spawns, and despawns are not delayed.
+- Unchanged worlds: skip the empty delta, with a 1-second heartbeat carrying
+  the current tick. The server continues simulating normally.
+- `npc_movement_started` event is omitted for delta clients because the
+  ordered `world_delta` event from that same simulation tick conveys motion.
+- Repeated identical `movement_started` preview payloads are suppressed and
+  far-actor control previews are omitted. Critical local steering and control
+  acknowledgements remain immediate.
+
+The per-channel baseline always represents **the last transmitted projected
+world**. Skipped ticks cannot silently advance the baseline, so client-side
+`base_tick` checks and `world_resync` remain valid. Remote motion is never
+used to determine hits, collisions or state settlement: all mechanics still
+run at full frequency on the Elixir map server.
+
+Run `mix test apps/darkorbit_web/test/darkorbit_web/world_stream_policy_test.exs`
+and the world-channel integration tests after pulling. These tests validate
+motion cadence, the no-op heartbeat, immediate surrender/damage changes,
+and duplicate preview suppression. Byte savings depend on scene density and
+flight patterns; profile real sockets before extrapolating capacity.

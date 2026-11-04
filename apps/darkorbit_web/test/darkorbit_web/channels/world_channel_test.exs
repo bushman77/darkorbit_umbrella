@@ -830,6 +830,57 @@ defmodule DarkorbitWeb.WorldChannelTest do
     leave_and_wait(joined)
   end
 
+  test "delta stream suppresses unchanged frames and maintains a heartbeat" do
+    account = verified_player_account_fixture()
+    {:ok, socket} = authenticated_socket(account)
+    {:ok, response, joined} =
+      subscribe_and_join(socket, WorldChannel, "world:1-1", %{"stream" => "delta_v1"})
+
+    assert response.stream == "delta_v1"
+    first_tick = response.map.tick
+    for _ <- 1..9 do
+      assert {:ok, _} = World.tick()
+    end
+    refute_push "world_delta", _, 0
+
+    assert {:ok, _} = World.tick()
+    expected_tick = first_tick + 10
+    assert_push "world_delta", %{base_tick: ^first_tick, tick: ^expected_tick, entities: []}
+    leave_and_wait(joined)
+  end
+
+  test "delta input feedback deduplicates identical movement previews" do
+    account = verified_player_account_fixture()
+    {:ok, socket} = authenticated_socket(account)
+    {:ok, _response, joined} =
+      subscribe_and_join(socket, WorldChannel, "world:1-1", %{"stream" => "delta_v1"})
+
+    entity = %{id: account.id, player_id: account.id, position_3d: %{x: 1, y: 2, z: 3},
+      attitude: %{yaw: 0, pitch: 0, roll: 0}}
+
+    send(joined.channel_pid, {:movement_started, entity})
+    assert_push "movement_delta", %{id: _}
+
+    send(joined.channel_pid, {:movement_started, entity})
+    refute_push "movement_delta", _
+
+    send(joined.channel_pid, {:movement_started,
+      %{entity | position_3d: %{x: 2, y: 2, z: 3}}})
+    assert_push "movement_delta", %{position_3d: %{x: 2}}
+    leave_and_wait(joined)
+  end
+
+  test "delta stream does not duplicate NPC movement events" do
+    account = verified_player_account_fixture()
+    {:ok, socket} = authenticated_socket(account)
+    {:ok, _response, joined} =
+      subscribe_and_join(socket, WorldChannel, "world:1-1", %{"stream" => "delta_v1"})
+
+    send(joined.channel_pid, {:npc_movement_started, %{id: "scow:1"}})
+    refute_push "npc_movement_started", _
+    leave_and_wait(joined)
+  end
+
   defp authenticated_socket(account) do
     connect(UserSocket, %{"token" => GameAuth.socket_token(account)})
   end

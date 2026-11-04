@@ -3,7 +3,7 @@ defmodule DarkorbitWeb.WorldChannel do
 
   alias Darkorbit.World
   alias Core.Universe.OrbitalEntry
-  alias DarkorbitWeb.WorldStreamDelta
+  alias DarkorbitWeb.{WorldStreamDelta, WorldStreamPolicy}
 
   @impl true
   def join("world:" <> map_id, payload,
@@ -228,7 +228,9 @@ defmodule DarkorbitWeb.WorldChannel do
   def handle_in("world_resync", _payload,
                 %{assigns: %{world_stream: :delta_v1, map_id: map_id}} = socket) do
     case World.snapshot(map_id) do
-      {:ok, map} -> {:reply, {:ok, %{map: map}}, assign(socket, :world_baseline, map)}
+      {:ok, map} ->
+        {:reply, {:ok, %{map: map}},
+         socket |> assign(:world_baseline, map) |> assign(:movement_previews, %{})}
       {:error, reason} -> {:reply, {:error, %{reason: error_reason(reason)}}, socket}
     end
   end
@@ -237,23 +239,59 @@ defmodule DarkorbitWeb.WorldChannel do
   def handle_info({:world_state, %{tick: tick} = map},
                   %{assigns: %{world_stream: :delta_v1, world_baseline: %{tick: base} = old}} = socket) do
     if tick > base do
-      push(socket, "world_delta", WorldStreamDelta.between(old, map))
-      {:noreply, assign(socket, :world_baseline, map)}
+      # Apply per-pilot spatial relevance ONLY to visual motion. The owned ship,
+      # nearby ships, damage and tactical state always replicate immediately.
+      projected = WorldStreamPolicy.project(map, old, socket.assigns.current_player_id)
+      delta = WorldStreamDelta.between(old, projected)
+
+      if WorldStreamPolicy.transmit?(delta, map.tick_ms) do
+        push(socket, "world_delta", delta)
+        {:noreply, assign(socket, :world_baseline, projected)}
+      else
+        # Keep the last *transmitted* baseline; subsequent updates are diffed
+        # against what the client actually has, not the untransmitted tick.
+        {:noreply, socket}
+      end
     else
       {:noreply, socket}
     end
   end
 
-  # Keep low-latency input feedback without rebroadcasting static ship fields.
+  # The next world_delta is broadcast in the same ordered MapServer tick.
+  # Forwarding a complete NPC entity here would duplicate that payload.
+  def handle_info({:npc_movement_started, _entity},
+                  %{assigns: %{world_stream: :delta_v1}} = socket) do
+    {:noreply, socket}
+  end
+
+  # Flight-control input is acknowledged immediately. Send only changed
+  # presentation fields, suppressing repeated mouse-control heartbeats and
+  # distant ship previews; authoritative position remains tick-driven.
   def handle_info({:movement_started, entity},
                   %{assigns: %{world_stream: :delta_v1}} = socket) do
-    patch = Map.take(entity, [
-      :id, :position_3d, :destination_3d, :route_waypoints_3d,
-      :navigation_mode, :flight_mode, :throttle, :forward_speed,
-      :attitude, :orientation, :angular_velocity, :velocity
-    ])
-    push(socket, "movement_delta", patch)
-    {:noreply, socket}
+    own = Enum.find(socket.assigns.world_baseline.entities, fn candidate ->
+      Map.get(candidate, :player_id) == socket.assigns.current_player_id
+    end)
+
+    if own && Map.get(entity, :id) != own.id &&
+         not WorldStreamPolicy.near?(own, entity) do
+      {:noreply, socket}
+    else
+      patch = Map.take(entity, [
+        :id, :position_3d, :destination_3d, :route_waypoints_3d,
+        :navigation_mode, :flight_mode, :throttle, :forward_speed,
+        :attitude, :orientation, :angular_velocity, :velocity
+      ])
+      previews = socket.assigns[:movement_previews] || %{}
+
+      if Map.get(previews, entity.id) === patch do
+        {:noreply, socket}
+      else
+        push(socket, "movement_delta", patch)
+        {:noreply, assign(socket, :movement_previews,
+          Map.put(previews, entity.id, patch))}
+      end
+    end
   end
 
   @impl true
@@ -384,7 +422,8 @@ defmodule DarkorbitWeb.WorldChannel do
          |> assign(:map_id, map_id)
          |> assign(:world_session_id, session.id)
          |> assign(:world_stream, if(delta?, do: :delta_v1, else: :full))
-         |> assign(:world_baseline, snapshot)}
+         |> assign(:world_baseline, snapshot)
+         |> assign(:movement_previews, %{})}
     else
       {:error, reason} ->
         _result = World.disconnect(session.id)
