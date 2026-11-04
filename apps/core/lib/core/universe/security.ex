@@ -34,7 +34,9 @@ defmodule Core.Universe.Security do
   Pressure is a relative 0..1 balancing weight, not a per-tick random roll.
   """
   @spec assess(term(), keyword()) :: {:ok, assessment()} | {:error, atom()}
-  def assess(position, opts \\ []) when is_list(opts) do
+  def assess(position, opts \\ [])
+
+  def assess(position, opts) when is_list(opts) do
     zones = Keyword.get(opts, :zones, Territory.zones())
     reputations = Keyword.get(opts, :reputations, %{})
     warrants = Keyword.get(opts, :wanted_factions, %{})

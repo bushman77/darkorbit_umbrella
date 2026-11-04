@@ -641,3 +641,27 @@
   visible label no longer falsely says Garnet when Beryl or Sapphire is
   equipped.
 - Elixir/Mix tests remain unrun in the editing environment.
+
+
+### Sunracer post-test regression cleanup (2026-11-03)
+
+- Updated the two remaining Core.WorldTest Phoenix/40-damage expectations
+  to actual Sunracer Garnet 10-damage combat: 6 shield + 4 hull damage
+  per hit against the legacy Dart, and 108/237 after the second shot.
+- Fixed the client entity spawn object assigning `angle` twice.
+  Initial orientation now uses the server-provided numeric heading
+  with route bearing as a visual fallback, while keeping
+  `navigationAngle` as a separate presentation field.
+- The 2026-11-03 workstation log reported Core.WorldTest 35/37 passed,
+  204/204 Node tests passed, equipment controller 5/5 passed,
+  world channel 21/21 passed, and successful assets.build (with
+  duplicate-key warning). These changes target the two remaining
+  failures and that build warning; retesting is required.
+
+- Corrected SOL zone-boundary quadratic roots to divide scalar numerators
+  instead of single-element tuples; existing TerritoryTest crossing cases
+  exercise this real runtime-error path.
+- Grouped default-argument declarations in Factions.patrol_directive/2
+  and Security.assess/2; removed an unused collision binding and an
+  unused equipment-controller test variable. The MapServer handle_call/3
+  grouping warning remains and does not by itself imply a test failure.

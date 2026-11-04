@@ -89,8 +89,6 @@ defmodule DarkorbitWeb.EquipmentControllerTest do
     account = verified_player_account_fixture()
     other = verified_player_account_fixture()
     {:ok, _} = Inventory.add_equipment(other.id, "sapphire", 1)
-    conn = signed_in(conn, account)
-
     for params <- [
       %{"config" => "1", "field" => "lasers", "slot" => "0", "item_id" => "sapphire"},
       %{"config" => "1", "field" => "lasers", "slot" => "1", "item_id" => "beryl"},

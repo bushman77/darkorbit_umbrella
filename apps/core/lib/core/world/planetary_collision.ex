@@ -17,7 +17,7 @@ defmodule Core.World.PlanetaryCollision do
 
   @spec resolve(Entity.t(), Entity.t(), MapDefinition.t()) ::
           {:ok, Entity.t()} | {:crashed, Entity.t()}
-  def resolve(%Entity{} = previous, %Entity{} = moved, %MapDefinition{planet: nil}),
+  def resolve(%Entity{}, %Entity{} = moved, %MapDefinition{planet: nil}),
     do: {:ok, moved}
 
   def resolve(%Entity{status: :destroyed}, %Entity{} = moved, %MapDefinition{}),

@@ -52,7 +52,9 @@ defmodule Core.Factions do
   """
   @spec patrol_directive(term(), keyword()) ::
           {:ok, %{band: band(), directive: directive()}} | {:error, atom()}
-  def patrol_directive(reputation, opts \\ []) when is_list(opts) do
+  def patrol_directive(reputation, opts \\ [])
+
+  def patrol_directive(reputation, opts) when is_list(opts) do
     wanted = Keyword.get(opts, :wanted, false)
 
     with {:ok, standing} <- band(reputation),

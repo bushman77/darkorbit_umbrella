@@ -383,16 +383,18 @@ defmodule Core.WorldTest do
 
     assert near_id == near_npc.id
     assert {:ok, attack} = World.attack(session.id, context.world_options)
-    assert attack.damage == 40
-    assert attack.shield_damage == 24
-    assert attack.hull_damage == 16
+    # The starter Sunracer has a Garnet laser (10), which penetrates
+    # the Dart's 60%-absorbing shields for 6 shield / 4 hull damage.
+    assert attack.damage == 10
+    assert attack.shield_damage == 6
+    assert attack.hull_damage == 4
     assert attack.destroyed == false
     assert {:error, :weapon_cooldown} = World.attack(session.id, context.world_options)
 
     assert {:ok, after_attack} = World.snapshot("1-1", context.world_options)
     damaged = Enum.find(after_attack.entities, &(&1.id == near_npc.id))
-    assert damaged.shields == 96
-    assert damaged.hull == 229
+    assert damaged.shields == 114
+    assert damaged.hull == 241
   end
 
   test "laser hit actually reduces shields at 3,200 game units", context do
@@ -532,8 +534,8 @@ defmodule Core.WorldTest do
 
     assert {:ok, first_tick} = World.tick("1-1", context.world_options)
     first_target = Enum.find(first_tick.entities, &(&1.id == npc_id))
-    assert first_target.shields == 96
-    assert first_target.hull == 229
+    assert first_target.shields == 114
+    assert first_target.hull == 241
     assert_receive {"1-1", :laser_fired, %{attacker_id: :engaged_pilot, target_id: ^npc_id}}
 
     for expected_tick <- 2..7 do
@@ -542,13 +544,13 @@ defmodule Core.WorldTest do
 
     assert {:ok, cooling_down} = World.snapshot("1-1", context.world_options)
     cooling_target = Enum.find(cooling_down.entities, &(&1.id == npc_id))
-    assert cooling_target.shields == 96
-    assert cooling_target.hull == 229
+    assert cooling_target.shields == 114
+    assert cooling_target.hull == 241
 
     assert {:ok, eighth_tick} = World.tick("1-1", context.world_options)
     eighth_target = Enum.find(eighth_tick.entities, &(&1.id == npc_id))
-    assert eighth_target.shields == 72
-    assert eighth_target.hull == 213
+    assert eighth_target.shields == 108
+    assert eighth_target.hull == 237
   end
 
   test "out-of-range engagement pauses while navigation remains independent", context do

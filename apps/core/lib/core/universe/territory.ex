@@ -171,7 +171,10 @@ defmodule Core.Universe.Territory do
     else
       root = :math.sqrt(discriminant)
 
-      [{{-b - root} / (2.0 * a), :entered}, {{-b + root} / (2.0 * a), :exited}]
+      # Fraction is a scalar, not a one-element tuple. Tuple braces here
+      # previously caused an arithmetic error when a route entered a ZOC.
+      [{(-b - root) / (2.0 * a), :entered},
+       {(-b + root) / (2.0 * a), :exited}]
       |> Enum.flat_map(fn {fraction, kind} ->
         if fraction > 0.0 and fraction < 1.0 do
           [

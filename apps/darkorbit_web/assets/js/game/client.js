@@ -571,7 +571,11 @@ class SpaceClient {
         playerId: entity.player_id == null ? null : entityKey(entity.player_id),
         npcTypeId: entity.npc_type_id,
         shipClass: entity.ship_class || null,
-        angle: Number.isFinite(entity.angle) ? entity.angle : 0,
+        // Trust the server's actual heading where present. Otherwise use
+        // a route-derived initial bearing as a visual-only fallback.
+        angle: Number.isFinite(entity.angle) ? entity.angle : destination
+          ? Math.atan2(destination.y - target.y, destination.x - target.x)
+          : -Math.PI / 2,
         course: entity.course || null,
         displayName: entity.display_name,
         render: {...target},
@@ -604,9 +608,6 @@ class SpaceClient {
         state: entity.state,
         status: entity.status,
         navigationAngle: destination
-          ? Math.atan2(destination.y - target.y, destination.x - target.x)
-          : -Math.PI / 2,
-        angle: destination
           ? Math.atan2(destination.y - target.y, destination.x - target.x)
           : -Math.PI / 2,
       })
