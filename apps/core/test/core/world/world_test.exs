@@ -1314,6 +1314,11 @@ defmodule Core.WorldTest do
 
     [{map_server, _}] = Registry.lookup(@registry, {:world_map, "1-1"})
     pending = :sys.get_state(map_server).solar_tactical[session.entity_id]
+    # Both combatants are frozen until the map, DB and SOL owners agree.
+    assert {:error, :entity_not_found} =
+             World.move(session.id, %{x: 1_100, y: 1_100}, opts)
+    assert {:ok, %{combat: _frozen_condition}} =
+             World.ship_condition(session.id, opts)
     assert pending.prepared.outcome == :retreat
     assert pending.prepared.report.npc.contact_id == enemy.strategic_vessel_id
     assert :sys.get_state(@solar_navigation_server).tactical_claims != %{}
@@ -1324,6 +1329,8 @@ defmodule Core.WorldTest do
              World.solar_finish_tactical(session.id, encounter_id, :retreat, opts)
     assert :sys.get_state(map_server).solar_tactical == %{}
     assert :sys.get_state(@solar_navigation_server).tactical_claims == %{}
+    assert {:ok, %{combat: _restored_condition}} =
+             World.ship_condition(session.id, opts)
     assert :ok = World.disconnect(session.id, opts)
   end
 
