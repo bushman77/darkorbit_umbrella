@@ -711,3 +711,15 @@ validation remain deferred.
   unexpected OTP restarts, plus explicit salvage/claim lifecycle
 - [ ] Add authenticated market and cargo surrender transfers using locked
   inventories; do not mint rewards from local combat actors
+
+### Lightweight NPC cognition V1 — Symbrella-derived (planned)
+
+Source: [Symbrella `symbolic_generation`](https://github.com/bushman77/Symbrella/tree/symbolic_generation). Extract **only bounded, reusable symbolic mechanisms**; do not embed the complete Symbrella brain or companion runtime in the MMO.
+
+- [ ] **Structured perception + bounded working memory:** feed server-authorized encounter events (contact, attack, damage, assistance) into a small per-character active context. Adapt the relevant retention/admission ideas from `Brain.WorkingMemory` / `Brain.WM`; no natural-language parsing of game events.
+- [ ] **Scoped episodic memory:** adapt `Brain.Hippocampus.Recall`'s scoped, recency-weighted retrieval to structured NPC episodes. Persist only salient encounters, with the remembering **character** identified separately from the strategic ship and tactical actor.
+- [ ] **Goal and decision policy:** extract small pure, testable patterns from `Brain.GoalStack` / `Brain.ActionSelector` for goals such as trade, survive, threaten, surrender, and retreat. Produce *intentions*, never direct writes to combat, inventory, navigation, or ownership state; the authoritative game server validates and executes them.
+- [ ] **Prewritten dialogue:** render approved lines from the chosen intent, NPC role/personality, and encounter context. Support bounded player dialogue choices; no generative dialogue or LLM.
+- [ ] **First vertical slice:** one merchant captain recalls a prior attack or rescue, chooses an appropriate goal/response, and retains memory across tactical encounters and a server restart. Add deterministic tests for identity isolation, recall, intention validation, and fallback when cognition is unavailable.
+
+**Non-goals for V1:** dictionary/brain-cell import, LIFG language parsing or lambda sentence composition, full Thalamus/ACC/OFC/DLPFC/neuromodulator processes, image/camera input, llama.cpp, and a GenServer per NPC. Keep Symbrella's personal companion identity/memory completely separate. Run cognition outside the map tick; reuse the existing bounded `Core.NPC.AI` for movement/combat, with safe deterministic fallback. Benchmark CPU, RAM, and decision latency before scaling NPC counts.
