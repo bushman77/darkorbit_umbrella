@@ -93,4 +93,21 @@ defmodule Darkorbit.WorldTest do
   end
 
 
+
+  test "an interrupted prepared departure is recovered on the next authenticated connect" do
+    account = player_account_fixture()
+    assert {:ok, first} = World.connect(account.id)
+
+    assert {:ok, %{player_id: player_id}} = Core.World.prepare_disconnect(first.id)
+    assert player_id == account.id
+    assert {:ok, true} = Core.World.pending_disconnect?(first.id)
+
+    assert {:ok, second} = World.connect(account.id)
+    on_exit(fn -> World.disconnect(second.id) end)
+    assert second.id != first.id
+    assert {:error, :session_not_found} = Core.World.ship_condition(first.id)
+    assert {:ok, false} = Core.World.pending_disconnect?(second.id)
+  end
+
+
 end

@@ -447,6 +447,9 @@ defmodule Core.Universe.NavigationTest do
       Navigation.finish_tactical(server, 1_100, first_id, :retreat, report)
     assert {:ok, %{tactical_encounter: nil}} =
        Navigation.finish_tactical(server, 1_100, first_id, :retreat, report)
+    assert {:error, :tactical_settlement_conflict} =
+       Navigation.finish_tactical(server, 1_100, first_id, :retreat,
+         %{report | contact_id: "forged"})
     assert :sys.get_state(server).tactical_claims == %{}
     assert :sys.get_state(server).traffic[contact_id].combat == report.combat
 

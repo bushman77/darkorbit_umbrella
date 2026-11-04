@@ -1351,4 +1351,22 @@ defmodule Core.WorldTest do
   end
 
 
+
+  @tag no_initial_encounter: true
+  test "prepared disconnect detaches and freezes an entity until durable save succeeds", context do
+    opts = context.world_options
+    {:ok, session} = World.connect(:departing_ship, context.stats, opts)
+    assert {:ok, %{combat: initial}} = World.prepare_disconnect(session.id, opts)
+    assert {:ok, true} = World.pending_disconnect?(session.id, opts)
+    assert {:ok, %{combat: ^initial}} = World.prepare_disconnect(session.id, opts)
+    assert {:error, :entity_not_found} =
+             World.move(session.id, %{x: 1_100, y: 1_100}, opts)
+
+    assert {:ok, snapshot} = World.snapshot("1-1", opts)
+    refute Enum.any?(snapshot.entities, &(&1.id == :departing_ship))
+    assert :ok = World.disconnect(session.id, opts)
+    assert {:error, :session_not_found} = World.prepare_disconnect(session.id, opts)
+  end
+
+
 end
