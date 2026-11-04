@@ -8,12 +8,14 @@ defmodule Core.Universe.Traffic do
   and hails are derived from server-owned positions; players do not create or
   steer the freighter by encountering it.
 
-  State currently survives player disconnects and tactical sessions while the
-  supervised world runs. Database persistence across server restarts and
-  tactical encounter instancing are explicitly later milestones.
+  State survives player disconnects and tactical sessions while the
+  supervised world runs. Tactical instances borrow the vessel's current
+  condition and reconcile it on exit. Database persistence across server
+  restarts and genuinely shared tactical arenas are later milestones.
   """
 
   alias Core.Universe.Sol
+  alias Core.NPC.Catalog, as: NPCCatalog
 
   @sensor_radius_km 2_000_000.0
   @dock_ms 45_000
@@ -68,6 +70,8 @@ defmodule Core.Universe.Traffic do
           home_destination_id: to,
           location_id: from,
           cargo: outbound,
+          combat: initial_condition(kind),
+          settled_encounters: MapSet.new(),
           outbound_cargo: outbound,
           return_cargo: inbound,
           cruise_speed_km_s: @cruise_speed_km_s,
@@ -151,6 +155,8 @@ defmodule Core.Universe.Traffic do
             home_destination_id: from_id,
             location_id: to_id,
             cargo: cargo,
+            combat: initial_condition(kind),
+            settled_encounters: MapSet.new(),
             outbound_cargo: cargo,
             return_cargo: cargo,
             cruise_speed_km_s: @cruise_speed_km_s,
@@ -173,24 +179,132 @@ defmodule Core.Universe.Traffic do
   def launch_contact(_ships, _from, _to, _serial, _archetype, _progress),
     do: {:error, :invalid_contact}
 
+  @doc """
+  Advance every ship on the SOL clock. A vessel currently leased to a
+  tactical encounter continues toward its destination but cannot finish
+  its strategic voyage and reuse its voyage number while combat is active.
+  Its procedural lifetime also cannot expire until the lease is released.
+  """
   @spec advance(map(), non_neg_integer()) :: map()
-  def advance(ships, elapsed_ms)
-      when is_map(ships) and is_integer(elapsed_ms) and elapsed_ms >= 0 do
+  @spec advance(map(), non_neg_integer(), MapSet.t(String.t())) :: map()
+  def advance(ships, elapsed_ms, active_contact_ids \\ MapSet.new())
+
+  def advance(ships, elapsed_ms, active_contact_ids)
+      when is_map(ships) and is_integer(elapsed_ms) and elapsed_ms >= 0 and
+           is_struct(active_contact_ids, MapSet) do
     ships
     |> Enum.reduce(%{}, fn {id, vessel}, result ->
-      if Map.get(vessel, :procedural?, false) do
-        lifetime = vessel.lifetime_remaining_ms - elapsed_ms
+      leased? = MapSet.member?(active_contact_ids, id)
+      allowed_ms =
+        if leased? and vessel.state == :in_transit do
+          max(0, min(elapsed_ms, vessel.duration_ms - vessel.elapsed_ms - 1))
+        else
+          elapsed_ms
+        end
 
-        if lifetime <= 0 do
+      updated = advance_vessel(vessel, allowed_ms)
+
+      if Map.get(vessel, :procedural?, false) do
+        remaining = vessel.lifetime_remaining_ms - elapsed_ms
+
+        if remaining <= 0 and not leased? do
           result
         else
-          updated = advance_vessel(vessel, elapsed_ms)
-          Map.put(result, id, %{updated | lifetime_remaining_ms: lifetime})
+          Map.put(result, id, %{updated | lifetime_remaining_ms: max(1, remaining)})
         end
       else
-        Map.put(result, id, advance_vessel(vessel, elapsed_ms))
+        Map.put(result, id, updated)
       end
     end)
+  end
+
+  @doc """
+  Commit the only authoritative combat result against an existing strategic
+  vessel and voyage. These fields are produced by the map-owned simulation,
+  never by a player payload. A settlement is recorded at most once and can
+  only decrease the preexisting hull/shields. Cargo is never awarded here.
+  """
+  @spec settle(map(), map(), map(), atom()) :: {:ok, map()} | {:error, atom()}
+  def settle(ships, %{contact_id: id, voyage_number: voyage, encounter_id: encounter_id},
+             report, outcome)
+      when is_map(ships) and is_binary(id) and is_integer(voyage) and
+           is_binary(encounter_id) and is_map(report) do
+    case Map.fetch(ships, id) do
+      :error -> {:error, :unknown_contact}
+      {:ok, vessel} ->
+        old = vessel.combat
+        settled = Map.get(vessel, :settled_encounters, MapSet.new())
+
+        cond do
+          MapSet.member?(settled, encounter_id) ->
+            {:error, :already_settled}
+
+          vessel.voyage_number != voyage ->
+            {:error, :stale_voyage}
+
+          old.status != :alive ->
+            {:error, :vessel_unavailable}
+
+          not valid_report?(old, report, outcome) ->
+            {:error, :invalid_combat_report}
+
+          true ->
+            updated_combat = Map.take(report, [:hull, :max_hull, :shields, :max_shields, :status])
+            state =
+              case outcome do
+                :victory -> :destroyed
+                :surrender -> :disabled
+                _ -> if(report.status == :surrendered, do: :disabled,
+                       else: vessel.state)
+              end
+
+            updated =
+              vessel
+              |> Map.put(:combat, updated_combat)
+              |> Map.put(:state, state)
+              |> Map.put(:settled_encounters, MapSet.put(settled, encounter_id))
+
+            {:ok, Map.put(ships, id, updated)}
+        end
+    end
+  end
+
+  def settle(_ships, _identity, _report, _outcome), do: {:error, :invalid_combat_report}
+
+  defp valid_report?(old, report, outcome) do
+    expected_status =
+      case outcome do
+        :victory -> :destroyed
+        :surrender -> :surrendered
+        value when value in [:retreat, :defeat, :escaped] -> :alive
+        _ -> :invalid
+      end
+
+    # A pilot may retreat (or be defeated) after the merchant has already
+    # surrendered; the surrender remains real, but cargo is not awarded.
+    reported_status = Map.get(report, :status)
+    compatible_status? =
+      reported_status == expected_status or
+        (outcome in [:retreat, :defeat] and reported_status == :surrendered)
+
+    expected_status != :invalid and compatible_status? and
+      Map.get(report, :max_hull) == old.max_hull and
+      Map.get(report, :max_shields) == old.max_shields and
+      is_integer(Map.get(report, :hull)) and
+      is_integer(Map.get(report, :shields)) and
+      report.hull >= 0 and report.hull <= old.hull and
+      report.shields >= 0 and report.shields <= old.shields and
+      (reported_status == :destroyed) == (report.hull == 0) and
+      (reported_status == :surrendered or report.hull > 0)
+  end
+
+  defp initial_condition(kind) do
+    definition = NPCCatalog.fetch!(ship_class(kind))
+    %{
+      hull: definition.max_hull, max_hull: definition.max_hull,
+      shields: definition.max_shields, max_shields: definition.max_shields,
+      status: :alive
+    }
   end
 
   @doc """
@@ -204,7 +318,7 @@ defmodule Core.Universe.Traffic do
     |> Enum.flat_map(fn vessel ->
       distance = distance(vessel.position_km, position)
 
-      if distance <= @sensor_radius_km do
+      if distance <= @sensor_radius_km and vessel.combat.status != :destroyed do
         [%{
           id: vessel.id,
           call_sign: vessel.call_sign,
@@ -232,6 +346,8 @@ defmodule Core.Universe.Traffic do
   def hail(ships, position, id) when is_binary(id) and is_map(ships) do
     case Map.fetch(ships, id) do
       :error -> {:error, :unknown_contact}
+      {:ok, %{combat: %{status: :destroyed}}} ->
+        {:error, :unknown_contact}
       {:ok, vessel} ->
         if distance(vessel.position_km, position) <= @sensor_radius_km do
           {:ok, hail_response(vessel)}
@@ -254,6 +370,7 @@ defmodule Core.Universe.Traffic do
   @spec hail_established(map(), String.t()) :: {:ok, map()} | {:error, atom()}
   def hail_established(ships, id) when is_map(ships) and is_binary(id) do
     case Map.fetch(ships, id) do
+      {:ok, %{combat: %{status: :destroyed}}} -> {:error, :unknown_contact}
       {:ok, vessel} -> {:ok, hail_response(vessel)}
       :error -> {:error, :unknown_contact}
     end
@@ -284,6 +401,11 @@ defmodule Core.Universe.Traffic do
   def sensor_radius_km, do: @sensor_radius_km
 
   defp advance_vessel(vessel, 0), do: vessel
+
+  # Destroyed and disabled ships keep their identity/manifest but cannot
+  # complete deliveries, produce return cargo, or spawn a new voyage.
+  defp advance_vessel(%{state: state} = vessel, _delta_ms)
+       when state in [:destroyed, :disabled], do: vessel
 
   defp advance_vessel(%{state: :in_transit} = vessel, delta_ms) do
     remaining = max(0, vessel.duration_ms - vessel.elapsed_ms)

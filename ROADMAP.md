@@ -691,3 +691,23 @@ validation remain deferred.
   cargo transfer from a surrendered/destroyed strategic vessel.
 - [ ] Reconcile persistent strategic NPC identity with temporary tactical
   encounter actor before implementing real cargo theft/loot.
+
+### Strategic-to-tactical vessel reconciliation (2026-11-03)
+
+- [x] Give scheduled and procedural SOL ships canonical combat conditions,
+  inherited by tactical NPC actors rather than reset at each encounter
+- [x] Bind tactical encounters to contact ID and traffic voyage number
+- [x] Enforce one active tactical claim per real vessel, even with two pilots
+- [x] Reconcile observed hull/shields on retreat, defeat and autonomous escape
+- [x] Leave surrendered merchants disabled and destroyed ships as tombstones
+- [x] Preserve strategic cargo unchanged and reject duplicate/stale reports
+- [x] Keep tactical-claimed procedural contacts alive until resolution
+- [x] Cover claim contention, tampering, persistent damage, surrender,
+  destruction, and autonomous escape with headless regression cases
+- [ ] Run Mix tests and check-only precommit on the Elixir workstation
+- [ ] Introduce a genuinely shared mid-space battle bubble with multiple
+  pilots targeting the same physical NPC simultaneously
+- [ ] Add durable DB snapshots and recovery of in-flight settlement on
+  unexpected OTP restarts, plus explicit salvage/claim lifecycle
+- [ ] Add authenticated market and cargo surrender transfers using locked
+  inventories; do not mint rewards from local combat actors

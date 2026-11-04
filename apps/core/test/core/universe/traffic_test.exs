@@ -185,4 +185,112 @@ defmodule Core.Universe.TrafficTest do
       Traffic.launch_contact(full, "earth", "venus", 33, :patrol, 0.5)
   end
 
+
+  test "a settled retreat preserves hull, shields, route, cargo and vessel identity" do
+    fleet = Traffic.seed()
+    original = fleet["traffic:sol:meridian-01"]
+    identity = %{contact_id: original.id, voyage_number: original.voyage_number,
+                 encounter_id: "flyby:traffic:sol:meridian-01:1"}
+    report = %{original.combat | hull: 180, shields: 20}
+
+    assert {:ok, settled} = Traffic.settle(fleet, identity, report, :retreat)
+    survivor = settled[original.id]
+    assert survivor.combat == report
+    assert survivor.cargo == original.cargo
+    assert survivor.voyage_number == original.voyage_number
+    assert survivor.origin_id == original.origin_id
+    assert survivor.destination_id == original.destination_id
+    assert survivor.state == :in_transit
+    assert MapSet.member?(survivor.settled_encounters, identity.encounter_id)
+
+    assert {:error, :already_settled} =
+      Traffic.settle(settled, identity, report, :retreat)
+    assert {:error, :stale_voyage} =
+      Traffic.settle(settled, %{identity | voyage_number: 2},
+        %{report | hull: 170}, :retreat)
+
+    moved = Traffic.advance(settled, 1_000)[original.id]
+    assert moved.position_km != survivor.position_km
+    assert moved.combat == report
+  end
+
+  test "forged heals, false victories, invalid identities and negative reports are rejected" do
+    fleet = Traffic.seed()
+    vessel = fleet["traffic:sol:vesper-02"]
+    identity = %{contact_id: vessel.id, voyage_number: 1, encounter_id: "original-encounter"}
+
+    assert {:error, :invalid_combat_report} =
+      Traffic.settle(fleet, identity, %{vessel.combat | hull: 211}, :retreat)
+    assert {:error, :invalid_combat_report} =
+      Traffic.settle(fleet, identity, %{vessel.combat | shields: -1}, :retreat)
+    assert {:error, :invalid_combat_report} =
+      Traffic.settle(fleet, identity, vessel.combat, :victory)
+    assert {:error, :invalid_combat_report} =
+      Traffic.settle(fleet, identity, %{vessel.combat | status: :surrendered}, :retreat)
+    assert {:error, :unknown_contact} =
+      Traffic.settle(fleet, %{identity | contact_id: "forged"}, vessel.combat, :retreat)
+  end
+
+  test "surrender disables a real merchant without resetting or awarding its cargo" do
+    fleet = Traffic.seed()
+    vessel = fleet["traffic:sol:vesper-02"]
+    identity = %{contact_id: vessel.id, voyage_number: 1, encounter_id: "held-courier"}
+    report = %{vessel.combat | hull: 70, shields: 0, status: :surrendered}
+
+    assert {:ok, settled} = Traffic.settle(fleet, identity, report, :surrender)
+    disabled = settled[vessel.id]
+    assert disabled.state == :disabled
+    assert disabled.combat == report
+    assert disabled.cargo == vessel.cargo
+    assert Traffic.advance(settled, 90_000)[vessel.id] == disabled
+    assert {:error, :vessel_unavailable} =
+      Traffic.settle(settled, %{identity | encounter_id: "second"},
+        %{report | hull: 60}, :surrender)
+
+    # A pilot retreating after a captain has surrendered cannot magically
+    # reactivate the surrendered merchant or reset its cargo manifest.
+    assert {:ok, abandoned} =
+      Traffic.settle(fleet, identity, report, :retreat)
+    assert abandoned[vessel.id].state == :disabled
+    assert abandoned[vessel.id].cargo == vessel.cargo
+  end
+
+  test "a destroyed vessel remains a tombstone and can never dock or reproduce its cargo" do
+    fleet = Traffic.seed()
+    vessel = fleet["traffic:sol:meridian-01"]
+    identity = %{contact_id: vessel.id, voyage_number: 1, encounter_id: "combat-kill"}
+    report = %{vessel.combat | hull: 0, shields: 0, status: :destroyed}
+    assert {:ok, settled} = Traffic.settle(fleet, identity, report, :victory)
+
+    destroyed = settled[vessel.id]
+    assert destroyed.state == :destroyed
+    assert destroyed.combat.status == :destroyed
+    assert destroyed.cargo == vessel.cargo
+    assert Traffic.advance(settled, vessel.duration_ms * 3)[vessel.id] == destroyed
+    refute Enum.any?(Traffic.contacts(settled, vessel.position_km),
+      &(&1.id == vessel.id))
+    assert {:error, :unknown_contact} =
+      Traffic.hail_established(settled, vessel.id)
+    assert {:error, :already_settled} =
+      Traffic.settle(settled, identity, report, :victory)
+  end
+
+  test "a leased procedural vessel cannot vanish or start a new voyage during combat" do
+    {:ok, fleet} =
+      Traffic.launch_contact(Traffic.seed(), "earth", "venus", 100,
+        :independent_trader, 0.5)
+    vessel = fleet["traffic:sol:cruise-100"]
+    active = MapSet.new([vessel.id])
+
+    held = Traffic.advance(fleet, 1_000_000, active)
+    after_hold = held[vessel.id]
+    assert after_hold != nil
+    assert after_hold.voyage_number == vessel.voyage_number
+    assert after_hold.state == :in_transit
+    assert after_hold.elapsed_ms < after_hold.duration_ms
+    assert after_hold.lifetime_remaining_ms == 1
+
+    assert Traffic.advance(held, 1_000)[vessel.id] == nil
+  end
+
 end

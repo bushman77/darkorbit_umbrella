@@ -157,7 +157,7 @@ defmodule Core.World.MapServer do
 
   @doc "Server-authorized victory verification or safe retreat."
   @spec finish_solar_tactical(atom(), String.t(), pos_integer(), term(), String.t(), atom()) ::
-          :ok | {:error, term()}
+          {:ok, map()} | {:error, term()}
   def finish_solar_tactical(registry, map_id, session_id, player_id, encounter_id, outcome)
       when outcome in [:victory, :retreat, :defeat, :surrender] do
     call_map(registry, map_id,
@@ -304,6 +304,7 @@ defmodule Core.World.MapServer do
          :ok <- living_attacker(ship),
          false <- Map.has_key?(state.solar_tactical, player_id),
          {:ok, base} <- NPCCatalog.fetch(ship_class, NPCCatalog.all()),
+         :ok <- validate_tactical_condition(route, base),
          {:ok, spawn} <- solar_tactical_position(state.definition, ship),
          {:ok, cruise_course} <- tactical_course(ship_class, route, spawn, state.definition) do
       type_id = "solar-" <> ship_class <> "-" <> Integer.to_string(player_id)
@@ -313,6 +314,9 @@ defmodule Core.World.MapServer do
         spawn: %{base.spawn | map_id: state.definition.id, positions: [spawn],
           patrol_radius: 180.0}}
       npc = NPCEntity.spawn(definition, 0, state.tick_ms)
+      # Use the physical vessel's carried-forward damage; do not mint a
+      # fresh 210-hull Scow on every interception of the same traffic ID.
+      npc = %{npc | hull: route.combat.hull, shields: route.combat.shields}
       npc =
         if cruise_course do
           %{npc | state: :cruise, destination: cruise_course.destination,
@@ -330,6 +334,8 @@ defmodule Core.World.MapServer do
           npc_definitions: Map.put(state.npc_definitions, type_id, definition),
           solar_tactical: Map.put(state.solar_tactical, player_id,
             %{encounter_id: encounter_id, npc_id: npc.id, type_id: type_id,
+              contact_id: route.contact_id, voyage_number: route.voyage_number,
+              last_combat: nil,
               navigation_player_id: ship.player_id, provoked?: aggressive?})
         }
         broadcast(updated, :npc_spawned, public_entity(npc))
@@ -353,6 +359,13 @@ defmodule Core.World.MapServer do
       cond do
         outcome == :victory and present != nil ->
           {:reply, {:error, :enemy_still_active}, state}
+
+        outcome == :victory and
+            (ongoing.last_combat == nil or ongoing.last_combat.status != :destroyed) ->
+          {:reply, {:error, :enemy_not_destroyed}, state}
+
+        outcome in [:retreat, :defeat] and present == nil ->
+          {:reply, {:error, :enemy_missing}, state}
 
         outcome == :surrender and (present == nil or present.state != :surrendered) ->
           {:reply, {:error, :enemy_not_surrendered}, state}
@@ -395,7 +408,9 @@ defmodule Core.World.MapServer do
                 disengagement_payload(entity, :target_removed, state.tick))
             end
           end)
-          {:reply, :ok, updated}
+          final_condition = if present, do: tactical_combat_report(present),
+            else: ongoing.last_combat
+          {:reply, {:ok, tactical_report(ongoing, final_condition)}, updated}
       end
     else
       :error -> {:reply, {:error, :no_tactical_encounter}, state}
@@ -889,7 +904,8 @@ defmodule Core.World.MapServer do
           case {current.solar_navigation_server, held.navigation_player_id} do
             {server, player_id} when not is_nil(server) and
                                      is_integer(player_id) and player_id > 0 ->
-              _ = SolarNavigation.finish_tactical(server, player_id, held.encounter_id, :escaped)
+              _ = SolarNavigation.finish_tactical(server, player_id, held.encounter_id,
+                :escaped, tactical_report(held, tactical_combat_report(npc)))
 
             _ ->
               :ok
@@ -1073,11 +1089,23 @@ defmodule Core.World.MapServer do
         end
       end)
 
+    # Retain the final map-verified state of a destroyed NPC after removing
+    # its geometry. World.solar_finish_tactical/4 uses this for settlement.
+    tactical =
+      Map.new(state.solar_tactical, fn {owner, held} ->
+        if held.npc_id == npc.id do
+          {owner, %{held | last_combat: tactical_combat_report(npc)}}
+        else
+          {owner, held}
+        end
+      end)
+
     state = %{
       state
       | entities: entities,
         npcs: Map.delete(state.npcs, npc.id),
-        respawns: respawns
+        respawns: respawns,
+        solar_tactical: tactical
     }
 
     Enum.each(cleared_entities, fn entity ->
@@ -1315,6 +1343,49 @@ defmodule Core.World.MapServer do
   end
 
   defp maybe_scow_survival(npc), do: npc
+
+  defp validate_tactical_condition(
+         %{contact_id: id, voyage_number: voyage, combat: combat},
+         definition)
+       when is_binary(id) and byte_size(id) > 0 and
+            is_integer(voyage) and voyage > 0 and is_map(combat) do
+    hull = Map.get(combat, :hull)
+    shields = Map.get(combat, :shields)
+
+    if Map.get(combat, :status) == :alive and
+         Map.get(combat, :max_hull) == definition.max_hull and
+         Map.get(combat, :max_shields) == definition.max_shields and
+         is_integer(hull) and hull > 0 and hull <= definition.max_hull and
+         is_integer(shields) and shields >= 0 and shields <= definition.max_shields do
+      :ok
+    else
+      {:error, :invalid_tactical_condition}
+    end
+  end
+
+  defp validate_tactical_condition(_route, _definition),
+    do: {:error, :invalid_tactical_condition}
+
+  defp tactical_combat_report(npc) do
+    status =
+      cond do
+        npc.status == :destroyed -> :destroyed
+        npc.state == :surrendered -> :surrendered
+        true -> :alive
+      end
+
+    %{
+      hull: npc.hull, max_hull: npc.max_hull,
+      shields: npc.shields, max_shields: npc.max_shields,
+      status: status
+    }
+  end
+
+  defp tactical_report(held, combat) do
+    %{encounter_id: held.encounter_id,
+      contact_id: held.contact_id, voyage_number: held.voyage_number,
+      combat: combat}
+  end
 
   defp tactical_course("scow", %{origin_id: from, destination_id: to}, spawn, map),
     do: CruiseRoute.project(from, to, spawn, map)

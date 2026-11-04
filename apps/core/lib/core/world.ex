@@ -88,12 +88,19 @@ defmodule Core.World do
     with {:ok, session} <- fetch_session(sessions, session_id),
          {:ok, navigation} <-
            SolarNavigation.enter_tactical(server, session.player_id, encounter_id) do
-      aggressive? = navigation.tactical_encounter.classification != :neutral_flyby
+      tactical = navigation.tactical_encounter
+      aggressive? = tactical.classification != :neutral_flyby
+      # These values originated in SOL Traffic, not the client. They tie the
+      # map actor to the particular physical vessel and voyage being held.
+      route =
+        tactical.course
+        |> Map.put(:contact_id, tactical.contact_id)
+        |> Map.put(:voyage_number, tactical.voyage_number)
+        |> Map.put(:combat, tactical.combat)
 
       case MapServer.start_solar_tactical(registry, session.map_id, session.id,
-             session.entity_id, encounter_id, navigation.tactical_encounter.call_sign,
-             navigation.tactical_encounter.ship_class, aggressive?,
-             navigation.tactical_encounter.course) do
+             session.entity_id, encounter_id, tactical.call_sign,
+             tactical.ship_class, aggressive?, route) do
         {:ok, enemy} ->
           {:ok, %{navigation: navigation, enemy: enemy}}
 
@@ -118,9 +125,10 @@ defmodule Core.World do
     with {:ok, session} <- fetch_session(sessions, session_id),
          {:ok, %{tactical_encounter: %{id: ^encounter_id}}} <-
            SolarNavigation.snapshot(server, session.player_id),
-         :ok <- MapServer.finish_solar_tactical(registry, session.map_id,
+         {:ok, verified} <- MapServer.finish_solar_tactical(registry, session.map_id,
            session.id, session.entity_id, encounter_id, outcome) do
-      SolarNavigation.finish_tactical(server, session.player_id, encounter_id, outcome)
+      SolarNavigation.finish_tactical(server, session.player_id, encounter_id,
+        outcome, verified)
     else
       {:ok, %{tactical_encounter: nil}} -> {:error, :no_tactical_encounter}
       {:ok, _} -> {:error, :encounter_mismatch}

@@ -1217,3 +1217,43 @@ mix assets.build
 ```
 All tests and browser/HMD acceptance require local execution. No new
 database tables/migrations or branches were created.
+
+### Strategic ↔ tactical ship identity reconciliation (2026-11-03)
+
+Each live SOL traffic vessel now owns the definitive combat condition:
+`combat: %{hull, max_hull, shields, max_shields, status}`. Scheduled
+and procedural ships initialize this condition from the authoritative NPC
+class catalog once, not at every player encounter. The tactical map actor
+is a temporary simulation projection of exactly one `contact_id` and
+`voyage_number`.
+
+A pilot must hold a real navigation encounter before entering tactical
+combat. `Core.Universe.Navigation` grants an exclusive per-vessel combat
+claim, verifies the original strategic voyage is still live, and passes the
+stored condition to `Core.World.MapServer`. A second pilot cannot create
+a separate simultaneous battle with that same ship, but their own navigation
+hold remains available for a later decision.
+
+All tactical exits produce a server-calculated, identity-bound combat
+report. `Core.Universe.Traffic.settle/4` checks voyage identity, rejects
+damage reports that heal or invent hull/shields, validates the outcome, and
+records the encounter ID to prevent double settlement. A retreat, pilot
+defeat, or escaped contact retains its damage and continues its SOL
+route. Surrender disables the physical vessel in place; destruction leaves
+a non-traversing tombstone instead of allowing the ship to dock and
+generate return cargo. Existing manifests are unchanged; no cargo or credit
+is granted during this pass.
+
+SOL traffic continues to move while a tactical claim is active, but that
+ship cannot finish its current strategic voyage (or expire from a procedural
+lifetime) until combat is resolved. Automatic Scow lane exit invokes the
+same authoritative settlement even if the pilot's websocket disconnects.
+
+**Scope / limits:** State is durable only within the supervised world
+runtime, not persisted to PostgreSQL across server restarts. Tactical
+encounters still use the current orbital map and a per-pilot local actor;
+this is exclusive-claim reconciliation, not a shared multi-player battle
+bubble. Cargo transfer, salvage, damageable subsystems, surrender trade,
+NPC recovery and fault-tolerant settlement between independent GenServers
+remain separate next milestones. No browser command accepts a combat
+report or names a ship to settle.

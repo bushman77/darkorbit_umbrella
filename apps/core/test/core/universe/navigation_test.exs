@@ -411,4 +411,77 @@ defmodule Core.Universe.NavigationTest do
     assert voyage.cruise_paused == false
   end
 
+
+  test "two pilots cannot claim the same merchant; settlement carries damage into the next fight",
+       %{server: server} do
+    assert {:ok, _} = Navigation.set_course(server, 1_100, "venus")
+    assert {:ok, _} = Navigation.set_course(server, 1_101, "venus")
+    for _ <- 1..85, do: assert(:ok = Navigation.tick(server))
+
+    {:ok, first} = Navigation.snapshot(server, 1_100)
+    {:ok, second} = Navigation.snapshot(server, 1_101)
+    first_id = first.pending_encounter.id
+    second_id = second.pending_encounter.id
+    contact_id = "traffic:sol:vesper-02"
+    assert first.pending_encounter.contact_id == contact_id
+    assert second.pending_encounter.contact_id == contact_id
+
+    assert {:ok, %{tactical_encounter: tactical}} =
+      Navigation.enter_tactical(server, 1_100, first_id)
+    assert tactical.contact_id == contact_id
+    assert tactical.voyage_number == 1
+    assert tactical.combat == :sys.get_state(server).traffic[contact_id].combat
+    assert {:error, :vessel_engaged} =
+      Navigation.enter_tactical(server, 1_101, second_id)
+    assert {:error, :tactical_report_required} =
+      Navigation.finish_tactical(server, 1_100, first_id, :retreat)
+
+    report = %{contact_id: contact_id, encounter_id: first_id, voyage_number: 1,
+      combat: %{tactical.combat | hull: 175, shields: 18}}
+
+    assert {:error, :tactical_report_mismatch} =
+      Navigation.finish_tactical(server, 1_100, first_id, :retreat,
+        %{report | contact_id: "forged"})
+
+    assert {:ok, %{cruise_paused: false}} =
+      Navigation.finish_tactical(server, 1_100, first_id, :retreat, report)
+    assert {:error, :no_tactical_encounter} =
+      Navigation.finish_tactical(server, 1_100, first_id, :retreat, report)
+    assert :sys.get_state(server).tactical_claims == %{}
+    assert :sys.get_state(server).traffic[contact_id].combat == report.combat
+
+    assert {:ok, %{tactical_encounter: next_tactical}} =
+      Navigation.enter_tactical(server, 1_101, second_id)
+    assert next_tactical.combat == report.combat
+    assert {:ok, _} =
+      Navigation.finish_tactical(server, 1_101, second_id, :rollback)
+    assert :sys.get_state(server).tactical_claims == %{}
+  end
+
+  test "a destroyed merchant cannot be intercepted again by another held pilot",
+       %{server: server} do
+    assert {:ok, _} = Navigation.set_course(server, 1_120, "venus")
+    assert {:ok, _} = Navigation.set_course(server, 1_121, "venus")
+    for _ <- 1..85, do: assert(:ok = Navigation.tick(server))
+    {:ok, first} = Navigation.snapshot(server, 1_120)
+    {:ok, second} = Navigation.snapshot(server, 1_121)
+    id = first.pending_encounter.id
+    assert second.pending_encounter.id == id
+
+    assert {:ok, %{tactical_encounter: tactical}} =
+      Navigation.enter_tactical(server, 1_120, id)
+    report = %{
+      contact_id: tactical.contact_id, encounter_id: id,
+      voyage_number: tactical.voyage_number,
+      combat: %{tactical.combat | hull: 0, shields: 0, status: :destroyed}
+    }
+    assert {:ok, %{pending_encounter: nil}} =
+      Navigation.finish_tactical(server, 1_120, id, :victory, report)
+    assert {:error, :vessel_unavailable} =
+      Navigation.enter_tactical(server, 1_121, id)
+    assert {:ok, %{pending_encounter: nil}} =
+      Navigation.resolve_encounter(server, 1_121, id, :continue)
+    assert :sys.get_state(server).traffic[tactical.contact_id].state == :destroyed
+  end
+
 end

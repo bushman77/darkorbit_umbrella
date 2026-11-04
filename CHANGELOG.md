@@ -688,3 +688,20 @@
   unused remembered helmet channel reference.
 - No combat, merchant AI, shield, equipment, or flight behavior changed.
   Mix verification still required on the workstation.
+
+### SOL vessel identity and combat state reconciliation (2026-11-03)
+
+- SOL Traffic now owns hull, shields, survival state and settlement history
+  for its physical, voyage-identified merchants and other encounter ships.
+- Navigation reserves a physical vessel for one tactical encounter at a
+  time and checks the strategic voyage identity before spawning a map NPC.
+- Tactical map actors inherit existing damage. Their server-verified exit
+  reports drive one-time Traffic settlement on victory, surrender, retreat,
+  defeat and autonomous lane escape.
+- Destroyed vessels remain non-travelling tombstones; surrendered vessels
+  are disabled and no cargo is granted or reset by finishing combat.
+- Procedural TTL and strategic voyage transitions are suspended at the
+  boundary for actively claimed vessels to avoid ghost/duplicate ships.
+- Added pure Traffic, Navigation and world integration regression cases.
+  Database durability and shared-instance multiplayer combat remain TODO.
+- Changes have not been executed with Mix in this editing environment.

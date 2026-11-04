@@ -6,13 +6,13 @@ defmodule Core.Universe.Navigation do
   Earth as a new pilot's start location, and real-time sublight interplanetary
   cruise through compressed game-scale system coordinates.
   Navigation and map-space combat are separate: no AU values are mapped into
-  Sector 1-1 coordinates. Strategic traffic runs continuously even when no player is connected;
-  close passes produce server-held, hailable decisions with genuine
-  server-owned relative positions, but not tactical combat NPC instances.
+  Sector 1-1 coordinates. Strategic traffic runs continuously even when no player
+  is connected; close passes are held against shared, server-owned vessels,
+  with exclusive tactical leases and damage reconciliation on settlement.
 
   Voyages and traffic persist within the supervised server runtime and
   advance independently of player sessions. Database persistence across
-  restarts, live orbital positions and tactical encounter handoffs remain
+  restarts, live orbital positions and shared tactical arenas remain
   future milestones. Never accept player_id from a browser payload.
   """
 
@@ -66,12 +66,23 @@ defmodule Core.Universe.Navigation do
     GenServer.call(server, {:enter_tactical, player_id, encounter_id})
   end
 
-  @doc "Finish or roll back a server-authorized tactical encounter."
+  @doc """
+  Roll back a failed tactical spawn, or settle a map-verified outcome.
+  Completed outcomes MUST include the authoritative combat report returned
+  by MapServer. There is no client-facing settlement API.
+  """
   @spec finish_tactical(GenServer.server(), pos_integer(), String.t(), atom()) ::
           {:ok, map()} | {:error, atom()}
   def finish_tactical(server, player_id, encounter_id, outcome)
       when is_integer(player_id) and player_id > 0 do
-    GenServer.call(server, {:finish_tactical, player_id, encounter_id, outcome})
+    finish_tactical(server, player_id, encounter_id, outcome, nil)
+  end
+
+  @spec finish_tactical(GenServer.server(), pos_integer(), String.t(), atom(), map() | nil) ::
+          {:ok, map()} | {:error, atom()}
+  def finish_tactical(server, player_id, encounter_id, outcome, report)
+      when is_integer(player_id) and player_id > 0 do
+    GenServer.call(server, {:finish_tactical, player_id, encounter_id, outcome, report})
   end
 
   @doc "Hail an in-range contact; identity and position come from the server."
@@ -96,6 +107,9 @@ defmodule Core.Universe.Navigation do
       voyages: %{},
       traffic: Keyword.get(opts, :traffic, Traffic.seed()),
       encountered: %{},
+      # At most one pilot owns a given physical vessel during a tactical
+      # encounter. Leases are bound to its current traffic voyage number.
+      tactical_claims: %{},
       # Server-owned reputation fixtures until the faction ledger is connected.
       # Never supplied by Phoenix client payloads or exposed in public snapshots.
       pilot_reputations: Keyword.get(opts, :pilot_reputations, %{}),
@@ -220,12 +234,27 @@ defmodule Core.Universe.Navigation do
           [:hostile_contact, :patrol_attention, :neutral_flyby] ->
         {:reply, {:error, :not_a_combat_encounter}, state}
 
+      not Map.has_key?(state.traffic, voyage.pending_encounter.contact_id) ->
+        {:reply, {:error, :vessel_unavailable}, state}
+
+      Map.has_key?(state.tactical_claims, voyage.pending_encounter.contact_id) ->
+        {:reply, {:error, :vessel_engaged}, state}
+
+      not available_vessel?(state.traffic[voyage.pending_encounter.contact_id],
+            voyage.pending_encounter) ->
+        {:reply, {:error, :vessel_unavailable}, state}
+
       true ->
+        contact = Map.fetch!(state.traffic, voyage.pending_encounter.contact_id)
         # Retain pending_encounter as the authoritative suspended decision.
         # The UI shows the combat cockpit instead of the modal during combat.
-        tactical = %{id: encounter_id, contact_id: voyage.pending_encounter.contact_id,
-          call_sign: voyage.pending_encounter.call_sign,
-          ship_class: Map.get(voyage.pending_encounter, :ship_class, "dart"),
+        tactical = %{id: encounter_id, contact_id: contact.id,
+          voyage_number: contact.voyage_number,
+          call_sign: contact.call_sign,
+          ship_class: contact.ship_class,
+          # MapServer receives this authoritative initial combat condition.
+          # It must never create a fresh, fully repaired clone.
+          combat: contact.combat,
           # Both endpoints came from the shared SOL vessel when the close
           # pass was detected. No client can submit or overwrite the route.
           course: %{
@@ -235,12 +264,16 @@ defmodule Core.Universe.Navigation do
           classification: voyage.pending_encounter.classification}
         updated = %{voyage | tactical_encounter: tactical}
         state = put_voyage(state, player_id, updated)
+        state = %{state | tactical_claims: Map.put(state.tactical_claims,
+          contact.id, %{player_id: player_id, encounter_id: encounter_id,
+            voyage_number: contact.voyage_number})}
         broadcast(state, player_id, updated)
         {:reply, {:ok, public(updated, state, player_id)}, state}
     end
   end
 
-  def handle_call({:finish_tactical, player_id, encounter_id, outcome}, _from, state) do
+  def handle_call({:finish_tactical, player_id, encounter_id, outcome, report},
+                  _from, state) do
     {voyage, state} = ensure_player(state, player_id)
 
     cond do
@@ -253,22 +286,61 @@ defmodule Core.Universe.Navigation do
       outcome not in [:rollback, :victory, :retreat, :defeat, :escaped, :surrender] ->
         {:reply, {:error, :invalid_encounter_outcome}, state}
 
+      outcome != :rollback and not is_map(report) ->
+        {:reply, {:error, :tactical_report_required}, state}
+
+      outcome != :rollback and not is_map(Map.get(report, :combat)) ->
+        {:reply, {:error, :tactical_report_required}, state}
+
+      outcome != :rollback and
+          (Map.get(report, :contact_id) != voyage.tactical_encounter.contact_id or
+           Map.get(report, :voyage_number) != voyage.tactical_encounter.voyage_number or
+           Map.get(report, :encounter_id) != encounter_id) ->
+        {:reply, {:error, :tactical_report_mismatch}, state}
+
       true ->
-        # Victory/retreat/ship escape resume the interrupted SOL route. Defeat cancels
-        # it and returns the navigator to the origin staging region; the
-        # destroyed local ship is respawned by the ordinary reconnect path.
-        updated =
-          case outcome do
-            :rollback -> %{voyage | tactical_encounter: nil}
-            :defeat ->
-              %{idle(voyage.location_id) |
-                arrival_origin_id: voyage.arrival_origin_id,
-                voyage_number: voyage.voyage_number}
-            _ -> %{voyage | tactical_encounter: nil, pending_encounter: nil}
+        tactical = voyage.tactical_encounter
+        claim = Map.get(state.tactical_claims, tactical.contact_id)
+
+        if claim != %{player_id: player_id, encounter_id: encounter_id,
+                       voyage_number: tactical.voyage_number} do
+          {:reply, {:error, :tactical_claim_mismatch}, state}
+        else
+          settlement =
+            if outcome == :rollback do
+              {:ok, state.traffic}
+            else
+              Traffic.settle(state.traffic,
+                %{contact_id: tactical.contact_id, encounter_id: encounter_id,
+                  voyage_number: tactical.voyage_number},
+                report.combat, outcome)
+            end
+
+          case settlement do
+            {:error, reason} ->
+              {:reply, {:error, reason}, state}
+
+            {:ok, traffic} ->
+              updated =
+                case outcome do
+                  :rollback -> %{voyage | tactical_encounter: nil}
+
+                  :defeat ->
+                    %{idle(voyage.location_id) |
+                      arrival_origin_id: voyage.arrival_origin_id,
+                      voyage_number: voyage.voyage_number}
+
+                  _ ->
+                    %{voyage | tactical_encounter: nil, pending_encounter: nil}
+                end
+
+              state = %{state | traffic: traffic,
+                tactical_claims: Map.delete(state.tactical_claims, tactical.contact_id)}
+              state = put_voyage(state, player_id, updated)
+              broadcast(state, player_id, updated)
+              {:reply, {:ok, public(updated, state, player_id)}, state}
           end
-        state = put_voyage(state, player_id, updated)
-        broadcast(state, player_id, updated)
-        {:reply, {:ok, public(updated, state, player_id)}, state}
+        end
     end
   end
 
@@ -329,7 +401,8 @@ defmodule Core.Universe.Navigation do
   defp advance(state) do
     old_traffic = state.traffic
     # Strategic traffic advances even if no pilot has ever joined.
-    state = %{state | traffic: Traffic.advance(state.traffic, state.tick_ms)}
+    held = state.tactical_claims |> Map.keys() |> MapSet.new()
+    state = %{state | traffic: Traffic.advance(state.traffic, state.tick_ms, held)}
 
     Enum.reduce(state.voyages, state, fn
       {player_id, %{status: :traveling} = voyage}, current ->
@@ -432,6 +505,26 @@ defmodule Core.Universe.Navigation do
       end
     else
       state
+    end
+  end
+
+  defp available_vessel?(contact, encounter) when is_map(contact) do
+    combat = Map.get(contact, :combat, %{})
+
+    Map.get(contact, :voyage_number) == voyage_number(encounter.id) and
+      Map.get(contact, :state) == :in_transit and
+      is_map(combat) and Map.get(combat, :status) == :alive and
+      is_integer(Map.get(combat, :hull)) and combat.hull > 0
+  end
+
+  defp available_vessel?(_contact, _encounter), do: false
+
+  # The original encounter ID embeds the strategic voyage number; refuse
+  # entry if that vessel has since completed the identified voyage.
+  defp voyage_number(encounter_id) do
+    case String.split(encounter_id, ":") |> List.last() |> Integer.parse() do
+      {value, ""} -> value
+      _ -> -1
     end
   end
 

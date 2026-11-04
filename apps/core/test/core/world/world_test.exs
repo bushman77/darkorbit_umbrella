@@ -956,6 +956,15 @@ defmodule Core.WorldTest do
     assert resumed.tactical_encounter == nil
     refute resumed.cruise_paused
     assert :sys.get_state(map_pid).solar_tactical == %{}
+
+    # Damage belongs to the original shared traffic vessel, not the
+    # temporary NPC that was removed on retreat.
+    real_contact_id = held.pending_encounter.contact_id
+    survivor = :sys.get_state(@solar_navigation_server).traffic[real_contact_id]
+    assert survivor.combat.hull == defending.hull
+    assert survivor.combat.shields == defending.shields
+    assert survivor.state == :in_transit
+    assert survivor.cargo == %{"medical_supplies" => 48}
   end
 
   @tag no_initial_encounter: true, no_auto_respawn: true
@@ -1009,6 +1018,16 @@ defmodule Core.WorldTest do
     assert resumed.tactical_encounter == nil
     refute resumed.cruise_paused
     refute Map.has_key?(:sys.get_state(pid).npcs, enemy.id)
+
+    # A surrender must leave the same cargo with the same disabled vessel.
+    contact = :sys.get_state(@solar_navigation_server).traffic[held.pending_encounter.contact_id]
+    assert contact.combat == %{hull: 68, max_hull: 210, shields: 0,
+                               max_shields: 45, status: :surrendered}
+    assert contact.state == :disabled
+    assert contact.cargo == %{"medical_supplies" => 48}
+    assert :ok = SolarNavigation.tick(@solar_navigation_server)
+    assert :sys.get_state(@solar_navigation_server).traffic[contact.id].position_km ==
+      contact.position_km
   end
 
   @tag no_initial_encounter: true, no_auto_respawn: true
@@ -1063,6 +1082,10 @@ defmodule Core.WorldTest do
     assert resumed.tactical_encounter == nil
     assert resumed.pending_encounter == nil
     assert resumed.elapsed_ms == held.elapsed_ms
+    contact = :sys.get_state(@solar_navigation_server).traffic[held.pending_encounter.contact_id]
+    assert contact.combat.hull == enemy.hull
+    assert contact.combat.shields == enemy.shields
+    assert contact.state == :in_transit
 
     assert :ok = SolarNavigation.tick(@solar_navigation_server)
     assert {:ok, moving} = World.solar_snapshot(session.id, opts)
@@ -1129,6 +1152,12 @@ defmodule Core.WorldTest do
     assert resumed.pending_encounter == nil
     assert {:ok, map} = World.snapshot("1-1", opts)
     refute Enum.any?(map.entities, &(&1.id == enemy.id))
+    destroyed_contact =
+      :sys.get_state(@solar_navigation_server).traffic[held.pending_encounter.contact_id]
+    assert destroyed_contact.state == :destroyed
+    assert destroyed_contact.combat.hull == 0
+    assert destroyed_contact.combat.status == :destroyed
+    assert destroyed_contact.cargo == %{"medical_supplies" => 48}
 
     assert :ok = SolarNavigation.tick(@solar_navigation_server)
     assert {:ok, moving} = World.solar_snapshot(session.id, opts)
@@ -1204,6 +1233,42 @@ defmodule Core.WorldTest do
     assert {:ok, map} = World.snapshot("1-1", opts)
     refute Enum.any?(map.entities, &(&1.id == enemy.id))
     assert {:error, :attacker_destroyed} = World.attack(session.id, opts)
+  end
+
+
+  @tag no_initial_encounter: true, no_auto_respawn: true
+  test "a previously damaged real courier enters tactical combat without repairing",
+       context do
+    opts = context.world_options
+    {:ok, session} = World.connect(9_738, context.stats, opts)
+
+    # Simulate a previously settled injury on the actual SOL traffic entry.
+    :sys.replace_state(@solar_navigation_server, fn state ->
+      traffic = Map.update!(state.traffic, "traffic:sol:vesper-02", fn ship ->
+        %{ship | combat: %{ship.combat | hull: 125, shields: 11}}
+      end)
+      %{state | traffic: traffic}
+    end)
+
+    assert {:ok, _} = World.solar_set_course(session.id, "venus", opts)
+    for _ <- 1..85, do: assert(:ok = SolarNavigation.tick(@solar_navigation_server))
+    {:ok, held} = World.solar_snapshot(session.id, opts)
+
+    assert {:ok, %{enemy: enemy, navigation: active}} =
+      World.solar_enter_tactical(session.id, held.pending_encounter.id, opts)
+    assert active.tactical_encounter.contact_id == "traffic:sol:vesper-02"
+    assert active.tactical_encounter.voyage_number == 1
+    assert enemy.hull == 125
+    assert enemy.max_hull == 210
+    assert enemy.shields == 11
+    assert enemy.max_shields == 45
+
+    assert {:ok, _} = World.solar_finish_tactical(
+      session.id, held.pending_encounter.id, :retreat, opts)
+    actual = :sys.get_state(@solar_navigation_server).traffic["traffic:sol:vesper-02"]
+    assert actual.combat.hull == 125
+    assert actual.combat.shields == 11
+    assert actual.state == :in_transit
   end
 
 end
