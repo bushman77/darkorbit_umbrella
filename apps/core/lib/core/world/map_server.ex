@@ -572,8 +572,12 @@ defmodule Core.World.MapServer do
   end
 
   def handle_call({:leave, session_id, entity_id}, _from, state) do
-    case find_session_entity(state, session_id, entity_id) do
-      {:ok, entity} ->
+    case {find_session_entity(state, session_id, entity_id),
+          Map.has_key?(state.solar_tactical, entity_id)} do
+      {{:ok, _entity}, true} ->
+        {:reply, {:error, :tactical_cleanup_pending}, state}
+
+      {{:ok, entity}, false} ->
         {npcs, cleared_npc_ids} = clear_npc_targets(state.npcs, entity.id)
         new_state = %{state |
           entities: Map.delete(state.entities, entity.id),
@@ -588,7 +592,7 @@ defmodule Core.World.MapServer do
 
         {:reply, :ok, new_state}
 
-      error ->
+      {error, _} ->
         {:reply, error, state}
     end
   end

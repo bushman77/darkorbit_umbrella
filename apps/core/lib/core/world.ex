@@ -61,6 +61,17 @@ defmodule Core.World do
     end
   end
 
+  @doc "Find a frozen tactical result awaiting Navigation/MapServer cleanup."
+  def pending_tactical_cleanup(session_id, opts \\ []) do
+    registry = Keyword.get(opts, :registry, Core.World.Registry)
+    sessions = Keyword.get(opts, :sessions, SessionManager)
+
+    with {:ok, session} <- fetch_session(sessions, session_id) do
+      MapServer.pending_tactical_cleanup(registry, session.map_id,
+        session.id, session.entity_id)
+    end
+  end
+
   @doc "Server-owned SOL travel status. Session identity is verified internally."
   @spec solar_snapshot(pos_integer(), keyword()) :: {:ok, map()} | {:error, term()}
   def solar_snapshot(session_id, opts \\ []) do

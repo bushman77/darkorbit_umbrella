@@ -88,14 +88,30 @@ defmodule Darkorbit.World do
   defp recover_prepared_departure(player_id) do
     case SessionManager.fetch_player(SessionManager, player_id) do
       {:ok, session} ->
-        case Simulation.pending_disconnect?(session.id) do
-          {:ok, true} -> disconnect(session.id)
-          {:ok, false} -> :ok
-          error -> error
+        with :ok <- recover_tactical_cleanup(session.id),
+             {:ok, pending?} <- Simulation.pending_disconnect?(session.id) do
+          if pending?, do: disconnect(session.id), else: :ok
         end
 
       :error ->
         :ok
+    end
+  end
+
+  defp recover_tactical_cleanup(session_id) do
+    case Simulation.pending_tactical_cleanup(session_id) do
+      {:ok, {encounter_id, outcome}} ->
+        with {:ok, _} <- solar_finish_tactical(session_id, encounter_id, outcome) do
+          # This old session was already frozen mid-settlement. Release it
+          # before admitting another authenticated connection for its pilot.
+          disconnect(session_id)
+        end
+
+      {:ok, nil} ->
+        :ok
+
+      error ->
+        error
     end
   end
 
@@ -107,10 +123,22 @@ defmodule Darkorbit.World do
           :ok
         end
 
-      {:ok, _} -> :ok
-      error -> error
+      {:ok, _} ->
+        case Simulation.pending_tactical_cleanup(session_id) do
+          {:ok, {encounter_id, outcome}} ->
+            with {:ok, _} <- solar_finish_tactical(session_id, encounter_id, outcome) do
+              :ok
+            end
+
+          {:ok, nil} -> :ok
+          error -> error
+        end
+
+      error ->
+        error
     end
   end
+
   defdelegate move(session_id, destination), to: Simulation
   defdelegate plot_course(session_id, waypoints), to: Simulation
   defdelegate stop_navigation(session_id), to: Simulation
