@@ -66,6 +66,11 @@ defmodule Core.World.MapServer do
     call_map(registry, map_id, {:disconnect_pending, session_id, entity_id})
   end
 
+  @doc "Return a prepared tactical result awaiting cleanup, if one exists."
+  def pending_tactical_cleanup(registry, map_id, session_id, entity_id) do
+    call_map(registry, map_id, {:pending_tactical_cleanup, session_id, entity_id})
+  end
+
   @spec leave(atom(), String.t(), pos_integer(), term()) :: :ok | {:error, term()}
   def leave(registry, map_id, session_id, entity_id) do
     call_map(registry, map_id, {:leave, session_id, entity_id})
@@ -223,6 +228,7 @@ defmodule Core.World.MapServer do
       respawns: %{},
       solar_tactical: %{},
       departures: %{},
+      tactical_frozen: %{},
       solar_navigation_server: Keyword.get(opts, :solar_navigation_server),
       auto_respawn?: Keyword.get(opts, :auto_respawn?, false),
       event_sink: Keyword.fetch!(opts, :event_sink),
@@ -300,6 +306,21 @@ defmodule Core.World.MapServer do
     result =
       with {:ok, ship} <- find_session_entity(state, session_id, entity_id) do
         {:ok, player_ship_report(ship)}
+      end
+
+    {:reply, result, state}
+  end
+
+  def handle_call({:pending_tactical_cleanup, session_id, entity_id}, _from, state) do
+    result =
+      with {:ok, ship} <- find_session_entity(state, session_id, entity_id) do
+        case Map.get(state.solar_tactical, ship.id) do
+          %{encounter_id: id, prepared: %{outcome: outcome}} ->
+            {:ok, {id, outcome}}
+
+          _ ->
+            {:ok, nil}
+        end
       end
 
     {:reply, result, state}
@@ -431,7 +452,7 @@ defmodule Core.World.MapServer do
         {:tactical_outcome, session_id, player_id, encounter_id}, _from, state
       ) do
     result =
-      with {:ok, player} <- authorized_entity(state, session_id, player_id),
+      with {:ok, player} <- find_session_entity(state, session_id, player_id),
            {:ok, held} <- Map.fetch(state.solar_tactical, player_id),
            true <- held.encounter_id == encounter_id do
         npc = Map.get(state.npcs, held.npc_id)
@@ -461,7 +482,7 @@ defmodule Core.World.MapServer do
         {:prepare_solar_tactical, session_id, player_id, encounter_id, outcome},
         _from, state
       ) do
-    with {:ok, ship} <- authorized_entity(state, session_id, player_id),
+    with {:ok, ship} <- find_session_entity(state, session_id, player_id),
          {:ok, ongoing} <- Map.fetch(state.solar_tactical, player_id),
          true <- ongoing.encounter_id == encounter_id do
       present = Map.get(state.npcs, ongoing.npc_id)
@@ -513,6 +534,8 @@ defmodule Core.World.MapServer do
           # exclusive strategic claim until the owner commits settlement.
           prepared = %{outcome: outcome, report: report, retiring_npc: retiring_npc}
           updated = %{state |
+            entities: Map.delete(state.entities, ship.id),
+            tactical_frozen: Map.put(state.tactical_frozen, session_id, ship),
             npcs: Map.delete(state.npcs, ongoing.npc_id),
             solar_tactical: Map.put(state.solar_tactical, player_id,
               %{ongoing | prepared: prepared})
@@ -530,11 +553,15 @@ defmodule Core.World.MapServer do
         {:complete_solar_tactical, session_id, player_id, encounter_id},
         _from, state
       ) do
-    with {:ok, _ship} <- authorized_entity(state, session_id, player_id),
+    with {:ok, ship} <- find_session_entity(state, session_id, player_id),
          {:ok, held} <- Map.fetch(state.solar_tactical, player_id),
          true <- held.encounter_id == encounter_id,
          true <- is_map(held.prepared) do
-      updated = retire_tactical_actor(state, player_id, held,
+      restored = %{state |
+        entities: Map.put(state.entities, ship.id, ship),
+        tactical_frozen: Map.delete(state.tactical_frozen, session_id)
+      }
+      updated = retire_tactical_actor(restored, player_id, held,
         held.prepared.retiring_npc)
       {:reply, :ok, updated}
     else
@@ -1633,7 +1660,8 @@ defmodule Core.World.MapServer do
   defp find_session_entity(state, session_id, entity_id) do
     case authorized_entity(state, session_id, entity_id) do
       {:error, :entity_not_found} ->
-        case Map.get(state.departures, session_id) do
+        case Map.get(state.tactical_frozen, session_id) ||
+               Map.get(state.departures, session_id) do
           %Entity{id: ^entity_id} = ship -> {:ok, ship}
           nil -> {:error, :entity_not_found}
           _ -> {:error, :session_mismatch}
