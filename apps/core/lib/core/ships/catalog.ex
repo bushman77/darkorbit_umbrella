@@ -12,16 +12,26 @@ defmodule Core.Ships.Catalog do
   @default_ships [
     %Ship{
       id: 1,
-      name: "Phoenix",
-      hit_points: 4_000,
+      # Keep ID 1: existing accounts retain ownership of their starter ship.
+      # 1989 Sunracer: 300 armor, built-in Garnet-10 beam, four cargo pods,
+      # forward-class-1 shield, standard missile tube and .20 G drive.
+      name: "Sunracer",
+      hit_points: 300,
       shields: 0,
+      # Existing simulation units are not m/s; movement balance remains
+      # unchanged until the original drive/acceleration model is introduced.
       speed: 320,
-      # The starter Phoenix carries a built-in pulse emitter. This server-owned
-      # base weapon arms existing pilots without mutating inventory on connect.
-      damage: 40,
-      cargo_capacity: 100,
+      damage: 10,
+      cargo_capacity: 4,
       laser_slots: 1,
-      generator_slots: 1
+      generator_slots: 1,
+      forward_shield_class: 1,
+      aft_shield_class: 0,
+      missile_tube: true,
+      acceleration_g: 0.20,
+      turn_deg_s: 45,
+      cargo_pods: 4,
+      max_cargo_pods: 8
     },
     %Ship{
       id: 2,

@@ -110,7 +110,7 @@ defmodule Core.World do
   @spec solar_finish_tactical(pos_integer(), String.t(), atom(), keyword()) ::
           {:ok, map()} | {:error, term()}
   def solar_finish_tactical(session_id, encounter_id, outcome, opts \\ [])
-      when outcome in [:victory, :retreat, :defeat] do
+      when outcome in [:victory, :retreat, :defeat, :surrender] do
     sessions = Keyword.get(opts, :sessions, SessionManager)
     registry = Keyword.get(opts, :registry, Core.World.Registry)
     server = solar_navigation_server(opts)

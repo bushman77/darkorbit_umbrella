@@ -32,6 +32,7 @@ defmodule Darkorbit.AccountsTest do
 
       assert [starter_ship] = Fleet.list_ships_for_user(account.id)
       assert starter_ship.ship_id == 1
+      assert Core.Ships.Catalog.fetch!(1).name == "Sunracer"
 
       assert [configuration_one, configuration_two] =
                Loadouts.list_loadouts_for_player_ship(starter_ship.id)
@@ -109,6 +110,18 @@ defmodule Darkorbit.AccountsTest do
       old_session_id = verified.session_id
       assert {:ok, logged_in} = Accounts.login_account(attrs.username, attrs.password)
       refute logged_in.session_id == old_session_id
+    end
+
+    test "active loadout configuration persists, defaults to C-1 and rejects invalid choices" do
+      account = player_account_fixture()
+      assert Darkorbit.World.active_configuration(account.id) == 1
+      assert {:error, :invalid_configuration} =
+        Accounts.activate_configuration(account.id, 3)
+      assert {:ok, _} = Accounts.activate_configuration(account.id, 2)
+      assert Darkorbit.World.active_configuration(account.id) == 2
+      assert {:ok, status} = Darkorbit.World.player_status(account.id,
+        Darkorbit.World.active_configuration(account.id))
+      assert status.configuration.number == 2
     end
 
     test "selects a company only once" do

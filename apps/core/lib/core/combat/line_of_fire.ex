@@ -58,7 +58,7 @@ defmodule Core.Combat.LineOfFire do
     remaining = max(0.01, max_distance - @muzzle_forward_scene / @scene_scale)
     eligible =
       Enum.filter(npcs, fn npc ->
-        Combat.alive?(npc) and
+        Combat.alive?(npc) and Map.get(npc, :state) != :surrendered and
           Combat.in_range?(%{position: position}, npc, max_distance)
       end)
 

@@ -195,20 +195,27 @@ class SpaceClient {
     })
     const tacticalPanel = this.root.querySelector("#solar-tactical-panel")
     tacticalPanel?.addEventListener("click", event => {
-      if (!event.target?.closest?.("[data-solar-tactical-retreat]") ||
-          this.tacticalRetreating) return
+      const accept = event.target?.closest?.("[data-solar-tactical-surrender]")
+      const retreat = event.target?.closest?.("[data-solar-tactical-retreat]")
+      if ((!accept && !retreat) || this.tacticalRetreating) return
       const tactical = this.navComputer?.solarNavigation?.tactical_encounter
       if (!tactical?.id) return
       this.tacticalRetreating = true
       const message = tacticalPanel.querySelector("[data-solar-tactical-message]")
-      if (message) message.textContent = "Withdrawing from interception…"
-      this.solarRetreatEncounter(tactical.id, (ok, navigation, reason) => {
+      if (message) message.textContent = accept
+        ? "Accepting the captain's surrender…" : "Withdrawing from interception…"
+      const handler = accept ? this.solarAcceptSurrender.bind(this)
+                             : this.solarRetreatEncounter.bind(this)
+      handler(tactical.id, (ok, navigation, reason) => {
         this.tacticalRetreating = false
         if (ok && navigation) {
           this.applySolarNavigation(navigation)
           this.navComputer?.open()
+          this.setCombatMessage(accept
+            ? "Merchant surrendered. Passage granted; cargo transfer is not yet implemented."
+            : "Interception ended. SOL voyage resumed.")
         } else if (message) {
-          message.textContent = "Retreat unavailable: " + (reason || "relay error")
+          message.textContent = "Decision unavailable: " + (reason || "relay error")
         }
         this.showSolarTactical()
       })
@@ -489,6 +496,7 @@ class SpaceClient {
     this.applyPlanetaryWarning(ownPlanetaryWarning(state, this.selfId))
     this.syncOwnCombatState()
     this.updateCombatHud()
+    this.showSolarTactical()
   }
 
   entityJoined(entity) {
@@ -746,12 +754,36 @@ class SpaceClient {
     if (label) label.textContent = tactical.call_sign || "Hostile interception"
     const button = panel.querySelector("[data-solar-tactical-retreat]")
     if (button) button.disabled = this.tacticalRetreating
+
+    const surrendered = [...this.entities.values()].some(entity =>
+      entity.kind === "npc" &&
+      entity.state === "surrendered" &&
+      entity.npcTypeId === "solar-scow-" + this.player?.pilot?.id)
+    const accept = panel.querySelector("[data-solar-tactical-surrender]")
+    if (accept) {
+      accept.hidden = !surrendered
+      accept.disabled = this.tacticalRetreating
+    }
+    const message = panel.querySelector("[data-solar-tactical-message]")
+    if (message && !this.tacticalRetreating) {
+      message.textContent = surrendered
+        ? "Scow captain offers surrender. Accept and resume or withdraw. Cargo transfers are not yet enabled."
+        : "Defeat the opposing vessel, accept surrender if offered, or retreat."
+    }
   }
 
   solarEnterEncounter(encounterId, done) {
     if (this.channel?.state !== "joined") return done(false, null, "relay offline")
     this.channel.push("solar_enter_encounter", {encounter_id: encounterId}, 5000)
       .receive("ok", response => done(true, response))
+      .receive("error", response => done(false, null, response.reason))
+      .receive("timeout", () => done(false, null, "timeout"))
+  }
+
+  solarAcceptSurrender(encounterId, done) {
+    if (this.channel?.state !== "joined") return done(false, null, "relay offline")
+    this.channel.push("solar_accept_surrender", {encounter_id: encounterId}, 5000)
+      .receive("ok", response => done(true, response.navigation))
       .receive("error", response => done(false, null, response.reason))
       .receive("timeout", () => done(false, null, "timeout"))
   }
@@ -1250,7 +1282,7 @@ class SpaceClient {
     const equipment = [...configuration.lasers, ...configuration.generators, ...configuration.drones]
     this.text(
       "#hud-equipment",
-      equipment.length ? equipment.map(item => item.name).join(" · ") : "Phoenix pulse emitter · Base ship systems"
+      equipment.length ? equipment.map(item => item.name).join(" · ") : "Garnet laser (10) · Forward-1 shield · Standard missile tube"
     )
   }
 

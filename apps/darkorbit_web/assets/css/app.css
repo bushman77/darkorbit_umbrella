@@ -968,3 +968,6 @@ body:has(#helmet-client) {
   line-height: 1.35; font-size: .7rem; color: #fcd6d9;
 }
 .solar-tactical-panel[hidden] { display: none !important; }
+
+/* An accepted merchant surrender is an explicit server-verified decision. */
+.solar-tactical-panel [hidden] { display: none !important; }

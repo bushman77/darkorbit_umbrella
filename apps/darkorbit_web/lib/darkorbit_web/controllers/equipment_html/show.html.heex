@@ -1,0 +1,147 @@
+<main id="equipment-locker" class="mx-auto min-h-screen max-w-6xl px-5 py-8 text-slate-100 sm:px-10">
+  <header class="mb-8 flex flex-wrap items-start justify-between gap-4">
+    <div>
+      <p class="text-xs font-bold uppercase tracking-[0.3em] text-cyan-300">Shipyard / Equipment locker</p>
+      <h1 class="mt-2 text-3xl font-bold"><%= @ship.name %></h1>
+      <p class="mt-2 text-sm text-slate-400">Pilot <%= @pilot.pilot_name %> · Owned ship · Authoritative inventory</p>
+    </div>
+    <a id="return-to-cockpit" href={~p"/play"} class="rounded-xl border border-cyan-400/40 bg-slate-900 px-4 py-3 text-sm font-semibold text-cyan-100 hover:border-cyan-300">
+      Return to cockpit
+    </a>
+  </header>
+
+  <%= if Phoenix.Flash.get(@flash, :info) do %>
+    <p role="status" class="mb-4 rounded-lg border border-emerald-400/40 bg-emerald-950 p-3 text-sm"><%= Phoenix.Flash.get(@flash, :info) %></p>
+  <% end %>
+  <%= if Phoenix.Flash.get(@flash, :error) do %>
+    <p role="alert" class="mb-4 rounded-lg border border-rose-400/50 bg-rose-950 p-3 text-sm"><%= Phoenix.Flash.get(@flash, :error) %></p>
+  <% end %>
+
+  <section class="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4" aria-label="Derived ship specifications">
+    <div class="rounded-xl border border-slate-700 bg-slate-900 p-4"><p class="text-xs uppercase text-slate-400">Armor</p><strong class="text-2xl"><%= @stats.hit_points %></strong></div>
+    <div class="rounded-xl border border-slate-700 bg-slate-900 p-4"><p class="text-xs uppercase text-slate-400">Beam damage</p><strong class="text-2xl"><%= @stats.damage %></strong></div>
+    <div class="rounded-xl border border-slate-700 bg-slate-900 p-4"><p class="text-xs uppercase text-slate-400">Cargo capacity</p><strong class="text-2xl"><%= @stats.cargo_capacity %> tonnes</strong></div>
+    <div class="rounded-xl border border-slate-700 bg-slate-900 p-4"><p class="text-xs uppercase text-slate-400">Ship shields</p><strong class="text-2xl"><%= @stats.shields %></strong></div>
+  </section>
+
+  <div class="mb-6 rounded-xl border border-cyan-500/25 bg-slate-900/75 p-4">
+    <h2 class="font-semibold text-cyan-200">Installed ship systems</h2>
+    <p class="mt-2 text-sm text-slate-300">
+      <%= if @ship.id == 1 do %>
+        Sunracer: Garnet beam (10) installed; Forward-<%= @stats.forward_shield_class %> shield;
+        standard missile tube; <%= @stats.cargo_pods %> one-tonne cargo pods
+        (maximum <%= @stats.max_cargo_pods %>), <%= @stats.acceleration_g %> G drive,
+        <%= @stats.turn_deg_s %>°/s turn rate.
+        Forward shield arcs, original acceleration and missile ammunition are not simulated yet.
+      <% else %>
+        Additional hull equipment and configuration are managed by the current loadout.
+      <% end %>
+    </p>
+    <p class="mt-2 text-xs text-amber-200">Changes apply when you return to the cockpit and establish a new ship session. This locker does not modify a live encounter.</p>
+  </div>
+
+  <nav aria-label="Equipment configurations" class="mb-5 flex gap-3">
+    <a href={~p"/equipment?config=1"} class={["rounded-lg border px-4 py-2 text-sm font-semibold", if(@configuration == 1, do: "border-cyan-300 bg-cyan-900 text-white", else: "border-slate-700 bg-slate-900 text-slate-300")]}>Configuration 1</a>
+    <a href={~p"/equipment?config=2"} class={["rounded-lg border px-4 py-2 text-sm font-semibold", if(@configuration == 2, do: "border-cyan-300 bg-cyan-900 text-white", else: "border-slate-700 bg-slate-900 text-slate-300")]}>Configuration 2</a>
+  </nav>
+
+  <form action={~p"/equipment/activate"} method="post" class="mb-5 flex flex-wrap items-center gap-3">
+    <input type="hidden" name="_csrf_token" value={get_csrf_token()}/>
+    <input type="hidden" name="config" value={@configuration}/>
+    <button type="submit" id="activate-configuration"
+      class="rounded-lg border border-emerald-500/50 bg-emerald-950 px-4 py-2 text-sm font-semibold hover:border-emerald-300"
+      disabled={@active_configuration == @configuration}>
+      <%= if @active_configuration == @configuration do %>
+        Configuration <%= @configuration %> active
+      <% else %>
+        Activate configuration <%= @configuration %>
+      <% end %>
+    </button>
+    <p class="text-xs text-slate-400">Active on next cockpit connection: C-<%= @active_configuration %></p>
+  </form>
+
+  <div class="grid gap-6 lg:grid-cols-2">
+    <section class="rounded-xl border border-slate-700 bg-slate-900 p-5" aria-label="Laser equipment slots">
+      <h2 class="mb-4 text-lg font-bold text-cyan-200">Beam weapon slots</h2>
+      <%= for {equipped, slot} <- @laser_slots do %>
+        <form action={~p"/equipment"} method="post" class="mb-3 rounded-lg border border-slate-700 p-3">
+          <input type="hidden" name="_csrf_token" value={get_csrf_token()}/>
+          <input type="hidden" name="config" value={@configuration}/>
+          <input type="hidden" name="field" value="lasers"/>
+          <input type="hidden" name="slot" value={slot}/>
+          <label for={"laser-#{slot}"} class="mb-2 block text-sm font-medium">Beam hardpoint <%= slot + 1 %></label>
+          <div class="flex gap-2">
+            <select name="item_id" id={"laser-#{slot}"} class="min-w-0 flex-1 rounded-lg border border-slate-600 bg-slate-950 p-2 text-sm">
+              <option value="" selected={is_nil(equipped)}><%= if @ship.id == 1, do: "Built-in Garnet (10)", else: "Empty hardpoint" %></option>
+              <%= for item <- @lasers, item.count > 0 or item.id == equipped do %>
+                <option value={item.id} selected={item.id == equipped}><%= item.name %> · Locker: <%= item.count %></option>
+              <% end %>
+            </select>
+            <button type="submit" class="rounded-lg bg-cyan-700 px-3 py-2 text-sm font-semibold hover:bg-cyan-600">Fit</button>
+          </div>
+        </form>
+      <% end %>
+    </section>
+
+    <section class="rounded-xl border border-slate-700 bg-slate-900 p-5" aria-label="Generator equipment slots">
+      <h2 class="mb-4 text-lg font-bold text-cyan-200">Generator / Shield slots</h2>
+      <%= for {equipped, slot} <- @generator_slots do %>
+        <form action={~p"/equipment"} method="post" class="mb-3 rounded-lg border border-slate-700 p-3">
+          <input type="hidden" name="_csrf_token" value={get_csrf_token()}/>
+          <input type="hidden" name="config" value={@configuration}/>
+          <input type="hidden" name="field" value="generators"/>
+          <input type="hidden" name="slot" value={slot}/>
+          <label for={"generator-#{slot}"} class="mb-2 block text-sm font-medium">Utility slot <%= slot + 1 %></label>
+          <div class="flex gap-2">
+            <select name="item_id" id={"generator-#{slot}"} class="min-w-0 flex-1 rounded-lg border border-slate-600 bg-slate-950 p-2 text-sm">
+              <option value="" selected={is_nil(equipped)}>Empty slot</option>
+              <%= for item <- @generators, item.count > 0 or item.id == equipped do %>
+                <option value={item.id} selected={item.id == equipped}><%= item.name %> · Locker: <%= item.count %></option>
+              <% end %>
+            </select>
+            <button type="submit" class="rounded-lg bg-cyan-700 px-3 py-2 text-sm font-semibold hover:bg-cyan-600">Fit</button>
+          </div>
+        </form>
+      <% end %>
+    </section>
+  </div>
+
+  <section class="mt-6 rounded-xl border border-slate-700 bg-slate-900 p-5" aria-label="Owned equipment inventory">
+    <h2 class="text-lg font-bold text-cyan-200">Inventory / Equipment locker</h2>
+    <p class="mb-4 mt-1 text-sm text-slate-400">Only equipment actually owned and not currently fitted is available here.</p>
+    <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+      <%= for item <- @inventory_items, item.count > 0 do %>
+        <div class="flex justify-between rounded-lg border border-slate-700 bg-slate-950 p-3 text-sm">
+          <span><%= item.name %></span><strong>×<%= item.count %></strong>
+        </div>
+      <% end %>
+    </div>
+    <%= if Enum.all?(@inventory_items, &(&1.count == 0)) do %>
+      <p class="mt-3 text-sm text-slate-500">No spare equipment. The Sunracer's built-in Garnet remains installed. Ship merchants and cargo trading will be added separately.</p>
+    <% end %>
+  </section>
+
+  <section class="mt-6 rounded-xl border border-slate-700 bg-slate-900 p-5"
+           aria-label="Ship cargo hold">
+    <h2 class="text-lg font-bold text-amber-200">Cargo hold</h2>
+    <p id="cargo-capacity" class="mt-2 text-sm text-slate-300">
+      Loaded <strong><%= @cargo_tonnage %></strong> of <strong><%= @stats.cargo_capacity %></strong> tonnes
+    </p>
+    <p class="mt-1 text-xs text-slate-400">
+      Four original Sunracer cargo pods. Cargo is persistent and capacity-checked;
+      station trading and merchant surrender transfers are not implemented yet.
+    </p>
+    <%= if map_size(@cargo_manifest) == 0 do %>
+      <p class="mt-3 text-sm text-slate-500">Cargo hold empty.</p>
+    <% else %>
+      <ul class="mt-4 grid gap-2 sm:grid-cols-2">
+        <%= for {id, quantity} <- @cargo_manifest do %>
+          <li class="flex justify-between rounded-lg border border-slate-700 bg-slate-950 p-3 text-sm">
+            <span><%= Map.get(@cargo_catalog, id, %{name: id}).name %></span>
+            <strong><%= quantity %> t</strong>
+          </li>
+        <% end %>
+      </ul>
+    <% end %>
+  </section>
+</main>

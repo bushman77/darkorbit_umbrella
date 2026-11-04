@@ -65,6 +65,10 @@ defmodule Core.Combat do
   end
 
   @spec valid_target?(map(), map()) :: boolean()
+  # A surrendered civilian is no longer a valid weapons target. Re-enabling
+  # attacks on surrendered ships, if desired for piracy consequences, must
+  # be an explicit server-owned action rather than accidental autofire.
+  def valid_target?(%{kind: :player}, %{kind: :npc, state: :surrendered}), do: false
   def valid_target?(%{kind: :player}, %{kind: :npc} = target), do: alive?(target)
   def valid_target?(%{kind: :npc}, %{kind: :player} = target), do: alive?(target)
   def valid_target?(_attacker, _target), do: false

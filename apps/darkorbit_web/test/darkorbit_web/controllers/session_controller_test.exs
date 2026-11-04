@@ -38,6 +38,7 @@ defmodule DarkorbitWeb.SessionControllerTest do
 
     assert Enum.count(LazyHTML.query(document, "#space-viewport[tabindex='0']")) == 1
     assert Enum.count(LazyHTML.query(document, "#action-hotbar")) == 1
+    assert Enum.count(LazyHTML.query(document, "#equipment-open[href='/equipment']")) == 1
 
     assert Enum.count(
              LazyHTML.query(

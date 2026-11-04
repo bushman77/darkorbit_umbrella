@@ -662,3 +662,32 @@ validation remain deferred.
   to shared strategic ships; reconcile ship death, cargo, and encounters.
 - [ ] Add merchant captains' flee, surrender, defend, and radio responses,
   informed by morale, player threat and ship damage.
+
+
+### Sunracer, inventory/equipment, and Scow survival (2026-11-03)
+
+- [x] Make default ship 1 the original Sunracer while keeping existing
+  player ownership, two configurations and other purchasable hulls.
+- [x] Set starter Garnet to 10 and base armor to 300; four-tonne cargo
+  capacity, Forward-1 shield, missile tube, .20G, and 45°/s as metadata.
+- [x] Add Beryl/Sapphire replacement laser rules for Sunracer hardpoint;
+  preserve additive multi-laser loadouts for later ship classes.
+- [x] Expose authenticated server-owned equipment inventory and C-1/C-2
+  layout at /equipment, with atomic fitting and account-scoped activation.
+- [x] Create persistent server-owned commodity stacks and enforce ship
+  cargo capacity under account and inventory locks.
+- [x] Make provoked Scows evade at <=80% hull and surrender at <=35%;
+  owner can accept surrender with server verification and return to SOL.
+- [x] Protect surrendered merchants against automatic or manual laser hits.
+- [x] Add Core, Darkorbit DB and Phoenix controller/channel regression tests.
+- [ ] Run full test/build suites and verify browser/SBS headset gameplay.
+- [ ] Replace provisional speed with original Sunracer acceleration and
+  turn dynamics as appropriate to game's tactical speed scale.
+- [ ] Add original forward/aft directional shield-class laser and collision
+  reduction, subsystem damage, equipment status and repair.
+- [ ] Add an actual merchant captain's varied morale, danger appraisal,
+  surrender offers and reputation/behavior consequences.
+- [ ] Build docking/shipyard purchase, commodity trading and capacity-safe
+  cargo transfer from a surrendered/destroyed strategic vessel.
+- [ ] Reconcile persistent strategic NPC identity with temporary tactical
+  encounter actor before implementing real cargo theft/loot.

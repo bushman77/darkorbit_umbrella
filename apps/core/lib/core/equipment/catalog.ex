@@ -9,6 +9,9 @@ defmodule Core.Equipment.Catalog do
   alias Core.Equipment.Item
 
   @default_items [
+    # Original Sunracer beam upgrades: the starting Garnet (10) is built-in.
+    %Item{id: "beryl", name: "Beryl beam (15)", category: :laser, damage: 15},
+    %Item{id: "sapphire", name: "Sapphire beam (20)", category: :laser, damage: 20},
     %Item{id: "lf1", name: "LF-1", category: :laser, damage: 40},
     %Item{id: "lf2", name: "LF-2", category: :laser, damage: 60},
     %Item{id: "lf3", name: "LF-3", category: :laser, damage: 150},

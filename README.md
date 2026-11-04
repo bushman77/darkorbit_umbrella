@@ -1130,3 +1130,90 @@ Tests to run: `mix test apps/core/test/core/npc/ai_test.exs`,
 `mix test apps/darkorbit_web/test/darkorbit_web/channels/world_channel_test.exs`,
 `npm test --prefix apps/darkorbit_web/assets`, and `mix assets.build`.
 Full Mix/browser/HMD execution is still pending on the player's machine.
+
+
+### Sunracer starter, equipment locker, and civilian survival V1 (2026-11-03)
+
+The original Space Rogue (1989) Sunracer Owner's Guide specifies a
+12-metre scout with 300 armor (upgradable to 500), a Garnet laser (10),
+a standard missile launcher, Forward-1 directional shield, 0.20G
+acceleration, 45°/s turn and four 1-tonne cargo pods (eight maximum).
+See https://cdn.steamstatic.com/steam/apps/569200/manuals/space_rogue_manual.pdf
+in "Your Ship" (printed p.2).
+
+**Ship catalog ID 1 is now Sunracer**, preserving all existing account
+ship ownership and its two saved configurations. The existing runtime's
+320 game-units/s speed is intentionally unchanged: it is not the
+original 0.20G acceleration model. Other DarkOrbit-influenced hulls
+remain in the catalog for future ship ownership and purchases.
+
+Core.Ships.Stats now derives Sunracer's base 300 hull, 10 Garnet damage,
+four-tonne cargo capacity and the installed system metadata. Sunracer's
+single laser hardpoint is a **replacement**, not an additive mounting:
+Beryl (15), Sapphire (20), and previously owned LF-class modules
+replace the current 10-damage Garnet when fitted. Removing an upgrade
+restores the built-in Garnet at 10. Multi-slot later ships retain the
+existing additive DarkOrbit-style calculation. The hotbar retains
+its internal stable action IDs so saved controls continue to work;
+the visible name is Garnet.
+
+**Important combat limitation:** Forward-1 shielding and the standard
+missile tube are recorded as installed Sunracer equipment, but the
+existing combat implementation still uses aggregate damage/shield
+pools and has no physical fore/aft arcs or missile launch/inventory.
+Sunracer's generic pool remains zero to avoid fabricating an energy
+buffer. Directional shielding, acceleration and subsystem damage are
+separate physical-system milestones.
+
+**Ship equipment page:** Authenticated `GET /equipment` is accessible
+from the cockpit header. It shows the active ship, original installed
+systems, current derived stats, server-owned equipment inventory, beam
+and generator hardpoints, and independent C-1/C-2 loadouts. Forms
+`POST /equipment` equip or unequip owned items only, under existing
+row-level transaction locks. `POST /equipment/activate` persists the
+pilot's selected C-1 or C-2 in their account data; Phoenix WorldChannel
+uses this configuration when the cockpit next connects. Old accounts
+without a selection default to C-1. No database migration is necessary.
+Changing equipment while on this page does not modify a live tactical
+simulation; return to cockpit to start a new runtime session.
+
+**Persistent cargo hold:** The existing `player_equipment.items`
+inventory JSON now carries a separate `cargo` stack map. Typed
+`Darkorbit.Cargo.Catalog` commodities currently weigh one tonne
+per quantity. `Darkorbit.Inventory.add_cargo/remove_cargo` use DB
+locks, account-checked active ship capacity, and server-supplied
+catalog masses. Sunracer is limited to four tonnes; unknown cargo
+identifiers and negative or excessive quantities are rejected.
+A starter account has an empty hold, with no client API to mint
+cargo. Station shop transactions, cargo pods upgrades, transfer from
+strategic NPCs, salvage, reputation and economy remain future work.
+
+**Scow survival V1:** Tactical Scows continue their real SOL-derived
+straight course, but at <=80% armor enter `:evade` and increase
+their local tactical speed by 50%. At <=35% armor they cease flight
+and fire, mark `:surrendered`, and offer an "Accept surrender" option
+in the active tactical cockpit. The server validates the exact
+encounter, owner and surrendered NPC before ending combat and
+resuming the original SOL voyage. Surrendered NPCs cannot be hit by
+locked auto-fire or manual wing beams in this first implementation.
+These armor thresholds and speed boosts are *provisional tuning*
+rather than claimed original Space Rogue AI probabilities. Surrender
+currently grants no goods, credits or reputation changes because
+crossing from an ephemeral map encounter to persistent/shared
+SOL cargo needs a transactionally safe transfer protocol.
+
+Testing:
+```sh
+mix test apps/core/test/core/ships/stats_test.exs
+mix test apps/core/test/core/world/world_test.exs
+mix test apps/darkorbit/test/darkorbit/accounts_test.exs
+mix test apps/darkorbit/test/darkorbit/inventory_test.exs
+mix test apps/darkorbit/test/darkorbit/ship_stats_test.exs
+mix test apps/darkorbit/test/darkorbit/loadouts_test.exs
+mix test apps/darkorbit_web/test/darkorbit_web/controllers/equipment_controller_test.exs
+mix test apps/darkorbit_web/test/darkorbit_web/channels/world_channel_test.exs
+npm test --prefix apps/darkorbit_web/assets
+mix assets.build
+```
+All tests and browser/HMD acceptance require local execution. No new
+database tables/migrations or branches were created.

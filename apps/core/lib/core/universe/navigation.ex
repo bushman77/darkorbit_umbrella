@@ -250,7 +250,7 @@ defmodule Core.Universe.Navigation do
       voyage.tactical_encounter.id != encounter_id ->
         {:reply, {:error, :encounter_mismatch}, state}
 
-      outcome not in [:rollback, :victory, :retreat, :defeat, :escaped] ->
+      outcome not in [:rollback, :victory, :retreat, :defeat, :escaped, :surrender] ->
         {:reply, {:error, :invalid_encounter_outcome}, state}
 
       true ->

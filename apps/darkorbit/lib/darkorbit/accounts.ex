@@ -131,6 +131,31 @@ defmodule Darkorbit.Accounts do
     end
   end
 
+  @doc "Server-owned, account-persistent active ship configuration."
+  def activate_configuration(user_id, configuration)
+      when is_integer(user_id) and user_id > 0 and configuration in [1, 2] do
+    Repo.transaction(fn ->
+      case lock_account(user_id) do
+        nil ->
+          Repo.rollback(:account_not_found)
+
+        %PlayerAccount{} = account ->
+          account
+          |> PlayerAccount.system_changeset(%{
+            "data" => Map.put(account.data || %{}, "active_configuration", configuration)
+          })
+          |> Repo.update()
+          |> case do
+            {:ok, updated} -> updated
+            {:error, reason} -> Repo.rollback(reason)
+          end
+      end
+    end)
+  end
+
+  def activate_configuration(_user_id, _configuration),
+    do: {:error, :invalid_configuration}
+
   def select_company(user_id, company) when is_integer(user_id) and is_binary(company) do
     faction_id = Map.get(%{"mmo" => 1, "eic" => 2, "vru" => 3}, company)
 

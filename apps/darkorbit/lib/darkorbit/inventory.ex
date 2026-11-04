@@ -9,6 +9,9 @@ defmodule Darkorbit.Inventory do
   import Ecto.Query, warn: false
 
   alias Core.Equipment.Catalog, as: EquipmentCatalog
+  alias Core.Ships.Catalog, as: ShipCatalog
+  alias Darkorbit.Accounts.PlayerAccount
+  alias Darkorbit.Cargo.Catalog, as: CargoCatalog
   alias Core.Equipment.Item
   alias Darkorbit.Inventory.PlayerEquipment
   alias Darkorbit.Repo
@@ -26,6 +29,7 @@ defmodule Darkorbit.Inventory do
       items: %{
         "apis" => false,
         "zeus" => false,
+        "cargo" => %{},
         "equipment" => %{
           "lasers" => %{"lf1" => 0, "lf2" => 0, "lf3" => 0, "lf4" => 0},
           "generators" => %{},
@@ -105,6 +109,127 @@ defmodule Darkorbit.Inventory do
   end
 
   def remove_equipment(_user_id, _item_id, _amount), do: {:error, :invalid_amount}
+
+  @doc "Persisted cargo hold quantities; never accept a client-supplied mass."
+  def cargo_manifest(user_id) when is_integer(user_id) do
+    case get_equipment_by_user_id(user_id) do
+      %PlayerEquipment{items: items} ->
+        Map.get(items || %{}, "cargo", %{})
+
+      nil ->
+        %{}
+    end
+  end
+
+  def cargo_manifest(_user_id), do: %{}
+
+  @spec cargo_tonnage(pos_integer()) :: non_neg_integer()
+  def cargo_tonnage(user_id) when is_integer(user_id) do
+    user_id |> cargo_manifest() |> cargo_tonnage_from_manifest()
+  end
+
+  def cargo_tonnage(_user_id), do: 0
+
+  @doc """
+  Atomically load cargo into the account's active ship, with an account lock,
+  inventory row lock, fixed catalog mass and server-owned capacity.
+  """
+  def add_cargo(user_id, cargo_id, amount)
+      when is_integer(user_id) and user_id > 0 and is_integer(amount) and amount > 0 do
+    with {:ok, item} <- CargoCatalog.fetch(cargo_id) do
+      Repo.transaction(fn ->
+        account =
+          from(account in PlayerAccount,
+            where: account.id == ^user_id, lock: "FOR UPDATE")
+          |> Repo.one()
+
+        equipment =
+          from(equipment in PlayerEquipment,
+            where: equipment.user_id == ^user_id, lock: "FOR UPDATE")
+          |> Repo.one()
+
+        with %PlayerAccount{} <- account,
+             %PlayerEquipment{} <- equipment,
+             {:ok, ship} <- ShipCatalog.fetch(account.ship_id),
+             manifest <- Map.get(equipment.items || %{}, "cargo", %{}),
+             used <- cargo_tonnage_from_manifest(manifest),
+             true <- used + amount * item.mass_tonnes <= ship.cargo_capacity do
+          updated = Map.update(manifest, cargo_id, amount, &(&1 + amount))
+          save_cargo!(equipment, updated)
+        else
+          nil -> Repo.rollback(:cargo_hold_unavailable)
+          {:error, _} -> Repo.rollback(:unknown_ship)
+          false -> Repo.rollback(:cargo_hold_full)
+          _ -> Repo.rollback(:cargo_hold_unavailable)
+        end
+      end)
+    end
+  end
+
+  def add_cargo(_user_id, cargo_id, _amount) do
+    case CargoCatalog.fetch(cargo_id) do
+      {:error, _} = error -> error
+      {:ok, _} -> {:error, :invalid_amount}
+    end
+  end
+
+  @doc "Unloads only quantities the server confirms are present."
+  def remove_cargo(user_id, cargo_id, amount)
+      when is_integer(user_id) and user_id > 0 and is_integer(amount) and amount > 0 do
+    with {:ok, _item} <- CargoCatalog.fetch(cargo_id) do
+      Repo.transaction(fn ->
+        equipment =
+          from(equipment in PlayerEquipment,
+            where: equipment.user_id == ^user_id, lock: "FOR UPDATE")
+          |> Repo.one()
+
+        case equipment do
+          %PlayerEquipment{} = row ->
+            manifest = Map.get(row.items || %{}, "cargo", %{})
+            count = Map.get(manifest, cargo_id, 0)
+
+            if count < amount do
+              Repo.rollback(:not_enough_cargo)
+            else
+              left = count - amount
+              updated = if left == 0,
+                do: Map.delete(manifest, cargo_id),
+                else: Map.put(manifest, cargo_id, left)
+              save_cargo!(row, updated)
+            end
+
+          nil ->
+            Repo.rollback(:cargo_hold_unavailable)
+        end
+      end)
+    end
+  end
+
+  def remove_cargo(_user_id, cargo_id, _amount) do
+    case CargoCatalog.fetch(cargo_id) do
+      {:error, _} = error -> error
+      {:ok, _} -> {:error, :invalid_amount}
+    end
+  end
+
+  defp cargo_tonnage_from_manifest(manifest) do
+    Enum.reduce(manifest, 0, fn {id, amount}, total ->
+      case CargoCatalog.fetch(id) do
+        {:ok, item} when is_integer(amount) and amount >= 0 ->
+          total + amount * item.mass_tonnes
+        _ ->
+          total
+      end
+    end)
+  end
+
+  defp save_cargo!(row, cargo) do
+    updated_items = Map.put(row.items || %{}, "cargo", cargo)
+    case row |> PlayerEquipment.items_changeset(updated_items) |> Repo.update() do
+      {:ok, saved} -> saved
+      {:error, reason} -> Repo.rollback(reason)
+    end
+  end
 
   def laser_count(user_id, laser_id) do
     if equipment_in_category?(laser_id, :laser),

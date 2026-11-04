@@ -8,11 +8,18 @@ defmodule Core.Ships.StatsTest do
   test "returns base hit points, shields, speed, damage, and cargo for an empty loadout" do
     assert {:ok, stats} = Stats.calculate(1, %{lasers: [], generators: []})
 
-    assert stats.hit_points == 4_000
+    assert stats.hit_points == 300
     assert stats.shields == 0
     assert stats.speed == 320
-    assert stats.damage == 40
-    assert stats.cargo_capacity == 100
+    assert stats.damage == 10
+    assert stats.cargo_capacity == 4
+    assert stats.forward_shield_class == 1
+    assert stats.aft_shield_class == 0
+    assert stats.missile_tube == true
+    assert stats.acceleration_g == 0.20
+    assert stats.turn_deg_s == 45
+    assert stats.cargo_pods == 4
+    assert stats.max_cargo_pods == 8
     assert stats.shield_absorption == 0.0
     assert stats.shield_regeneration == 0
   end
@@ -21,7 +28,7 @@ defmodule Core.Ships.StatsTest do
     loadout = %{lasers: ["lf1"], generators: ["g3"]}
 
     assert {:ok, stats} = Stats.calculate(1, loadout)
-    assert stats.damage == 80
+    assert stats.damage == 40
     assert stats.speed == 327
     assert stats.shields == 0
   end
@@ -44,10 +51,21 @@ defmodule Core.Ships.StatsTest do
     assert {:ok, %{1 => config_one, 2 => config_two}} =
              Stats.calculate_configurations(1, configurations)
 
-    assert config_one.damage == 80
+    assert config_one.damage == 40
     assert config_one.speed == 322
-    assert config_two.damage == 240
+    assert config_two.damage == 200
     assert config_two.shields == 2_000
+  end
+
+  test "Sunracer built-in Garnet is replaced, not added, by Beryl/Sapphire" do
+    assert {:ok, starting} = Stats.calculate(1, %{lasers: [], generators: []})
+    assert starting.damage == 10
+    assert {:ok, beryl} = Stats.calculate(1, %{lasers: ["beryl"], generators: []})
+    assert beryl.damage == 15
+    assert {:ok, sapphire} = Stats.calculate(1, %{lasers: ["sapphire"], generators: []})
+    assert sapphire.damage == 20
+    assert {:ok, empty_again} = Stats.calculate(1, %{lasers: [nil], generators: []})
+    assert empty_again.damage == 10
   end
 
   test "requires both equipment configurations" do
@@ -113,7 +131,7 @@ defmodule Core.Ships.StatsTest do
     }
 
     assert {:ok, stats} = Stats.calculate(1, loadout)
-    assert stats.damage == 80
+    assert stats.damage == 40
     assert stats.speed == 322
   end
 end

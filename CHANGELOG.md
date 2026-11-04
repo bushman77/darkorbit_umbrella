@@ -600,3 +600,28 @@
   disconnected viewers. Strategic SOL traffic continues independently.
 - Added route, AI, and end-to-end world regression tests. These tests
   have not been executed in the editing environment.
+
+
+### Sunracer baseline, cargo hold and equipment locker (2026-11-03)
+
+- Changed catalog ship 1 from placeholder Phoenix to Sunracer, retaining
+  persisted account ship ID 1 and preserving future multi-ship ownership.
+- Base Sunracer now has 300 armor, a 10-point built-in Garnet, a four-tonne
+  cargo hold and original Forward-1/missile/drive system metadata.
+- Added Beryl (15) and Sapphire (20) named upgrades; single Sunracer
+  beams replace rather than stack damage, while existing DarkOrbit
+  multi-slot ships retain additive equipment calculations.
+- Added /equipment authenticated equipment/loadout screen, account-owned
+  equip/unequip forms, and persistent C-1/C-2 selection applied to the
+  next cockpit session.
+- Added fixed-catalog cargo commodity storage to the existing
+  inventory JSON with row-locked capacity-constrained transfers.
+- Added non-suicidal Scow survival transitions: evade at 80% hull and
+  surrender at 35%; accept surrender is ownership checked and resumes
+  the suspended course; surrendered ships are protected from shots.
+- Added unit and integration tests for baseline stats, owned inventory,
+  equipment transfers, configuration activation, surrender and security.
+- Directional shield physics, real cargo trading, surrender payout,
+  loot reconciliation and live-session refitting are not implemented.
+- Elixir/Mix tests and physical headset runs not executable in the
+  editing environment.

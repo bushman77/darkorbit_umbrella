@@ -957,6 +957,59 @@ defmodule Core.WorldTest do
   end
 
   @tag no_initial_encounter: true, no_auto_respawn: true
+  test "a merchant evades injury, then offers surrender rather than fighting to destruction",
+       context do
+    opts = context.world_options
+    stats = %{context.stats | damage: 10}
+    {:ok, session} = World.connect(9_737, stats, opts)
+    assert {:ok, _} = World.solar_set_course(session.id, "venus", opts)
+    for _ <- 1..85, do: assert(:ok = SolarNavigation.tick(@solar_navigation_server))
+    {:ok, held} = World.solar_snapshot(session.id, opts)
+    encounter_id = held.pending_encounter.id
+
+    assert {:ok, %{enemy: enemy}} =
+      World.solar_enter_tactical(session.id, encounter_id, opts)
+    assert enemy.ship_class == "scow"
+
+    assert {:error, :enemy_not_surrendered} =
+      World.solar_finish_tactical(session.id, encounter_id, :surrender, opts)
+
+    [{pid, _}] = Registry.lookup(@registry, {:world_map, "1-1"})
+    assert {:ok, _} = World.select_target(session.id, enemy.id, opts)
+    :sys.replace_state(pid, fn map ->
+      npc = Map.fetch!(map.npcs, enemy.id)
+      updated = %{npc | hull: 170, shields: 0}
+      %{map | npcs: Map.put(map.npcs, enemy.id, updated)}
+    end)
+
+    assert {:ok, %{destroyed: false}} = World.attack(session.id, opts)
+    fleeing = :sys.get_state(pid).npcs[enemy.id]
+    assert fleeing.state == :evade
+    assert fleeing.speed > 105
+    assert fleeing.destination != nil
+    assert fleeing.hull == 160
+
+    for _ <- 1..8, do: assert({:ok, _} = World.tick("1-1", opts))
+    :sys.replace_state(pid, fn map ->
+      npc = Map.fetch!(map.npcs, enemy.id)
+      %{map | npcs: Map.put(map.npcs, enemy.id, %{npc | hull: 78})}
+    end)
+
+    assert {:ok, %{destroyed: false}} = World.attack(session.id, opts)
+    surrendered = :sys.get_state(pid).npcs[enemy.id]
+    assert surrendered.state == :surrendered
+    assert surrendered.hull == 68
+    assert surrendered.destination == nil
+    assert {:error, :invalid_target} = World.attack(session.id, opts)
+
+    assert {:ok, resumed} =
+      World.solar_finish_tactical(session.id, encounter_id, :surrender, opts)
+    assert resumed.tactical_encounter == nil
+    refute resumed.cruise_paused
+    refute Map.has_key?(:sys.get_state(pid).npcs, enemy.id)
+  end
+
+  @tag no_initial_encounter: true, no_auto_respawn: true
   test "a merchant Scow travels its existing course, leaves the encounter, and unpauses SOL",
        context do
     opts = context.world_options

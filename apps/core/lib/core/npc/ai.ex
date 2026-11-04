@@ -22,6 +22,8 @@ defmodule Core.NPC.AI do
       :idle -> idle(npc, target, map, tick)
       :patrol -> patrol(npc, target, tick)
       :cruise -> cruise(npc, target, tick)
+      :evade -> cruise(npc, target, tick)
+      :surrendered -> {%{npc | destination: nil, target_id: nil}, []}
       :pursue -> engage_or_idle(npc, target, tick)
       :attack -> engage_or_idle(npc, target, tick)
       :destroyed -> {%{npc | status: :destroyed, destination: nil, target_id: nil}, []}

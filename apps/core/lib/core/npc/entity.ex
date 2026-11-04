@@ -32,7 +32,7 @@ defmodule Core.NPC.Entity do
   ]
   defstruct @enforce_keys ++ [:destination, :target_id, :course]
 
-  @type state :: :idle | :patrol | :pursue | :attack | :cruise | :destroyed
+  @type state :: :idle | :patrol | :pursue | :attack | :cruise | :evade | :surrendered | :destroyed
 
   @type t :: %__MODULE__{
           id: String.t(),

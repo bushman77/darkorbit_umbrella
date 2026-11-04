@@ -227,6 +227,9 @@ defmodule DarkorbitWeb.WorldChannelTest do
 
     assert {:ok, world} = World.snapshot("1-1")
     assert Enum.any?(world.entities, &(&1.id == npc_id))
+
+    ref = push(joined, "solar_accept_surrender", %{"encounter_id" => encounter_id})
+    assert_reply ref, :error, %{reason: "enemy_not_surrendered"}
     assert :ok = Core.Universe.Navigation.tick(server)
     assert {:ok, paused} = Core.Universe.Navigation.snapshot(server, account.id)
     assert paused.cruise_paused

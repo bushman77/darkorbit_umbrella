@@ -61,7 +61,9 @@
     aria-label="Active tactical interception">
     <p class="solar-encounter-kicker">TACTICAL INTERCEPTION ACTIVE</p>
     <strong data-solar-tactical-name>Encounter vessel</strong>
-    <p data-solar-tactical-message>Destroy the opposing vessel or retreat to continue your SOL course.</p>
+    <p data-solar-tactical-message>Defeat the opposing vessel, accept surrender if offered, or retreat.</p>
+    <button type="button" hidden class="nav-button"
+      data-solar-tactical-surrender>Accept surrender / Resume course</button>
     <button type="button" class="nav-button nav-danger"
       data-solar-tactical-retreat>Retreat / Resume course</button>
   </section>
@@ -129,6 +131,12 @@
       </div>
       <p id="cockpit-helmet-feedback" role="status" class="mt-2 text-amber-200"></p>
     </div>
+
+    <a id="equipment-open" href={~p"/equipment"}
+       class="pointer-events-auto rounded-xl border border-amber-400/40 bg-slate-950/85 px-3 py-3 text-xs font-bold tracking-widest text-amber-200 hover:border-amber-300"
+       title="Inventory and ship loadout (reconnects the cockpit)">
+      <.icon name="hero-wrench-screwdriver" class="mr-1 inline size-4" /> EQUIPMENT
+    </a>
 
     <button id="nav-open" type="button" class="pointer-events-auto rounded-xl border border-cyan-300/30 bg-slate-950/85 px-4 py-3 text-xs font-bold tracking-widest text-cyan-100 hover:border-cyan-300" aria-keyshortcuts="M">
       <.icon name="hero-map" class="mr-1 inline size-4" /> SOLAR ATLAS <span class="text-cyan-300/60">[M]</span>

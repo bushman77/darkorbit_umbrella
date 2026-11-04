@@ -46,6 +46,14 @@ defmodule Darkorbit.World do
     end
   end
 
+  @doc "Persisted choice of active configuration, defaulting to one for old pilots."
+  def active_configuration(user_id) when is_integer(user_id) do
+    case Accounts.get_player_account!(user_id) do
+      %PlayerAccount{data: %{"active_configuration" => 2}} -> 2
+      _ -> 1
+    end
+  end
+
   @spec connect(pos_integer(), 1 | 2, keyword()) ::
           {:ok, Core.World.Session.t()} | {:error, term()}
   def connect(user_id, config_no \\ 1, opts \\ []) do

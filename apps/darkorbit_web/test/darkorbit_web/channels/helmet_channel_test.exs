@@ -57,6 +57,8 @@ defmodule DarkorbitWeb.HelmetChannelTest do
     assert_reply ref, :error, %{reason: "read_only_or_invalid_command"}
     ref = push(viewer, "solar_retreat_encounter", %{"encounter_id" => "forged"})
     assert_reply ref, :error, %{reason: "read_only_or_invalid_command"}
+    ref = push(viewer, "solar_accept_surrender", %{"encounter_id" => "forged"})
+    assert_reply ref, :error, %{reason: "read_only_or_invalid_command"}
 
     ref = push(control, "set_mode", %{"mode" => "combat"})
     assert_reply ref, :ok, %{mode: "combat"}

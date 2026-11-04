@@ -75,7 +75,7 @@ defmodule Darkorbit.Accounts.PlayerAccount do
   @doc false
   def system_changeset(player_account, attrs) do
     player_account
-    |> cast(attrs, [:session_id, :verification, :faction_id, :ship_id])
+    |> cast(attrs, [:session_id, :verification, :faction_id, :ship_id, :data])
     |> validate_required([:session_id, :verification, :faction_id, :ship_id])
     |> common_constraints()
   end

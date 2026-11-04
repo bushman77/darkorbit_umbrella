@@ -159,7 +159,7 @@ defmodule Core.World.MapServer do
   @spec finish_solar_tactical(atom(), String.t(), pos_integer(), term(), String.t(), atom()) ::
           :ok | {:error, term()}
   def finish_solar_tactical(registry, map_id, session_id, player_id, encounter_id, outcome)
-      when outcome in [:victory, :retreat, :defeat] do
+      when outcome in [:victory, :retreat, :defeat, :surrender] do
     call_map(registry, map_id,
       {:finish_solar_tactical, session_id, player_id, encounter_id, outcome})
   end
@@ -353,6 +353,9 @@ defmodule Core.World.MapServer do
       cond do
         outcome == :victory and present != nil ->
           {:reply, {:error, :enemy_still_active}, state}
+
+        outcome == :surrender and (present == nil or present.state != :surrendered) ->
+          {:reply, {:error, :enemy_not_surrendered}, state}
 
         outcome == :retreat and not Combat.alive?(ship) ->
           {:reply, {:error, :attacker_destroyed}, state}
@@ -622,7 +625,8 @@ defmodule Core.World.MapServer do
           do: attacker.damage,
           else: max(1, div(attacker.damage * connected, total_connections))
 
-        {updated, damage} = Combat.apply_damage(target, amount)
+        {damaged, damage} = Combat.apply_damage(target, amount)
+        updated = maybe_scow_survival(damaged)
         impact = %{
           target_id: id,
           target: combat_target_state(updated),
@@ -811,7 +815,7 @@ defmodule Core.World.MapServer do
 
         moved_npc = advance_entity(decided_npc, decided_npc.speed * distance_factor)
 
-        if npc.state == :cruise and npc.destination != nil and
+        if npc.state in [:cruise, :evade] and npc.destination != nil and
              moved_npc.destination == nil do
           # This Scow left the local interception lane. Do not spawn a new
           # patrol waypoint or allow it to circle back to its pursuer.
@@ -938,6 +942,7 @@ defmodule Core.World.MapServer do
 
   defp resolve_player_attack(state, attacker, target, beam \\ nil) do
     {damaged_target, damage} = Combat.apply_damage(target, attacker.damage)
+    damaged_target = maybe_scow_survival(damaged_target)
 
     updated_attacker = %{
       attacker
@@ -1286,6 +1291,30 @@ defmodule Core.World.MapServer do
       state_events
     end
   end
+
+  # Merchant survival thresholds are intentionally explicit and
+  # deterministic. They are V1 tuning, NOT reverse-engineered original
+  # Space Rogue odds. Scows accelerate away once they have lost 20% of
+  # their hull, and surrender at 35% remaining. Their original destination
+  # is retained while evading; only surrender stops them.
+  defp maybe_scow_survival(%NPCEntity{status: :alive, course: course} = npc)
+       when is_map(course) do
+    fraction = npc.hull / max(npc.max_hull, 1)
+
+    cond do
+      fraction <= 0.35 ->
+        %{npc | state: :surrendered, destination: nil,
+                speed: 0, target_id: nil}
+
+      fraction <= 0.8 and npc.state == :cruise ->
+        %{npc | state: :evade, speed: npc.speed * 1.5}
+
+      true ->
+        npc
+    end
+  end
+
+  defp maybe_scow_survival(npc), do: npc
 
   defp tactical_course("scow", %{origin_id: from, destination_id: to}, spawn, map),
     do: CruiseRoute.project(from, to, spawn, map)

@@ -42,6 +42,9 @@ defmodule DarkorbitWeb.Router do
     pipe_through [:browser, :require_authenticated_player]
 
     get "/play", GameController, :show
+    get "/equipment", EquipmentController, :show
+    post "/equipment", EquipmentController, :update
+    post "/equipment/activate", EquipmentController, :activate
   end
 
   # Other scopes may use custom stacks.

@@ -115,6 +115,17 @@ defmodule DarkorbitWeb.WorldChannel do
   def handle_in("solar_retreat_encounter", _payload, socket),
     do: {:reply, {:error, %{reason: "invalid_encounter"}}, socket}
 
+  def handle_in("solar_accept_surrender", %{"encounter_id" => id}, socket)
+      when is_binary(id) do
+    case World.solar_finish_tactical(socket.assigns.world_session_id, id, :surrender) do
+      {:ok, navigation} -> {:reply, {:ok, %{navigation: navigation}}, socket}
+      {:error, reason} -> {:reply, {:error, %{reason: error_reason(reason)}}, socket}
+    end
+  end
+
+  def handle_in("solar_accept_surrender", _payload, socket),
+    do: {:reply, {:error, %{reason: "invalid_encounter"}}, socket}
+
   def handle_in("solar_hail", %{"contact_id" => id}, socket)
       when is_binary(id) do
     case World.solar_hail(socket.assigns.world_session_id, id) do
