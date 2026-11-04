@@ -110,6 +110,8 @@ defmodule Core.Universe.Navigation do
       # At most one pilot owns a given physical vessel during a tactical
       # encounter. Leases are bound to its current traffic voyage number.
       tactical_claims: %{},
+      # Exact receipts permit retry when map cleanup fails after settlement.
+      settled_tactical: %{},
       # Server-owned reputation fixtures until the faction ledger is connected.
       # Never supplied by Phoenix client payloads or exposed in public snapshots.
       pilot_reputations: Keyword.get(opts, :pilot_reputations, %{}),
@@ -276,7 +278,15 @@ defmodule Core.Universe.Navigation do
                   _from, state) do
     {voyage, state} = ensure_player(state, player_id)
 
+    receipt = Map.get(state.settled_tactical, {player_id, encounter_id})
+
     cond do
+      receipt == %{outcome: outcome, report: report} ->
+        {:reply, {:ok, public(voyage, state, player_id)}, state}
+
+      receipt != nil ->
+        {:reply, {:error, :tactical_settlement_conflict}, state}
+
       not is_map(voyage.tactical_encounter) ->
         {:reply, {:error, :no_tactical_encounter}, state}
 
@@ -334,7 +344,15 @@ defmodule Core.Universe.Navigation do
                     %{voyage | tactical_encounter: nil, pending_encounter: nil}
                 end
 
-              state = %{state | traffic: traffic,
+              receipts =
+                if outcome == :rollback do
+                  state.settled_tactical
+                else
+                  Map.put(state.settled_tactical, {player_id, encounter_id},
+                    %{outcome: outcome, report: report})
+                end
+
+              state = %{state | traffic: traffic, settled_tactical: receipts,
                 tactical_claims: Map.delete(state.tactical_claims, tactical.contact_id)}
               state = put_voyage(state, player_id, updated)
               broadcast(state, player_id, updated)

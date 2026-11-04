@@ -161,13 +161,23 @@ defmodule Core.World.MapServer do
        call_sign, ship_class, aggressive?, course})
   end
 
-  @doc "Server-authorized victory verification or safe retreat."
-  @spec finish_solar_tactical(atom(), String.t(), pos_integer(), term(), String.t(), atom()) ::
-          {:ok, map()} | {:error, term()}
-  def finish_solar_tactical(registry, map_id, session_id, player_id, encounter_id, outcome)
+  @doc "Freeze a verified tactical outcome before any cross-process settlement."
+  def prepare_solar_tactical(registry, map_id, session_id, player_id, encounter_id, outcome)
       when outcome in [:victory, :retreat, :defeat, :surrender] do
     call_map(registry, map_id,
-      {:finish_solar_tactical, session_id, player_id, encounter_id, outcome})
+      {:prepare_solar_tactical, session_id, player_id, encounter_id, outcome})
+  end
+
+  @doc "Retire a prepared tactical actor only after strategic settlement succeeds."
+  def complete_solar_tactical(registry, map_id, session_id, player_id, encounter_id) do
+    call_map(registry, map_id,
+      {:complete_solar_tactical, session_id, player_id, encounter_id})
+  end
+
+  @doc "Determine a disconnect outcome from map-owned combat state only."
+  def tactical_outcome(registry, map_id, session_id, player_id, encounter_id) do
+    call_map(registry, map_id,
+      {:tactical_outcome, session_id, player_id, encounter_id})
   end
 
   @spec available?(atom(), String.t()) :: boolean()
@@ -364,7 +374,7 @@ defmodule Core.World.MapServer do
           solar_tactical: Map.put(state.solar_tactical, player_id,
             %{encounter_id: encounter_id, npc_id: npc.id, type_id: type_id,
               contact_id: route.contact_id, voyage_number: route.voyage_number,
-              last_combat: nil,
+              last_combat: nil, prepared: nil,
               navigation_player_id: ship.player_id, provoked?: aggressive?})
         }
         broadcast(updated, :npc_spawned, public_entity(npc))
@@ -377,7 +387,36 @@ defmodule Core.World.MapServer do
   end
 
   def handle_call(
-        {:finish_solar_tactical, session_id, player_id, encounter_id, outcome},
+        {:tactical_outcome, session_id, player_id, encounter_id}, _from, state
+      ) do
+    result =
+      with {:ok, player} <- authorized_entity(state, session_id, player_id),
+           {:ok, held} <- Map.fetch(state.solar_tactical, player_id),
+           true <- held.encounter_id == encounter_id do
+        npc = Map.get(state.npcs, held.npc_id)
+
+        outcome =
+          cond do
+            held.prepared != nil -> held.prepared.outcome
+            player.status == :destroyed -> :defeat
+            npc == nil and is_map(held.last_combat) and
+                held.last_combat.status == :destroyed -> :victory
+            npc != nil and npc.state == :surrendered -> :surrender
+            true -> :retreat
+          end
+
+        {:ok, outcome}
+      else
+        :error -> {:error, :no_tactical_encounter}
+        false -> {:error, :encounter_mismatch}
+        error -> error
+      end
+
+    {:reply, result, state}
+  end
+
+  def handle_call(
+        {:prepare_solar_tactical, session_id, player_id, encounter_id, outcome},
         _from, state
       ) do
     with {:ok, ship} <- authorized_entity(state, session_id, player_id),
@@ -386,6 +425,12 @@ defmodule Core.World.MapServer do
       present = Map.get(state.npcs, ongoing.npc_id)
 
       cond do
+        is_map(ongoing.prepared) and ongoing.prepared.outcome == outcome ->
+          {:reply, {:ok, ongoing.prepared.report}, state}
+
+        is_map(ongoing.prepared) ->
+          {:reply, {:error, :tactical_settlement_conflict}, state}
+
         outcome == :victory and present != nil ->
           {:reply, {:error, :enemy_still_active}, state}
 
@@ -406,41 +451,76 @@ defmodule Core.World.MapServer do
           {:reply, {:error, :pilot_still_alive}, state}
 
         true ->
-          # Retreat must clear stale target locks for every pilot that may
-          # have targeted this now-removed encounter NPC.
-          {entities, cleared} =
-            Enum.reduce(state.entities, {%{}, []}, fn {id, entity}, {acc, refs} ->
-              if entity.target_id == ongoing.npc_id or
-                   entity.engaged_target_id == ongoing.npc_id do
-                revised = %{entity | target_id: nil, engaged_target_id: nil}
-                {Map.put(acc, id, revised), [entity | refs]}
-              else
-                {Map.put(acc, id, entity), refs}
-              end
-            end)
-
-          updated = %{state |
-            entities: entities,
-            npcs: Map.delete(state.npcs, ongoing.npc_id),
-            npc_definitions: Map.delete(state.npc_definitions, ongoing.type_id),
-            solar_tactical: Map.delete(state.solar_tactical, player_id)
-          }
-          if present, do: broadcast(updated, :entity_left, public_entity(present))
-
-          Enum.each(cleared, fn entity ->
-            if entity.target_id != nil do
-              broadcast(updated, :target_cleared, %{
-                player_id: entity.id, target_id: nil, tick: state.tick})
-            end
-            if entity.engaged_target_id != nil do
-              broadcast(updated, :combat_disengaged,
-                disengagement_payload(entity, :target_removed, state.tick))
-            end
-          end)
           final_condition = if present, do: tactical_combat_report(present),
             else: ongoing.last_combat
-          {:reply, {:ok, tactical_report(ongoing, final_condition)}, updated}
+          report = %{
+            npc: tactical_report(ongoing, final_condition),
+            player: %{
+              player_id: ship.player_id,
+              ship_instance_id: ship.ship_instance_id,
+              combat: player_combat_condition(ship)
+            }
+          }
+          # This removes the transient actor from the simulation (no attacks
+          # can change its damage), but retains both the evidence and its
+          # exclusive strategic claim until the owner commits settlement.
+          prepared = %{outcome: outcome, report: report, retiring_npc: present}
+          updated = %{state |
+            npcs: Map.delete(state.npcs, ongoing.npc_id),
+            solar_tactical: Map.put(state.solar_tactical, player_id,
+              %{ongoing | prepared: prepared})
+          }
+          {:reply, {:ok, report}, updated}
       end
+    else
+      :error -> {:reply, {:error, :no_tactical_encounter}, state}
+      false -> {:reply, {:error, :encounter_mismatch}, state}
+      error -> {:reply, error, state}
+    end
+  end
+
+  def handle_call(
+        {:complete_solar_tactical, session_id, player_id, encounter_id},
+        _from, state
+      ) do
+    with {:ok, _ship} <- authorized_entity(state, session_id, player_id),
+         {:ok, held} <- Map.fetch(state.solar_tactical, player_id),
+         true <- held.encounter_id == encounter_id,
+         true <- is_map(held.prepared) do
+      {entities, cleared} =
+        Enum.reduce(state.entities, {%{}, []}, fn {id, entity}, {acc, refs} ->
+          if entity.target_id == held.npc_id or
+               entity.engaged_target_id == held.npc_id do
+            revised = %{entity | target_id: nil, engaged_target_id: nil}
+            {Map.put(acc, id, revised), [entity | refs]}
+          else
+            {Map.put(acc, id, entity), refs}
+          end
+        end)
+
+      updated = %{state |
+        entities: entities,
+        npcs: Map.delete(state.npcs, held.npc_id),
+        npc_definitions: Map.delete(state.npc_definitions, held.type_id),
+        solar_tactical: Map.delete(state.solar_tactical, player_id)
+      }
+
+      if held.prepared.retiring_npc do
+        broadcast(updated, :entity_left, public_entity(held.prepared.retiring_npc))
+      end
+
+      Enum.each(cleared, fn entity ->
+        if entity.target_id != nil do
+          broadcast(updated, :target_cleared, %{
+            player_id: entity.id, target_id: nil, tick: state.tick})
+        end
+        if entity.engaged_target_id != nil do
+          broadcast(updated, :combat_disengaged,
+            disengagement_payload(entity, :target_removed, state.tick))
+        end
+      end)
+
+      {:reply, :ok, updated}
     else
       :error -> {:reply, {:error, :no_tactical_encounter}, state}
       false -> {:reply, {:error, :encounter_mismatch}, state}

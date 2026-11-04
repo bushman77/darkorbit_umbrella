@@ -124,7 +124,13 @@ defmodule Core.World do
     end
   end
 
-  @doc "Map-server verified victory or retreat, then resume the held SOL voyage."
+  @doc """
+  Settle a frozen, map-verified report before deleting tactical evidence.
+
+  A persistence callback may be supplied by Darkorbit.World. Core itself
+  never accesses PostgreSQL. Failed persistence or Navigation settlement
+  leaves the map's prepared report available for an exact retry.
+  """
   @spec solar_finish_tactical(pos_integer(), String.t(), atom(), keyword()) ::
           {:ok, map()} | {:error, term()}
   def solar_finish_tactical(session_id, encounter_id, outcome, opts \\ [])
@@ -134,16 +140,33 @@ defmodule Core.World do
     server = solar_navigation_server(opts)
 
     with {:ok, session} <- fetch_session(sessions, session_id),
-         {:ok, %{tactical_encounter: %{id: ^encounter_id}}} <-
-           SolarNavigation.snapshot(server, session.player_id),
-         {:ok, verified} <- MapServer.finish_solar_tactical(registry, session.map_id,
-           session.id, session.entity_id, encounter_id, outcome) do
-      SolarNavigation.finish_tactical(server, session.player_id, encounter_id,
-        outcome, verified)
-    else
-      {:ok, %{tactical_encounter: nil}} -> {:error, :no_tactical_encounter}
-      {:ok, _} -> {:error, :encounter_mismatch}
-      error -> error
+         {:ok, verified} <- MapServer.prepare_solar_tactical(registry, session.map_id,
+           session.id, session.entity_id, encounter_id, outcome),
+         :ok <- persist_tactical_player(verified.player, opts),
+         {:ok, navigation} <- SolarNavigation.finish_tactical(server, session.player_id,
+           encounter_id, outcome, verified.npc),
+         :ok <- MapServer.complete_solar_tactical(registry, session.map_id,
+           session.id, session.entity_id, encounter_id) do
+      {:ok, navigation}
+    end
+  end
+
+  @doc "Determine a safe server-owned outcome on disconnect."
+  def solar_tactical_outcome(session_id, encounter_id, opts \\ []) do
+    registry = Keyword.get(opts, :registry, Core.World.Registry)
+    sessions = Keyword.get(opts, :sessions, SessionManager)
+
+    with {:ok, session} <- fetch_session(sessions, session_id) do
+      MapServer.tactical_outcome(registry, session.map_id, session.id,
+        session.entity_id, encounter_id)
+    end
+  end
+
+  defp persist_tactical_player(player, opts) do
+    case Keyword.get(opts, :persist_player_condition) do
+      nil -> :ok
+      fun when is_function(fun, 1) -> fun.(player)
+      _ -> {:error, :invalid_persistence_callback}
     end
   end
 

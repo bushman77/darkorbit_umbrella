@@ -91,7 +91,14 @@ defmodule Darkorbit.World do
   defdelegate solar_hail(session_id, contact_id), to: Simulation
   defdelegate solar_resolve_encounter(session_id, encounter_id, choice), to: Simulation
   defdelegate solar_enter_tactical(session_id, encounter_id), to: Simulation
-  defdelegate solar_finish_tactical(session_id, encounter_id, outcome), to: Simulation
+  @doc "Persist player damage before releasing the strategic NPC claim."
+  def solar_finish_tactical(session_id, encounter_id, outcome) do
+    Simulation.solar_finish_tactical(session_id, encounter_id, outcome,
+      persist_player_condition: fn %{player_id: player_id,
+                                     ship_instance_id: ship_id, combat: combat} ->
+        ShipCondition.save_verified(player_id, ship_id, combat)
+      end)
+  end
   defdelegate flight_controls(session_id, input), to: Simulation
   defdelegate select_target(session_id, target_id), to: Simulation
   defdelegate clear_target(session_id), to: Simulation
