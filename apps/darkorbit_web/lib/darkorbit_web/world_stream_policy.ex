@@ -90,7 +90,7 @@ defmodule DarkorbitWeb.WorldStreamPolicy do
 
   defp urgent_change?(previous, current) do
     Enum.any?(@urgent_fields, fn key ->
-      Map.get(previous, key) !== Map.get(current, key)
+      Map.get(previous, key) != Map.get(current, key)
     end)
   end
 end

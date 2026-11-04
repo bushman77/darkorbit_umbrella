@@ -37,7 +37,7 @@ defmodule DarkorbitWeb.WorldStreamDelta do
 
   defp changed_fields(old, current) do
     Enum.reduce(current, %{}, fn {key, value}, acc ->
-      if Map.has_key?(old, key) and Map.get(old, key) === value,
+      if Map.has_key?(old, key) and Map.get(old, key) == value,
         do: acc,
         else: Map.put(acc, key, value)
     end)

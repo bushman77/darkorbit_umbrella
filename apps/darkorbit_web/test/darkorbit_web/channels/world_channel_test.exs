@@ -838,13 +838,19 @@ defmodule DarkorbitWeb.WorldChannelTest do
 
     assert response.stream == "delta_v1"
     first_tick = response.map.tick
-    for _ <- 1..9 do
-      assert {:ok, _} = World.tick()
+
+    # Exercise the replication channel with unchanged snapshots. The physics
+    # integrator can legitimately normalize initial integer velocities to
+    # floats, which is not part of this transport cadence regression.
+    for offset <- 1..9 do
+      send(joined.channel_pid,
+        {:world_state, %{response.map | tick: first_tick + offset}})
     end
     refute_push "world_delta", _, 0
 
-    assert {:ok, _} = World.tick()
     expected_tick = first_tick + 10
+    send(joined.channel_pid,
+      {:world_state, %{response.map | tick: expected_tick}})
     assert_push "world_delta", %{base_tick: ^first_tick, tick: ^expected_tick, entities: []}
     leave_and_wait(joined)
   end

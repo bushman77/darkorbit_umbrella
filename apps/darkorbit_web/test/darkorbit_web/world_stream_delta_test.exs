@@ -29,6 +29,16 @@ defmodule DarkorbitWeb.WorldStreamDeltaTest do
     assert byte_size(Jason.encode!(delta)) < div(byte_size(Jason.encode!(after_state)), 2)
   end
 
+  test "numerically identical integer and floating-point zeros do not produce packets" do
+    before = %{tick: 1, entities: [
+      %{id: 3, kind: :player, velocity: %{x: 0, y: 0, z: 0}}
+    ]}
+    after_state = %{before | tick: 2, entities: [
+      %{id: 3, kind: :player, velocity: %{x: 0.0, y: -0.0, z: 0.0}}
+    ]}
+    assert WorldStreamDelta.between(before, after_state).entities == []
+  end
+
   test "damage, spawns, removals and warnings" do
     before = snapshot()
     [player, _] = before.entities
