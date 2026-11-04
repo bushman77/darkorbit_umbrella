@@ -17,6 +17,7 @@ defmodule Darkorbit.World do
   alias Darkorbit.Fleet
   alias Darkorbit.Loadouts
   alias Darkorbit.ShipStats
+  alias Darkorbit.ShipCondition
   alias Darkorbit.World.PubSub
 
   @legacy_test_earth_sector Application.compile_env(:darkorbit, :legacy_test_earth_sector, false)
@@ -59,19 +60,28 @@ defmodule Darkorbit.World do
   def connect(user_id, config_no \\ 1, opts \\ []) do
     with {:ok, player_ship} <- Fleet.get_active_ship(user_id),
          {:ok, stats} <- ShipStats.calculate(user_id, player_ship.id, config_no),
+         {:ok, condition} <-
+           ShipCondition.load_or_initialize(user_id, player_ship.id, stats),
          {:ok, entry} <- region_for_player(user_id) do
       requested_map = Keyword.get(opts, :map_id, entry.map_id)
 
       if requested_map == entry.map_id do
         Simulation.connect(user_id, stats, map_id: requested_map, entry: entry,
-          ship_instance_id: player_ship.id)
+          ship_instance_id: player_ship.id, combat_condition: condition)
       else
         {:error, :wrong_orbital_region}
       end
     end
   end
 
-  defdelegate disconnect(session_id), to: Simulation
+  @doc "Persist the actual map-owned damage before releasing the player session."
+  def disconnect(session_id) do
+    with {:ok, %{player_id: player_id, ship_instance_id: ship_id, combat: condition}} <-
+           Simulation.ship_condition(session_id),
+         :ok <- ShipCondition.save_verified(player_id, ship_id, condition) do
+      Simulation.disconnect(session_id)
+    end
+  end
   defdelegate move(session_id, destination), to: Simulation
   defdelegate plot_course(session_id, waypoints), to: Simulation
   defdelegate stop_navigation(session_id), to: Simulation

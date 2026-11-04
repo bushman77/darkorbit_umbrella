@@ -22,11 +22,21 @@ defmodule Core.World do
       with {:ok, session} <- SessionManager.open(sessions, player_id, map_id,
           Keyword.get(opts, :ship_instance_id)),
            {:ok, _entity} <- join_or_close(registry, sessions, session, stats,
-             Keyword.get(opts, :entry)) do
+             Keyword.get(opts, :entry), Keyword.get(opts, :combat_condition)) do
         {:ok, session}
       end
     else
       {:error, :map_not_found}
+    end
+  end
+
+  @doc "Server-only capture of an authenticated player entity's current combat condition."
+  def ship_condition(session_id, opts \\ []) do
+    registry = Keyword.get(opts, :registry, Core.World.Registry)
+    sessions = Keyword.get(opts, :sessions, SessionManager)
+
+    with {:ok, session} <- fetch_session(sessions, session_id) do
+      MapServer.ship_condition(registry, session.map_id, session.id, session.entity_id)
     end
   end
 
@@ -339,8 +349,8 @@ defmodule Core.World do
 
   defp require_conventional(_session, _opts), do: :ok
 
-  defp join_or_close(registry, sessions, session, stats, entry) do
-    case MapServer.join(registry, session.map_id, session, stats, entry) do
+  defp join_or_close(registry, sessions, session, stats, entry, condition) do
+    case MapServer.join(registry, session.map_id, session, stats, entry, condition) do
       {:ok, entity} ->
         {:ok, entity}
 

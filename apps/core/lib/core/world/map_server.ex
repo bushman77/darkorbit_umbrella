@@ -14,6 +14,7 @@ defmodule Core.World.MapServer do
   alias Core.NPC.Entity, as: NPCEntity
   alias Core.Universe.Navigation, as: SolarNavigation
   alias Core.Ships.Stats
+  alias Core.Ships.Condition
   alias Core.World.Course
   alias Core.World.Entity
   alias Core.World.FlightDynamics
@@ -46,8 +47,13 @@ defmodule Core.World.MapServer do
 
   @spec join(atom(), String.t(), Session.t(), Stats.t() | map()) ::
           {:ok, map()} | {:error, term()}
-  def join(registry, map_id, %Session{} = session, stats, entry \\ nil) do
-    call_map(registry, map_id, {:join, session, stats, entry})
+  def join(registry, map_id, %Session{} = session, stats, entry \\ nil, condition \\ nil) do
+    call_map(registry, map_id, {:join, session, stats, entry, condition})
+  end
+
+  @doc "Read the server-owned condition of an authenticated player ship."
+  def ship_condition(registry, map_id, session_id, entity_id) do
+    call_map(registry, map_id, {:ship_condition, session_id, entity_id})
   end
 
   @spec leave(atom(), String.t(), pos_integer(), term()) :: :ok | {:error, term()}
@@ -209,9 +215,12 @@ defmodule Core.World.MapServer do
 
   @impl true
   def handle_call({:join, session, stats}, from, state),
-    do: handle_call({:join, session, stats, nil}, from, state)
+    do: handle_call({:join, session, stats, nil, nil}, from, state)
 
-  def handle_call({:join, session, stats, entry}, _from, state) do
+  def handle_call({:join, session, stats, entry}, from, state),
+    do: handle_call({:join, session, stats, entry, nil}, from, state)
+
+  def handle_call({:join, session, stats, entry, condition}, _from, state) do
     cond do
       Map.has_key?(state.entities, session.entity_id) or
           Map.has_key?(state.npcs, session.entity_id) ->
@@ -223,7 +232,12 @@ defmodule Core.World.MapServer do
       not valid_join_entry?(state.definition, entry) ->
         {:reply, {:error, :invalid_spawn}, state}
 
+      not valid_player_condition?(stats, condition) ->
+        {:reply, {:error, :invalid_ship_condition}, state}
+
       true ->
+        {:ok, condition} = if is_nil(condition), do: Condition.initial(stats),
+          else: {:ok, condition}
         weapon = Combat.player_weapon(stats, state.tick_ms)
         position = if entry, do: entry.position, else: state.definition.spawn
         attitude = if entry, do: entry.attitude,
@@ -240,10 +254,10 @@ defmodule Core.World.MapServer do
           orientation: Orientation.from_angles(attitude),
           destination: nil,
           speed: stats.speed,
-          hull: stats.hit_points,
-          max_hull: stats.hit_points,
-          shields: stats.shields,
-          max_shields: stats.shields,
+          hull: condition.hull,
+          max_hull: condition.max_hull,
+          shields: condition.shields,
+          max_shields: condition.max_shields,
           shield_absorption: stats.shield_absorption,
           damage: weapon.damage,
           attack_range: weapon.attack_range,
@@ -251,7 +265,7 @@ defmodule Core.World.MapServer do
           next_attack_tick: 0,
           target_id: nil,
           engaged_target_id: nil,
-          status: :alive
+          status: if(condition.status == :destroyed, do: :destroyed, else: :alive)
         }
 
         new_state = %{state | entities: Map.put(state.entities, entity.id, entity)}
@@ -259,6 +273,19 @@ defmodule Core.World.MapServer do
         broadcast(new_state, :entity_joined, payload)
         {:reply, {:ok, payload}, new_state}
     end
+  end
+
+  def handle_call({:ship_condition, session_id, entity_id}, _from, state) do
+    result =
+      with {:ok, ship} <- authorized_entity(state, session_id, entity_id) do
+        {:ok, %{
+          player_id: ship.player_id,
+          ship_instance_id: ship.ship_instance_id,
+          combat: player_combat_condition(ship)
+        }}
+      end
+
+    {:reply, result, state}
   end
 
   def handle_call(:clear_encounters, _from, state) do
@@ -1509,6 +1536,22 @@ defmodule Core.World.MapServer do
 
   defp armed_weapon(%{damage: damage}) when is_number(damage) and damage > 0, do: :ok
   defp armed_weapon(_entity), do: {:error, :weapon_unarmed}
+
+  defp valid_player_condition?(_stats, nil), do: true
+
+  defp valid_player_condition?(stats, condition) when is_map(condition) do
+    Condition.validate(condition) == :ok and
+      condition.max_hull == Map.get(stats, :hit_points) and
+      condition.max_shields == Map.get(stats, :shields)
+  end
+
+  defp valid_player_condition?(_stats, _condition), do: false
+
+  defp player_combat_condition(ship) do
+    %{hull: ship.hull, max_hull: ship.max_hull,
+      shields: ship.shields, max_shields: ship.max_shields,
+      status: if(ship.status == :destroyed, do: :destroyed, else: :alive)}
+  end
 
   defp valid_stats?(stats) do
     valid_non_negative_number?(Map.get(stats, :speed)) and
