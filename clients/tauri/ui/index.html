@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>SBS Space — Connect</title>
+    <link rel="stylesheet" href="./launcher.css">
+    <script type="module" src="./launcher.mjs"></script>
+  </head>
+  <body>
+    <main class="shell">
+      <div class="eyebrow">SBS SPACE / DESKTOP CLIENT</div>
+      <div class="mark" aria-hidden="true">✦</div>
+      <h1>Enter the solar system.</h1>
+      <p class="intro">Connect to the authoritative Elixir server. Your cockpit, Atlas, stereo view, combat and inventory are delivered by Phoenix.</p>
+      <form id="connect-form" novalidate>
+        <label for="server-url">Game server</label>
+        <input id="server-url" type="url" inputmode="url" autocomplete="url" spellcheck="false" placeholder="http://127.0.0.1:4000" required>
+        <p class="hint">Local testing: http://127.0.0.1:4000. Public multiplayer servers must use HTTPS.</p>
+        <div class="actions">
+          <button type="submit" class="primary">Launch cockpit</button>
+          <button type="button" id="use-local" class="secondary">Use local server</button>
+        </div>
+        <p role="alert" id="error" class="error" hidden></p>
+      </form>
+      <footer>Independent desktop distribution · Steam not required · Server-authoritative multiplayer</footer>
+    </main>
+  </body>
+</html>
