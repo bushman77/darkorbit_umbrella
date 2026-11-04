@@ -163,7 +163,7 @@ defmodule Core.World.MapServer do
 
   @doc "Freeze a verified tactical outcome before any cross-process settlement."
   def prepare_solar_tactical(registry, map_id, session_id, player_id, encounter_id, outcome)
-      when outcome in [:victory, :retreat, :defeat, :surrender] do
+      when outcome in [:victory, :retreat, :defeat, :surrender, :escaped] do
     call_map(registry, map_id,
       {:prepare_solar_tactical, session_id, player_id, encounter_id, outcome})
   end
@@ -374,7 +374,7 @@ defmodule Core.World.MapServer do
           solar_tactical: Map.put(state.solar_tactical, player_id,
             %{encounter_id: encounter_id, npc_id: npc.id, type_id: type_id,
               contact_id: route.contact_id, voyage_number: route.voyage_number,
-              last_combat: nil, prepared: nil,
+              last_combat: nil, prepared: nil, escape_pending: nil,
               navigation_player_id: ship.player_id, provoked?: aggressive?})
         }
         broadcast(updated, :npc_spawned, public_entity(npc))
@@ -399,6 +399,7 @@ defmodule Core.World.MapServer do
           cond do
             held.prepared != nil -> held.prepared.outcome
             player.status == :destroyed -> :defeat
+            held.escape_pending != nil -> :escaped
             npc == nil and is_map(held.last_combat) and
                 held.last_combat.status == :destroyed -> :victory
             npc != nil and npc.state == :surrendered -> :surrender
@@ -441,6 +442,10 @@ defmodule Core.World.MapServer do
         outcome in [:retreat, :defeat] and present == nil ->
           {:reply, {:error, :enemy_missing}, state}
 
+        outcome == :escaped and
+            (present != nil or not is_struct(ongoing.escape_pending, NPCEntity)) ->
+          {:reply, {:error, :enemy_not_escaped}, state}
+
         outcome == :surrender and (present == nil or present.state != :surrendered) ->
           {:reply, {:error, :enemy_not_surrendered}, state}
 
@@ -451,7 +456,8 @@ defmodule Core.World.MapServer do
           {:reply, {:error, :pilot_still_alive}, state}
 
         true ->
-          final_condition = if present, do: tactical_combat_report(present),
+          retiring_npc = present || ongoing.escape_pending
+          final_condition = if retiring_npc, do: tactical_combat_report(retiring_npc),
             else: ongoing.last_combat
           report = %{
             npc: tactical_report(ongoing, final_condition),
@@ -464,7 +470,7 @@ defmodule Core.World.MapServer do
           # This removes the transient actor from the simulation (no attacks
           # can change its damage), but retains both the evidence and its
           # exclusive strategic claim until the owner commits settlement.
-          prepared = %{outcome: outcome, report: report, retiring_npc: present}
+          prepared = %{outcome: outcome, report: report, retiring_npc: retiring_npc}
           updated = %{state |
             npcs: Map.delete(state.npcs, ongoing.npc_id),
             solar_tactical: Map.put(state.solar_tactical, player_id,
@@ -487,39 +493,8 @@ defmodule Core.World.MapServer do
          {:ok, held} <- Map.fetch(state.solar_tactical, player_id),
          true <- held.encounter_id == encounter_id,
          true <- is_map(held.prepared) do
-      {entities, cleared} =
-        Enum.reduce(state.entities, {%{}, []}, fn {id, entity}, {acc, refs} ->
-          if entity.target_id == held.npc_id or
-               entity.engaged_target_id == held.npc_id do
-            revised = %{entity | target_id: nil, engaged_target_id: nil}
-            {Map.put(acc, id, revised), [entity | refs]}
-          else
-            {Map.put(acc, id, entity), refs}
-          end
-        end)
-
-      updated = %{state |
-        entities: entities,
-        npcs: Map.delete(state.npcs, held.npc_id),
-        npc_definitions: Map.delete(state.npc_definitions, held.type_id),
-        solar_tactical: Map.delete(state.solar_tactical, player_id)
-      }
-
-      if held.prepared.retiring_npc do
-        broadcast(updated, :entity_left, public_entity(held.prepared.retiring_npc))
-      end
-
-      Enum.each(cleared, fn entity ->
-        if entity.target_id != nil do
-          broadcast(updated, :target_cleared, %{
-            player_id: entity.id, target_id: nil, tick: state.tick})
-        end
-        if entity.engaged_target_id != nil do
-          broadcast(updated, :combat_disengaged,
-            disengagement_payload(entity, :target_removed, state.tick))
-        end
-      end)
-
+      updated = retire_tactical_actor(state, player_id, held,
+        held.prepared.retiring_npc)
       {:reply, :ok, updated}
     else
       :error -> {:reply, {:error, :no_tactical_encounter}, state}
@@ -975,57 +950,75 @@ defmodule Core.World.MapServer do
   end
 
   defp complete_tactical_courses(state, ships) do
-    Enum.reduce(ships, state, fn npc, current ->
-      case Enum.find(current.solar_tactical, fn {_owner, held} ->
-             held.npc_id == npc.id
-           end) do
-        {owner_id, held} ->
-          {entities, cleared} =
-            Enum.reduce(current.entities, {%{}, []}, fn {id, ship}, {acc, releases} ->
-              if ship.target_id == npc.id or ship.engaged_target_id == npc.id do
-                updated = %{ship | target_id: nil, engaged_target_id: nil}
-                {Map.put(acc, id, updated), [ship | releases]}
-              else
-                {Map.put(acc, id, ship), releases}
-              end
-            end)
+    # Retain exact combat evidence if the strategic owner cannot settle an
+    # escape. Next ticks retry without respawning or repairing the vessel.
+    state =
+      Enum.reduce(ships, state, fn npc, current ->
+        case Enum.find(current.solar_tactical, fn {_owner, held} ->
+               held.npc_id == npc.id
+             end) do
+          {owner_id, held} ->
+            updated_held = %{held | escape_pending: npc}
+            %{current | solar_tactical:
+              Map.put(current.solar_tactical, owner_id, updated_held)}
 
-          updated = %{current |
-            entities: entities,
-            solar_tactical: Map.delete(current.solar_tactical, owner_id),
-            npc_definitions: Map.delete(current.npc_definitions, held.type_id)}
+          nil ->
+            current
+        end
+      end)
 
-          broadcast(updated, :entity_left, public_entity(npc))
+    retry_escaped_tactical(state)
+  end
 
-          Enum.each(cleared, fn ship ->
-            if ship.target_id != nil do
-              broadcast(updated, :target_cleared,
-                %{player_id: ship.id, target_id: nil, tick: current.tick})
-            end
-            if ship.engaged_target_id != nil do
-              broadcast(updated, :combat_disengaged,
-                disengagement_payload(ship, :target_removed, current.tick))
-            end
-          end)
-
-          # Unlike relying on a browser/channel event, this must work even
-          # when the pilot loses Wi-Fi while the Scow crosses the lane.
-          case {current.solar_navigation_server, held.navigation_player_id} do
-            {server, player_id} when not is_nil(server) and
-                                     is_integer(player_id) and player_id > 0 ->
-              _ = SolarNavigation.finish_tactical(server, player_id, held.encounter_id,
-                :escaped, tactical_report(held, tactical_combat_report(npc)))
-
-            _ ->
-              :ok
+  defp retry_escaped_tactical(state) do
+    Enum.reduce(state.solar_tactical, state, fn {owner_id, held}, current ->
+      case {held.escape_pending, held.prepared, current.solar_navigation_server} do
+        {%NPCEntity{} = npc, nil, server} when not is_nil(server) ->
+          case SolarNavigation.finish_tactical(server, held.navigation_player_id,
+                 held.encounter_id, :escaped,
+                 tactical_report(held, tactical_combat_report(npc))) do
+            {:ok, _} -> retire_tactical_actor(current, owner_id, held, npc)
+            {:error, _reason} -> current
           end
 
-          updated
-
-        nil ->
+        _ ->
           current
       end
     end)
+  end
+
+  defp retire_tactical_actor(state, owner_id, held, npc) do
+    {entities, cleared} =
+      Enum.reduce(state.entities, {%{}, []}, fn {id, entity}, {acc, refs} ->
+        if entity.target_id == held.npc_id or entity.engaged_target_id == held.npc_id do
+          revised = %{entity | target_id: nil, engaged_target_id: nil}
+          {Map.put(acc, id, revised), [entity | refs]}
+        else
+          {Map.put(acc, id, entity), refs}
+        end
+      end)
+
+    updated = %{state |
+      entities: entities,
+      npcs: Map.delete(state.npcs, held.npc_id),
+      npc_definitions: Map.delete(state.npc_definitions, held.type_id),
+      solar_tactical: Map.delete(state.solar_tactical, owner_id)
+    }
+
+    if npc, do: broadcast(updated, :entity_left, public_entity(npc))
+
+    Enum.each(cleared, fn entity ->
+      if entity.target_id != nil do
+        broadcast(updated, :target_cleared, %{
+          player_id: entity.id, target_id: nil, tick: state.tick})
+      end
+      if entity.engaged_target_id != nil do
+        broadcast(updated, :combat_disengaged,
+          disengagement_payload(entity, :target_removed, state.tick))
+      end
+    end)
+
+    updated
   end
 
   defp resolve_player_engagements(state) do
