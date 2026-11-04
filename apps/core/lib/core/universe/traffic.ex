@@ -294,8 +294,9 @@ defmodule Core.Universe.Traffic do
       is_integer(Map.get(report, :shields)) and
       report.hull >= 0 and report.hull <= old.hull and
       report.shields >= 0 and report.shields <= old.shields and
-      (reported_status == :destroyed) == (report.hull == 0) and
-      (reported_status == :surrendered or report.hull > 0)
+      # Zero hull is valid only for a destroyed vessel; this also rejects
+      # alive/surrendered reports with zero hull.
+      (reported_status == :destroyed) == (report.hull == 0)
   end
 
   defp initial_condition(kind) do
