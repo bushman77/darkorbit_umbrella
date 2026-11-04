@@ -28,7 +28,7 @@ defmodule DarkorbitWeb.WorldStreamPolicy do
   def project(%{entities: entities, tick: tick, tick_ms: tick_ms} = current,
               %{entities: old_entities}, player_id)
       when is_list(entities) and is_list(old_entities) and is_integer(tick) do
-    interval = max(1, Integer.ceil_div(500, tick_ms))
+    interval = max(1, ceil_ticks(500, tick_ms))
 
     if rem(tick, interval) == 0 do
       current
@@ -81,8 +81,12 @@ defmodule DarkorbitWeb.WorldStreamPolicy do
                   base_tick: base, tick: tick}, tick_ms)
       when tick_ms > 0 do
     changed != [] or removed != [] or metadata != %{} or
-      tick - base >= max(1, Integer.ceil_div(1_000, tick_ms))
+      tick - base >= max(1, ceil_ticks(1_000, tick_ms))
   end
+
+  # Compatible with Elixir 1.15+ (Integer.ceil_div/2 requires 1.20+).
+  defp ceil_ticks(milliseconds, tick_ms) when tick_ms > 0,
+    do: max(1, div(milliseconds + tick_ms - 1, tick_ms))
 
   defp urgent_change?(previous, current) do
     Enum.any?(@urgent_fields, fn key ->
