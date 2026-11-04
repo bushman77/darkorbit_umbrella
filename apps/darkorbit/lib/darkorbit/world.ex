@@ -88,9 +88,19 @@ defmodule Darkorbit.World do
   defp recover_prepared_departure(player_id) do
     case SessionManager.fetch_player(SessionManager, player_id) do
       {:ok, session} ->
-        with :ok <- recover_tactical_cleanup(session.id),
-             {:ok, pending?} <- Simulation.pending_disconnect?(session.id) do
-          if pending?, do: disconnect(session.id), else: :ok
+        with :ok <- recover_tactical_cleanup(session.id) do
+          # Tactical recovery may have already closed the previous session.
+          case SessionManager.fetch_player(SessionManager, player_id) do
+            :error ->
+              :ok
+
+            {:ok, remaining} ->
+              case Simulation.pending_disconnect?(remaining.id) do
+                {:ok, true} -> disconnect(remaining.id)
+                {:ok, false} -> :ok
+                error -> error
+              end
+          end
         end
 
       :error ->
