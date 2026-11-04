@@ -665,3 +665,7 @@
   and Security.assess/2; removed an unused collision binding and an
   unused equipment-controller test variable. The MapServer handle_call/3
   grouping warning remains and does not by itself imply a test failure.
+
+### Mix precommit callback grouping (2026-11-03)
+
+- Reordered only the two private laser-burst helper functions below the contiguous `handle_call/3` callback clauses in `Core.World.MapServer`. This removes Elixir's callback-clause grouping warning under `--warnings-as-errors` without changing gameplay, calculations, or routing. Mix verification remains required on the workstation.

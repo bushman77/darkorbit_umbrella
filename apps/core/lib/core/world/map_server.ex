@@ -605,6 +605,32 @@ defmodule Core.World.MapServer do
     end
   end
 
+  def handle_call({:attack, session_id, entity_id}, _from, state) do
+    with {:ok, attacker} <- authorized_entity(state, session_id, entity_id),
+         :ok <- living_attacker(attacker),
+         {:ok, target_id} <- selected_target(attacker),
+         {:ok, target} <- fetch_npc(state, target_id),
+         :ok <- Combat.validate_attack(attacker, target, state.tick) do
+      {new_state, payload} = resolve_player_attack(state, attacker, target)
+      {:reply, {:ok, payload}, new_state}
+    else
+      error -> {:reply, error, state}
+    end
+  end
+
+  def handle_call(:snapshot, _from, state), do: {:reply, {:ok, public_state(state)}, state}
+
+  def handle_call(:tick, _from, state) do
+    new_state = advance_tick(state)
+    {:reply, {:ok, public_state(new_state)}, new_state}
+  end
+
+  @impl true
+  def handle_info(:simulation_tick, state) do
+    new_state = state |> advance_tick() |> schedule_tick()
+    {:noreply, new_state}
+  end
+
   # One synchronized weapon activation. When both beams strike the same
   # NPC, combine the damage once; if two NPCs intersect separate rays,
   # distribute that same authorized damage budget across both.
@@ -695,32 +721,6 @@ defmodule Core.World.MapServer do
       shields: target.shields, max_shields: target.max_shields,
       status: target.status
     }
-  end
-
-  def handle_call({:attack, session_id, entity_id}, _from, state) do
-    with {:ok, attacker} <- authorized_entity(state, session_id, entity_id),
-         :ok <- living_attacker(attacker),
-         {:ok, target_id} <- selected_target(attacker),
-         {:ok, target} <- fetch_npc(state, target_id),
-         :ok <- Combat.validate_attack(attacker, target, state.tick) do
-      {new_state, payload} = resolve_player_attack(state, attacker, target)
-      {:reply, {:ok, payload}, new_state}
-    else
-      error -> {:reply, error, state}
-    end
-  end
-
-  def handle_call(:snapshot, _from, state), do: {:reply, {:ok, public_state(state)}, state}
-
-  def handle_call(:tick, _from, state) do
-    new_state = advance_tick(state)
-    {:reply, {:ok, public_state(new_state)}, new_state}
-  end
-
-  @impl true
-  def handle_info(:simulation_tick, state) do
-    new_state = state |> advance_tick() |> schedule_tick()
-    {:noreply, new_state}
   end
 
   defp advance_tick(state) do
