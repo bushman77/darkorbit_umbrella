@@ -40,6 +40,27 @@ defmodule Core.World do
     end
   end
 
+  @doc "Freeze a player ship's last map-owned combat state before DB persistence."
+  def prepare_disconnect(session_id, opts \\ []) do
+    registry = Keyword.get(opts, :registry, Core.World.Registry)
+    sessions = Keyword.get(opts, :sessions, SessionManager)
+
+    with {:ok, session} <- fetch_session(sessions, session_id),
+         :ok <- require_tactical_closed(session, opts) do
+      MapServer.prepare_disconnect(registry, session.map_id, session.id, session.entity_id)
+    end
+  end
+
+  @doc "Check whether a previous socket left a retryable departure."
+  def pending_disconnect?(session_id, opts \\ []) do
+    registry = Keyword.get(opts, :registry, Core.World.Registry)
+    sessions = Keyword.get(opts, :sessions, SessionManager)
+
+    with {:ok, session} <- fetch_session(sessions, session_id) do
+      MapServer.disconnect_pending?(registry, session.map_id, session.id, session.entity_id)
+    end
+  end
+
   @doc "Server-owned SOL travel status. Session identity is verified internally."
   @spec solar_snapshot(pos_integer(), keyword()) :: {:ok, map()} | {:error, term()}
   def solar_snapshot(session_id, opts \\ []) do

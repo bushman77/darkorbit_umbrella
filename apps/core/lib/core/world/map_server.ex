@@ -56,6 +56,16 @@ defmodule Core.World.MapServer do
     call_map(registry, map_id, {:ship_condition, session_id, entity_id})
   end
 
+  @doc "Freeze and detach the ship while its last damage is saved."
+  def prepare_disconnect(registry, map_id, session_id, entity_id) do
+    call_map(registry, map_id, {:prepare_disconnect, session_id, entity_id})
+  end
+
+  @doc "Only a prepared departure may be retried after the socket was lost."
+  def disconnect_pending?(registry, map_id, session_id, entity_id) do
+    call_map(registry, map_id, {:disconnect_pending, session_id, entity_id})
+  end
+
   @spec leave(atom(), String.t(), pos_integer(), term()) :: :ok | {:error, term()}
   def leave(registry, map_id, session_id, entity_id) do
     call_map(registry, map_id, {:leave, session_id, entity_id})
@@ -212,6 +222,7 @@ defmodule Core.World.MapServer do
       npc_definitions: npc_definitions,
       respawns: %{},
       solar_tactical: %{},
+      departures: %{},
       solar_navigation_server: Keyword.get(opts, :solar_navigation_server),
       auto_respawn?: Keyword.get(opts, :auto_respawn?, false),
       event_sink: Keyword.fetch!(opts, :event_sink),
@@ -287,15 +298,45 @@ defmodule Core.World.MapServer do
 
   def handle_call({:ship_condition, session_id, entity_id}, _from, state) do
     result =
-      with {:ok, ship} <- authorized_entity(state, session_id, entity_id) do
-        {:ok, %{
-          player_id: ship.player_id,
-          ship_instance_id: ship.ship_instance_id,
-          combat: player_combat_condition(ship)
-        }}
+      with {:ok, ship} <- find_session_entity(state, session_id, entity_id) do
+        {:ok, player_ship_report(ship)}
       end
 
     {:reply, result, state}
+  end
+
+  def handle_call({:disconnect_pending, session_id, entity_id}, _from, state) do
+    result =
+      case Map.get(state.departures, session_id) do
+        %Entity{id: ^entity_id} -> {:ok, true}
+        nil -> {:ok, false}
+        _ -> {:error, :session_mismatch}
+      end
+
+    {:reply, result, state}
+  end
+
+  def handle_call({:prepare_disconnect, session_id, entity_id}, _from, state) do
+    case Map.fetch(state.departures, session_id) do
+      {:ok, %Entity{id: ^entity_id} = ship} ->
+        {:reply, {:ok, player_ship_report(ship)}, state}
+
+      {:ok, _other_ship} ->
+        {:reply, {:error, :session_mismatch}, state}
+
+      :error ->
+        case authorized_entity(state, session_id, entity_id) do
+          {:ok, ship} ->
+            updated = %{state |
+              entities: Map.delete(state.entities, ship.id),
+              departures: Map.put(state.departures, session_id, ship)
+            }
+            {:reply, {:ok, player_ship_report(ship)}, updated}
+
+          error ->
+            {:reply, error, state}
+        end
+    end
   end
 
   def handle_call(:clear_encounters, _from, state) do
@@ -504,10 +545,14 @@ defmodule Core.World.MapServer do
   end
 
   def handle_call({:leave, session_id, entity_id}, _from, state) do
-    case authorized_entity(state, session_id, entity_id) do
+    case find_session_entity(state, session_id, entity_id) do
       {:ok, entity} ->
         {npcs, cleared_npc_ids} = clear_npc_targets(state.npcs, entity.id)
-        new_state = %{state | entities: Map.delete(state.entities, entity.id), npcs: npcs}
+        new_state = %{state |
+          entities: Map.delete(state.entities, entity.id),
+          departures: Map.delete(state.departures, session_id),
+          npcs: npcs
+        }
         broadcast(new_state, :entity_left, public_entity(entity))
 
         Enum.each(cleared_npc_ids, fn npc_id ->
@@ -1583,6 +1628,28 @@ defmodule Core.World.MapServer do
       end
 
     within_map? and clear_of_planet?
+  end
+
+  defp find_session_entity(state, session_id, entity_id) do
+    case authorized_entity(state, session_id, entity_id) do
+      {:error, :entity_not_found} ->
+        case Map.get(state.departures, session_id) do
+          %Entity{id: ^entity_id} = ship -> {:ok, ship}
+          nil -> {:error, :entity_not_found}
+          _ -> {:error, :session_mismatch}
+        end
+
+      result ->
+        result
+    end
+  end
+
+  defp player_ship_report(ship) do
+    %{
+      player_id: ship.player_id,
+      ship_instance_id: ship.ship_instance_id,
+      combat: player_combat_condition(ship)
+    }
   end
 
   defp authorized_entity(state, session_id, entity_id) do

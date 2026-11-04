@@ -58,7 +58,8 @@ defmodule Darkorbit.World do
   @spec connect(pos_integer(), 1 | 2, keyword()) ::
           {:ok, Core.World.Session.t()} | {:error, term()}
   def connect(user_id, config_no \\ 1, opts \\ []) do
-    with {:ok, player_ship} <- Fleet.get_active_ship(user_id),
+    with :ok <- recover_prepared_departure(user_id),
+         {:ok, player_ship} <- Fleet.get_active_ship(user_id),
          {:ok, stats} <- ShipStats.calculate(user_id, player_ship.id, config_no),
          {:ok, condition} <-
            ShipCondition.load_or_initialize(user_id, player_ship.id, stats),
@@ -78,9 +79,23 @@ defmodule Darkorbit.World do
   def disconnect(session_id) do
     with :ok <- settle_on_disconnect(session_id),
          {:ok, %{player_id: player_id, ship_instance_id: ship_id, combat: condition}} <-
-           Simulation.ship_condition(session_id),
+           Simulation.prepare_disconnect(session_id),
          :ok <- ShipCondition.save_verified(player_id, ship_id, condition) do
       Simulation.disconnect(session_id)
+    end
+  end
+
+  defp recover_prepared_departure(player_id) do
+    case SessionManager.fetch_player(SessionManager, player_id) do
+      {:ok, session} ->
+        case Simulation.pending_disconnect?(session.id) do
+          {:ok, true} -> disconnect(session.id)
+          {:ok, false} -> :ok
+          error -> error
+        end
+
+      :error ->
+        :ok
     end
   end
 
