@@ -206,7 +206,8 @@ defmodule Core.Universe.TrafficTest do
     assert {:error, :already_settled} =
       Traffic.settle(settled, identity, report, :retreat)
     assert {:error, :stale_voyage} =
-      Traffic.settle(settled, %{identity | voyage_number: 2},
+      Traffic.settle(settled,
+        %{identity | voyage_number: 2, encounter_id: "stale-voyage"},
         %{report | hull: 170}, :retreat)
 
     moved = Traffic.advance(settled, 1_000)[original.id]
@@ -226,7 +227,7 @@ defmodule Core.Universe.TrafficTest do
     assert {:error, :invalid_combat_report} =
       Traffic.settle(fleet, identity, vessel.combat, :victory)
     assert {:error, :invalid_combat_report} =
-      Traffic.settle(fleet, identity, %{vessel.combat | status: :surrendered}, :retreat)
+      Traffic.settle(fleet, identity, %{vessel.combat | status: :surrendered}, :escaped)
     assert {:error, :unknown_contact} =
       Traffic.settle(fleet, %{identity | contact_id: "forged"}, vessel.combat, :retreat)
   end
