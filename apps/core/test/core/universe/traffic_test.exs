@@ -255,6 +255,40 @@ defmodule Core.Universe.TrafficTest do
     assert abandoned[vessel.id].cargo == vessel.cargo
   end
 
+  test "destroyed procedural raider with zero hull settles a verified victory" do
+    {:ok, fleet} =
+      Traffic.launch_contact(Traffic.seed(), "earth", "venus", 1, :raider, 0.5)
+
+    raider = fleet["traffic:sol:cruise-1"]
+    assert raider.combat == %{
+      status: :alive, hull: 245, shields: 120,
+      max_hull: 245, max_shields: 120
+    }
+
+    identity = %{
+      contact_id: raider.id,
+      voyage_number: raider.voyage_number,
+      encounter_id: "flyby:traffic:sol:cruise-1:1"
+    }
+    destroyed = %{raider.combat | hull: 0, shields: 0, status: :destroyed}
+
+    # A kill must not be rejected merely because destroyed means zero hull.
+    assert {:ok, settled} = Traffic.settle(fleet, identity, destroyed, :victory)
+    assert settled[raider.id].state == :destroyed
+    assert settled[raider.id].combat == destroyed
+    assert MapSet.member?(settled[raider.id].settled_encounters, identity.encounter_id)
+    assert {:error, :already_settled} =
+      Traffic.settle(settled, identity, destroyed, :victory)
+
+    # Keep enforcing status/hull integrity and the original capacities.
+    assert {:error, :invalid_combat_report} =
+      Traffic.settle(fleet, identity, %{destroyed | hull: 1}, :victory)
+    assert {:error, :invalid_combat_report} =
+      Traffic.settle(fleet, identity, %{destroyed | status: :alive}, :victory)
+    assert {:error, :invalid_combat_report} =
+      Traffic.settle(fleet, identity, %{destroyed | max_hull: 246}, :victory)
+  end
+
   test "a destroyed vessel remains a tombstone and can never dock or reproduce its cargo" do
     fleet = Traffic.seed()
     vessel = fleet["traffic:sol:meridian-01"]
