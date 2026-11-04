@@ -3,9 +3,10 @@ defmodule DarkorbitWeb.WorldChannel do
 
   alias Darkorbit.World
   alias Core.Universe.OrbitalEntry
+  alias DarkorbitWeb.WorldStreamDelta
 
   @impl true
-  def join("world:" <> map_id, _payload,
+  def join("world:" <> map_id, payload,
            %{assigns: %{socket_role: :pilot}} = socket) do
     player_id = socket.assigns.current_player_id
     configuration = World.active_configuration(player_id)
@@ -18,7 +19,7 @@ defmodule DarkorbitWeb.WorldChannel do
              :ok <- World.subscribe("sol"),
              {:ok, status} <- World.player_status(player_id, configuration),
              {:ok, session} <- World.connect(player_id, configuration, map_id: map_id) do
-          finish_join(socket, map_id, session, status)
+          finish_join(socket, map_id, session, status, payload)
         else
           {:error, reason} -> {:error, %{reason: error_reason(reason)}}
         end
@@ -146,9 +147,13 @@ defmodule DarkorbitWeb.WorldChannel do
   end
 
   def handle_in("flight_controls", input, socket) when is_map(input) do
-    # Authentication and entity identity come solely from the channel session.
+    # No full entity acknowledgement on opt-in delta streams. The immediate
+    # movement_delta event and the next authoritative tick convey its state.
     case World.flight_controls(socket.assigns.world_session_id, input) do
-      {:ok, entity} -> {:reply, {:ok, %{entity: entity}}, socket}
+      {:ok, entity} ->
+        payload = if socket.assigns[:world_stream] == :delta_v1,
+          do: %{accepted: true}, else: %{entity: entity}
+        {:reply, {:ok, payload}, socket}
       {:error, reason} -> {:reply, {:error, %{reason: error_reason(reason)}}, socket}
     end
   end
@@ -217,6 +222,38 @@ defmodule DarkorbitWeb.WorldChannel do
       {:ok, attack} -> {:reply, {:ok, attack}, socket}
       {:error, reason} -> {:reply, {:error, %{reason: error_reason(reason)}}, socket}
     end
+  end
+
+  # A client may request resynchronization only for its authenticated map.
+  def handle_in("world_resync", _payload,
+                %{assigns: %{world_stream: :delta_v1, map_id: map_id}} = socket) do
+    case World.snapshot(map_id) do
+      {:ok, map} -> {:reply, {:ok, %{map: map}}, assign(socket, :world_baseline, map)}
+      {:error, reason} -> {:reply, {:error, %{reason: error_reason(reason)}}, socket}
+    end
+  end
+
+  @impl true
+  def handle_info({:world_state, %{tick: tick} = map},
+                  %{assigns: %{world_stream: :delta_v1, world_baseline: %{tick: base} = old}} = socket) do
+    if tick > base do
+      push(socket, "world_delta", WorldStreamDelta.between(old, map))
+      {:noreply, assign(socket, :world_baseline, map)}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  # Keep low-latency input feedback without rebroadcasting static ship fields.
+  def handle_info({:movement_started, entity},
+                  %{assigns: %{world_stream: :delta_v1}} = socket) do
+    patch = Map.take(entity, [
+      :id, :position_3d, :destination_3d, :route_waypoints_3d,
+      :navigation_mode, :flight_mode, :throttle, :forward_speed,
+      :attitude, :orientation, :angular_velocity, :velocity
+    ])
+    push(socket, "movement_delta", patch)
+    {:noreply, socket}
   end
 
   @impl true
@@ -323,7 +360,7 @@ defmodule DarkorbitWeb.WorldChannel do
     :ok
   end
 
-  defp finish_join(socket, map_id, session, status) do
+  defp finish_join(socket, map_id, session, status, payload) do
     with {:ok, snapshot} <- World.snapshot(map_id),
          {:ok, solar_navigation} <- World.solar_snapshot(session.id) do
         player_ids =
@@ -339,10 +376,15 @@ defmodule DarkorbitWeb.WorldChannel do
           pilots: World.player_summaries(player_ids)
         }
 
+        delta? = Map.get(payload, "stream") == "delta_v1"
+        response = if delta?, do: Map.put(response, :stream, "delta_v1"), else: response
+
         {:ok, response,
          socket
          |> assign(:map_id, map_id)
-         |> assign(:world_session_id, session.id)}
+         |> assign(:world_session_id, session.id)
+         |> assign(:world_stream, if(delta?, do: :delta_v1, else: :full))
+         |> assign(:world_baseline, snapshot)}
     else
       {:error, reason} ->
         _result = World.disconnect(session.id)

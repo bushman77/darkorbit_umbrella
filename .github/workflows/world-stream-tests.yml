@@ -1,0 +1,24 @@
+name: World stream JS regression tests
+
+on:
+  push:
+    branches: [sbs]
+    paths:
+      - "apps/darkorbit_web/assets/js/game/world_stream_delta*"
+      - "apps/darkorbit_web/assets/js/game/client.js"
+      - ".github/workflows/world-stream-tests.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  node:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Verify state reconstruction and resync behavior
+        run: node --test apps/darkorbit_web/assets/js/game/world_stream_delta_test.mjs

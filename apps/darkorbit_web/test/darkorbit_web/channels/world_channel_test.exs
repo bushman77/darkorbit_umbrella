@@ -802,6 +802,34 @@ defmodule DarkorbitWeb.WorldChannelTest do
            )
   end
 
+  test "delta opt-in uses sparse ticks and authenticated resync" do
+    account = verified_player_account_fixture()
+    {:ok, socket} = authenticated_socket(account)
+    {:ok, response, joined} =
+      subscribe_and_join(socket, WorldChannel, "world:1-1", %{"stream" => "delta_v1"})
+
+    assert response.stream == "delta_v1"
+    assert {:ok, _} = World.tick()
+    assert_push "world_delta", %{base_tick: base_tick, tick: tick, entities: updates}
+    assert tick > base_tick
+    assert is_list(updates)
+
+    ref = push(joined, "world_resync", %{"map_id" => "sol:mars"})
+    assert_reply ref, :ok, %{map: %{map_id: "1-1"}}
+    leave_and_wait(joined)
+  end
+
+  test "unmodified channel join retains full snapshot stream" do
+    account = verified_player_account_fixture()
+    {:ok, socket} = authenticated_socket(account)
+    {:ok, response, joined} = subscribe_and_join(socket, WorldChannel, "world:1-1")
+    refute Map.has_key?(response, :stream)
+    assert {:ok, _} = World.tick()
+    assert_push "world_state", %{entities: entities}
+    assert is_list(entities)
+    leave_and_wait(joined)
+  end
+
   defp authenticated_socket(account) do
     connect(UserSocket, %{"token" => GameAuth.socket_token(account)})
   end

@@ -21,6 +21,7 @@ import {HelmetControl} from "./helmet_control.mjs"
 import {helmetAlignmentKeyIntent} from "./helmet_alignment_keys.mjs"
 import {NavigationComputer} from "./navigation_computer.mjs"
 import {FlightControls} from "./flight_controls.mjs"
+import {WorldStreamDelta} from "./world_stream_delta.mjs"
 import {
   MouseSteering, validMouseSensitivity, MOUSE_STEERING_IDLE_MS,
 } from "./mouse_steering.mjs"
@@ -85,6 +86,8 @@ class SpaceClient {
     this.selectedHotbarSlot = 1
     this.worldTick = 0
     this.tickMs = 100
+    this.worldStream = null
+    this.worldResyncInFlight = false
     this.beams = []
     this.lastLaserFeedback = null
     this.lastFrame = performance.now()
@@ -351,9 +354,24 @@ class SpaceClient {
     }
 
     this.mapId = mapId
-    const channel = this.socket.channel(`world:${mapId}`, {})
+    const channel = this.socket.channel(`world:${mapId}`, {stream: "delta_v1"})
     this.channel = channel
-    channel.on("world_state", state => this.applyWorldState(state))
+    channel.on("world_state", state => {
+      if (this.channel !== channel) return
+      if (this.worldStream) this.worldStream.reset(state)
+      this.applyWorldState(state)
+    })
+    channel.on("world_delta", delta => {
+      if (this.channel !== channel || this.worldResyncInFlight) return
+      const map = this.worldStream?.apply(delta)
+      if (map) this.applyWorldState(map)
+      else this.requestWorldResync()
+    })
+    channel.on("movement_delta", patch => {
+      if (this.channel !== channel || this.worldResyncInFlight) return
+      const entity = this.worldStream?.previewEntity(patch)
+      if (entity) this.upsertEntity(entity)
+    })
     channel.on("solar_navigation_updated", payload => {
       if (String(payload.player_id) === String(this.selfId) && payload.navigation) {
         this.applySolarNavigation(payload.navigation)
@@ -440,6 +458,8 @@ class SpaceClient {
     this.selectedTargetId = null
     this.commandDestination = null
     this.entities.clear()
+    this.worldStream = null
+    this.worldResyncInFlight = false
     this.beams = []
     this.setSolarEncounter(null)
     this.applyPlanetaryWarning(null, {announce: false})
@@ -453,6 +473,9 @@ class SpaceClient {
 
   joined(response) {
     this.mapId = response.map.map_id
+    this.worldStream = response.stream === "delta_v1"
+      ? new WorldStreamDelta(response.map) : null
+    this.worldResyncInFlight = false
     this.root.dataset.mapId = this.mapId
     this.entities.clear()
     this.player = response.player
@@ -475,6 +498,30 @@ class SpaceClient {
     this.flightControls.mode = "cruise"
     this.populateHud()
     this.setConnection("Authoritative sync", "online")
+  }
+
+  requestWorldResync() {
+    if (this.worldResyncInFlight || this.channel?.state !== "joined") return
+    this.worldResyncInFlight = true
+    const channel = this.channel
+    const failed = () => {
+      if (this.channel !== channel) return
+      this.worldResyncInFlight = false
+      this.setConnection("World resync failed; reconnecting", "error")
+      this.socket.disconnect()
+      this.socket.connect()
+    }
+    channel.push("world_resync", {}, 5000)
+      .receive("ok", response => {
+        if (this.channel !== channel) return
+        this.worldResyncInFlight = false
+        if (response.map && this.worldStream) {
+          this.worldStream.reset(response.map)
+          this.applyWorldState(response.map)
+        }
+      })
+      .receive("error", failed)
+      .receive("timeout", failed)
   }
 
   applyWorldState(state) {
