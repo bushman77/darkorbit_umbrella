@@ -7,6 +7,14 @@ defmodule Darkorbit.Umbrella.MixProject do
       version: "0.1.0",
       elixir: "~> 1.15",
       start_permanent: Mix.env() == :prod,
+      releases: [
+        space_mmo: [
+          applications: [
+            darkorbit: :permanent,
+            darkorbit_web: :permanent
+          ]
+        ]
+      ],
       deps: deps(),
       aliases: aliases(),
       listeners: [Phoenix.CodeReloader]
