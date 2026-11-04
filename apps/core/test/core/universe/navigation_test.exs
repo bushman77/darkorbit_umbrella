@@ -445,8 +445,8 @@ defmodule Core.Universe.NavigationTest do
 
     assert {:ok, %{cruise_paused: false}} =
       Navigation.finish_tactical(server, 1_100, first_id, :retreat, report)
-    assert {:error, :no_tactical_encounter} =
-      Navigation.finish_tactical(server, 1_100, first_id, :retreat, report)
+    assert {:ok, %{tactical_encounter: nil}} =
+       Navigation.finish_tactical(server, 1_100, first_id, :retreat, report)
     assert :sys.get_state(server).tactical_claims == %{}
     assert :sys.get_state(server).traffic[contact_id].combat == report.combat
 

@@ -134,7 +134,7 @@ defmodule Core.World do
   @spec solar_finish_tactical(pos_integer(), String.t(), atom(), keyword()) ::
           {:ok, map()} | {:error, term()}
   def solar_finish_tactical(session_id, encounter_id, outcome, opts \\ [])
-      when outcome in [:victory, :retreat, :defeat, :surrender] do
+      when outcome in [:victory, :retreat, :defeat, :surrender, :escaped] do
     sessions = Keyword.get(opts, :sessions, SessionManager)
     registry = Keyword.get(opts, :registry, Core.World.Registry)
     server = solar_navigation_server(opts)
@@ -197,6 +197,7 @@ defmodule Core.World do
     sessions = Keyword.get(opts, :sessions, SessionManager)
 
     with {:ok, session} <- fetch_session(sessions, session_id),
+         :ok <- require_tactical_closed(session, opts),
          :ok <- MapServer.leave(registry, session.map_id, session.id, session.entity_id),
          {:ok, _session} <- SessionManager.close(sessions, session.id) do
       :ok
@@ -356,6 +357,17 @@ defmodule Core.World do
     registry = Keyword.get(opts, :registry, Core.World.Registry)
     MapServer.tick(registry, map_id)
   end
+
+  defp require_tactical_closed(%Session{player_id: player_id}, opts)
+       when is_integer(player_id) and player_id > 0 do
+    case SolarNavigation.snapshot(solar_navigation_server(opts), player_id) do
+      {:ok, %{tactical_encounter: %{}}} -> {:error, :tactical_encounter_active}
+      {:ok, _} -> :ok
+      error -> error
+    end
+  end
+
+  defp require_tactical_closed(_session, _opts), do: :ok
 
   # Enforce the propulsion boundary at the authoritative game API, not
   # solely in browser controls or Phoenix. Test worlds also support

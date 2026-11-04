@@ -74,12 +74,26 @@ defmodule Darkorbit.World do
     end
   end
 
-  @doc "Persist the actual map-owned damage before releasing the player session."
+  @doc "Settle any live combat and persist map-owned damage before disconnecting."
   def disconnect(session_id) do
-    with {:ok, %{player_id: player_id, ship_instance_id: ship_id, combat: condition}} <-
+    with :ok <- settle_on_disconnect(session_id),
+         {:ok, %{player_id: player_id, ship_instance_id: ship_id, combat: condition}} <-
            Simulation.ship_condition(session_id),
          :ok <- ShipCondition.save_verified(player_id, ship_id, condition) do
       Simulation.disconnect(session_id)
+    end
+  end
+
+  defp settle_on_disconnect(session_id) do
+    case Simulation.solar_snapshot(session_id) do
+      {:ok, %{tactical_encounter: %{id: encounter_id}}} ->
+        with {:ok, outcome} <- Simulation.solar_tactical_outcome(session_id, encounter_id),
+             {:ok, _} <- solar_finish_tactical(session_id, encounter_id, outcome) do
+          :ok
+        end
+
+      {:ok, _} -> :ok
+      error -> error
     end
   end
   defdelegate move(session_id, destination), to: Simulation
