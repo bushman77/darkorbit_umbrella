@@ -809,10 +809,24 @@ defmodule DarkorbitWeb.WorldChannelTest do
       subscribe_and_join(socket, WorldChannel, "world:1-1", %{"stream" => "delta_v1"})
 
     assert response.stream == "delta_v1"
-    assert {:ok, _} = World.tick()
-    assert_push "world_delta", %{base_tick: base_tick, tick: tick, entities: updates}
-    assert tick > base_tick
-    assert is_list(updates)
+
+    # A genuinely changed condition must stream immediately. Empty ticks
+    # are intentionally suppressed by the new adaptive policy.
+    current_ship = Enum.find(response.map.entities, &(&1.player_id == account.id))
+    changed_ship = %{current_ship | hull: current_ship.hull - 1}
+    next_tick = response.map.tick + 1
+    changed_entities =
+      Enum.map(response.map.entities, fn entity ->
+        if entity.id == current_ship.id, do: changed_ship, else: entity
+      end)
+    send(joined.channel_pid, {:world_state,
+      %{response.map | tick: next_tick, entities: changed_entities}})
+
+    assert_push "world_delta", %{base_tick: base_tick, tick: ^next_tick, entities: updates}
+    assert base_tick == response.map.tick
+    assert Enum.any?(updates, fn patch ->
+      patch.id == current_ship.id and patch.hull == changed_ship.hull
+    end)
 
     ref = push(joined, "world_resync", %{"map_id" => "sol:mars"})
     assert_reply ref, :ok, %{map: %{map_id: "1-1"}}
