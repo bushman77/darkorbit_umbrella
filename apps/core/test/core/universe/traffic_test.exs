@@ -309,6 +309,39 @@ defmodule Core.Universe.TrafficTest do
       Traffic.settle(settled, identity, report, :victory)
   end
 
+  test "destroyed Corsair tactical report settles with zero hull and shields" do
+    {:ok, fleet} =
+      Traffic.launch_contact(Traffic.seed(), "earth", "venus", 1, :raider, 0.5)
+
+    vessel = fleet["traffic:sol:cruise-1"]
+    identity = %{
+      contact_id: vessel.id,
+      voyage_number: vessel.voyage_number,
+      encounter_id: "flyby:traffic:sol:cruise-1:1"
+    }
+    report = %{vessel.combat | hull: 0, shields: 0, status: :destroyed}
+
+    assert vessel.combat == %{
+      status: :alive, hull: 245, shields: 120, max_hull: 245, max_shields: 120
+    }
+
+    assert {:ok, settled} = Traffic.settle(fleet, identity, report, :victory)
+    corsair = settled[vessel.id]
+    assert corsair.state == :destroyed
+    assert corsair.combat == report
+    assert MapSet.member?(corsair.settled_encounters, identity.encounter_id)
+
+    assert {:error, :already_settled} =
+      Traffic.settle(settled, identity, report, :victory)
+
+    # A zero-hull ship cannot be reported alive, nor can victory be claimed
+    # while the hull is still positive.
+    assert {:error, :invalid_combat_report} =
+      Traffic.settle(fleet, identity, %{report | status: :alive}, :retreat)
+    assert {:error, :invalid_combat_report} =
+      Traffic.settle(fleet, identity, %{report | hull: 1}, :victory)
+  end
+
   test "a leased procedural vessel cannot vanish or start a new voyage during combat" do
     {:ok, fleet} =
       Traffic.launch_contact(Traffic.seed(), "earth", "venus", 100,
