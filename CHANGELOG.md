@@ -625,3 +625,19 @@
   loot reconciliation and live-session refitting are not implemented.
 - Elixir/Mix tests and physical headset runs not executable in the
   editing environment.
+
+
+### Active ship configuration join correction (2026-11-03)
+
+- Phoenix WorldChannel now reads the persisted active C-1/C-2 choice
+  before both player_status/2 and World.connect/3. Previously it always
+  supplied configuration 1 and ignored the shipyard's activated layout.
+- Updated legacy player-combat and ship-catalog assertions from
+  Phoenix 4,000 / 40 to Sunracer 300 / Garnet 10, including the Dart
+  shield/hull split on a successful starter laser hit.
+- Added channel regression for genuinely spawning with Beryl 15 in
+  configuration 2 after a server-owned activation.
+- Hotbar retains stable pulse_emitter and x1_laser identifiers, but its
+  visible label no longer falsely says Garnet when Beryl or Sapphire is
+  equipped.
+- Elixir/Mix tests remain unrun in the editing environment.

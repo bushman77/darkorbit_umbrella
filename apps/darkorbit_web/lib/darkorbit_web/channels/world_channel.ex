@@ -8,6 +8,7 @@ defmodule DarkorbitWeb.WorldChannel do
   def join("world:" <> map_id, _payload,
            %{assigns: %{socket_role: :pilot}} = socket) do
     player_id = socket.assigns.current_player_id
+    configuration = World.active_configuration(player_id)
 
     with {:ok, region} <- World.region_for_player(player_id) do
       if region.map_id != map_id do
@@ -15,8 +16,8 @@ defmodule DarkorbitWeb.WorldChannel do
       else
         with :ok <- World.subscribe(map_id),
              :ok <- World.subscribe("sol"),
-             {:ok, status} <- World.player_status(player_id, 1),
-             {:ok, session} <- World.connect(player_id, 1, map_id: map_id) do
+             {:ok, status} <- World.player_status(player_id, configuration),
+             {:ok, session} <- World.connect(player_id, configuration, map_id: map_id) do
           finish_join(socket, map_id, session, status)
         else
           {:error, reason} -> {:error, %{reason: error_reason(reason)}}

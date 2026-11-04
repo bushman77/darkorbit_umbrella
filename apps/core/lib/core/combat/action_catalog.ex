@@ -14,7 +14,7 @@ defmodule Core.Combat.ActionCatalog do
   @pulse_emitter %{
     id: "pulse_emitter",
     type: :weapon,
-    label: "Sunracer Garnet laser",
+    label: "Equipped ship beam weapon",
     cooldown_ms: 700
   }
 
@@ -22,7 +22,7 @@ defmodule Core.Combat.ActionCatalog do
     id: "x1_laser",
     type: :ammunition,
     activation_mode: :toggle,
-    label: "Garnet laser",
+    label: "Fire equipped laser",
     icon: "laser",
     weapon_id: "pulse_emitter"
   }

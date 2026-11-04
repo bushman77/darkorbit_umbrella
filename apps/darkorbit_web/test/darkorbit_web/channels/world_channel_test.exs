@@ -77,7 +77,9 @@ defmodule DarkorbitWeb.WorldChannelTest do
     assert response.player.pilot.id == account.id
     assert response.player.pilot.pilot_name == account.pilot_name
     assert response.player.stats.speed == 320
-    assert response.player.stats.damage == 40
+    assert response.player.stats.damage == 10
+    assert response.player.ship.name == "Sunracer"
+    assert response.player.stats.hit_points == 300
     assert Enum.any?(response.map.entities, &(&1.id == account.id))
     assert Enum.count(response.map.entities, &(&1.kind == :npc)) == 0
     assert response.solar_navigation.system_id == "sol"
@@ -95,6 +97,28 @@ defmodule DarkorbitWeb.WorldChannelTest do
     assert Enum.all?(Enum.drop(response.hotbar, 1), &is_nil(&1.action))
 
     leave_and_wait(joined_socket)
+  end
+
+  test "cockpit joins with the persisted active equipment configuration" do
+    account = verified_player_account_fixture()
+    [owned] = Darkorbit.Fleet.list_ships_for_user(account.id)
+    [_, alternate] = Darkorbit.Loadouts.list_loadouts_for_player_ship(owned.id)
+
+    assert {:ok, _} = Darkorbit.Inventory.add_equipment(account.id, "beryl", 1)
+    assert {:ok, _} =
+      Darkorbit.Loadouts.equip_laser_from_inventory(
+        account.id, alternate.id, "ship", 0, "beryl")
+    assert {:ok, _} = Darkorbit.Accounts.activate_configuration(account.id, 2)
+
+    {:ok, socket} = authenticated_socket(account)
+    {:ok, response, joined} =
+      subscribe_and_join(socket, WorldChannel, "world:1-1")
+
+    assert response.player.configuration.number == 2
+    assert response.player.stats.damage == 15
+    ship = Enum.find(response.map.entities, &(&1.player_id == account.id))
+    assert ship.damage == 15
+    leave_and_wait(joined)
   end
 
   test "arriving at Venus switches to a shared planet map with an incoming entry pose" do
@@ -618,14 +642,14 @@ defmodule DarkorbitWeb.WorldChannelTest do
     attack_ref =
       push(first_socket, "laser_attack", %{"damage" => 999_999, "target_id" => "spoof"})
 
-    assert_reply attack_ref, :ok, %{damage: 40, target_id: ^target_id, destroyed: false}
-    assert_push "laser_fired", %{attacker_id: ^first_id, damage: 40, target_id: ^target_id}
-    assert_push "laser_fired", %{attacker_id: ^first_id, damage: 40, target_id: ^target_id}
+    assert_reply attack_ref, :ok, %{damage: 10, target_id: ^target_id, destroyed: false}
+    assert_push "laser_fired", %{attacker_id: ^first_id, damage: 10, target_id: ^target_id}
+    assert_push "laser_fired", %{attacker_id: ^first_id, damage: 10, target_id: ^target_id}
 
     assert {:ok, snapshot} = World.snapshot()
     damaged = Enum.find(snapshot.entities, &(&1.id == target.id))
-    assert damaged.shields == target.shields - 24
-    assert damaged.hull == target.hull - 16
+    assert damaged.shields == target.shields - 6
+    assert damaged.hull == target.hull - 4
 
     repeated_ref = push(first_socket, "laser_attack", %{})
     assert_reply repeated_ref, :error, %{reason: "weapon_cooldown"}
