@@ -19,7 +19,8 @@ defmodule Core.World do
     sessions = Keyword.get(opts, :sessions, SessionManager)
 
     if MapServer.available?(registry, map_id) do
-      with {:ok, session} <- SessionManager.open(sessions, player_id, map_id),
+      with {:ok, session} <- SessionManager.open(sessions, player_id, map_id,
+          Keyword.get(opts, :ship_instance_id)),
            {:ok, _entity} <- join_or_close(registry, sessions, session, stats,
              Keyword.get(opts, :entry)) do
         {:ok, session}

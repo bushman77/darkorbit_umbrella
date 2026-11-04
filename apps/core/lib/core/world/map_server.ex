@@ -233,6 +233,7 @@ defmodule Core.World.MapServer do
           id: session.entity_id,
           kind: :player,
           player_id: session.player_id,
+          ship_instance_id: session.ship_instance_id,
           session_id: session.id,
           position: position,
           attitude: attitude,
@@ -316,7 +317,8 @@ defmodule Core.World.MapServer do
       npc = NPCEntity.spawn(definition, 0, state.tick_ms)
       # Use the physical vessel's carried-forward damage; do not mint a
       # fresh 210-hull Scow on every interception of the same traffic ID.
-      npc = %{npc | hull: route.combat.hull, shields: route.combat.shields}
+      npc = %{npc | hull: route.combat.hull, shields: route.combat.shields,
+        strategic_vessel_id: route.contact_id}
       npc =
         if cruise_course do
           %{npc | state: :cruise, destination: cruise_course.destination,
@@ -1595,6 +1597,7 @@ defmodule Core.World.MapServer do
       id: entity.id,
       kind: entity.kind,
       player_id: entity.player_id,
+      ship_instance_id: entity.ship_instance_id,
       position: public_position(entity.position),
       position_3d: position_3d(entity.position),
       destination: public_position(entity.destination),
@@ -1630,6 +1633,7 @@ defmodule Core.World.MapServer do
       id: entity.id,
       kind: entity.kind,
       npc_type_id: entity.npc_type_id,
+      strategic_vessel_id: entity.strategic_vessel_id,
       ship_class: npc_ship_class(entity.npc_type_id),
       # The strategic endpoints, tactical heading and local destination
       # belong to the server. UI renderers never choose an NPC trajectory.

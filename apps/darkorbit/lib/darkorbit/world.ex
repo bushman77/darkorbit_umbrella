@@ -57,12 +57,14 @@ defmodule Darkorbit.World do
   @spec connect(pos_integer(), 1 | 2, keyword()) ::
           {:ok, Core.World.Session.t()} | {:error, term()}
   def connect(user_id, config_no \\ 1, opts \\ []) do
-    with {:ok, stats} <- ShipStats.for_active_ship(user_id, config_no),
+    with {:ok, player_ship} <- Fleet.get_active_ship(user_id),
+         {:ok, stats} <- ShipStats.calculate(user_id, player_ship.id, config_no),
          {:ok, entry} <- region_for_player(user_id) do
       requested_map = Keyword.get(opts, :map_id, entry.map_id)
 
       if requested_map == entry.map_id do
-        Simulation.connect(user_id, stats, map_id: requested_map, entry: entry)
+        Simulation.connect(user_id, stats, map_id: requested_map, entry: entry,
+          ship_instance_id: player_ship.id)
       else
         {:error, :wrong_orbital_region}
       end

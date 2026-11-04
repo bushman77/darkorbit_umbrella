@@ -22,6 +22,7 @@ defmodule Core.World.Entity do
     :status
   ]
   defstruct @enforce_keys ++ [
+              :ship_instance_id,
               :destination,
               :target_id,
               :engaged_target_id,
@@ -40,6 +41,7 @@ defmodule Core.World.Entity do
 
   @type t :: %__MODULE__{
           id: term(),
+          ship_instance_id: pos_integer() | nil,
           kind: :player,
           player_id: term(),
           session_id: pos_integer(),

@@ -30,12 +30,13 @@ defmodule Core.NPC.Entity do
     :next_attack_tick,
     :patrol_step
   ]
-  defstruct @enforce_keys ++ [:destination, :target_id, :course]
+  defstruct @enforce_keys ++ [:destination, :target_id, :course, :strategic_vessel_id]
 
   @type state :: :idle | :patrol | :pursue | :attack | :cruise | :evade | :surrendered | :destroyed
 
   @type t :: %__MODULE__{
           id: String.t(),
+          strategic_vessel_id: String.t() | nil,
           kind: :npc,
           npc_type_id: String.t(),
           display_name: String.t(),
