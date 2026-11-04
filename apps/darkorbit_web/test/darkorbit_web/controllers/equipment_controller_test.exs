@@ -85,7 +85,7 @@ defmodule DarkorbitWeb.EquipmentControllerTest do
     assert Darkorbit.World.active_configuration(account.id) == 2
   end
 
-  test "fabricated inventory and unusable slots cannot grant gear", %{conn: conn} do
+  test "fabricated inventory and unusable slots cannot grant gear", %{conn: _conn} do
     account = verified_player_account_fixture()
     other = verified_player_account_fixture()
     {:ok, _} = Inventory.add_equipment(other.id, "sapphire", 1)
