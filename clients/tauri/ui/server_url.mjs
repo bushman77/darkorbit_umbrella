@@ -1,4 +1,4 @@
-export const DEFAULT_SERVER_URL = "http://127.0.0.1:4000"
+export const DEFAULT_SERVER_URL = "https://localhost:4001"
 
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"])
 

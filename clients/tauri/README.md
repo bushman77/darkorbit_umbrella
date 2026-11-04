@@ -28,16 +28,57 @@ sudo apt install -y libwebkit2gtk-4.1-dev build-essential curl wget file \
 Install Rust with the current instructions at https://rustup.rs/ and install
 Node.js and npm if they are not installed.
 
-Start the **existing** server from the umbrella root in terminal 1:
+## Configure trusted HTTPS for the local client
+
+The Tauri launcher now defaults to **https://localhost:4001**. HTTPS is
+optional for localhost generally, but it is the recommended native-client
+development path. An HTTPS URL cannot connect to Phoenix's cleartext HTTP
+listener on port 4000; the Bandit warning "TLS received on a clear channel"
+indicates a protocol/port mismatch.
+
+Install mkcert and its NSS trust-store helper:
 
 ```sh
-mix setup                 # first time only; requires PostgreSQL
-DARKORBIT_LOOPBACK_ONLY=1 mix phx.server
+sudo apt update
+sudo apt install -y mkcert libnss3-tools
+mkcert -install
 ```
 
+Generate a **local-only** certificate in the Phoenix application's
+private directory (never commit these files):
+
+```sh
+cd ~/darkorbit_umbrella
+mkdir -p apps/darkorbit_web/priv/cert
+mkcert -cert-file apps/darkorbit_web/priv/cert/localhost.pem \
+  -key-file apps/darkorbit_web/priv/cert/localhost-key.pem \
+  localhost 127.0.0.1 ::1
+```
+
+Apply migrations introduced by the new persistent-ship code, then start
+Phoenix with a loopback HTTPS listener:
+
+```sh
+mix ecto.migrate
+DARKORBIT_LOOPBACK_ONLY=1 DARKORBIT_DEV_HTTPS=1 mix phx.server
+```
+
+Check connectivity from another terminal:
+
+```sh
+curl -I https://localhost:4001/login
+```
+
+Phoenix now listens on HTTP **4000** and HTTPS **4001**. The HTTPS
+listener is bound to 127.0.0.1 only. This is deliberately a development
+configuration: for remote multiplayer, use a deployed HTTPS server,
+trusted certificate, configured origins and WebSocket upgrade support.
+
 The loopback flag is appropriate when the client and server are on the same
-computer. For remote multiplayer, deploy the server separately with HTTPS,
-WebSocket upgrade support and appropriate origin/secret configuration.
+computer. If you only want local HTTP, run `mix phx.server` without
+`DARKORBIT_DEV_HTTPS` and enter `http://127.0.0.1:4000` manually
+in the launcher. Browser/webview HTTPS upgrades are not by themselves
+evidence that Tauri strictly requires HTTPS for localhost.
 
 In terminal 2, from the umbrella root:
 
@@ -49,7 +90,7 @@ npm run dev
 ```
 
 Choose **Use local server**, then **Launch cockpit**. The launcher opens
-`http://127.0.0.1:4000/play`; an unauthenticated pilot is redirected to
+`https://localhost:4001/play`; an unauthenticated pilot is redirected to
 `/login`. You may use development accounts provisioned by `mix setup`.
 
 ## Build and distribute without Steam
@@ -88,3 +129,16 @@ rendering performance. See https://v2.tauri.app/develop/debug/linux-graphics/.
 Run the URL validation tests with `npm test`. The Rust/Tauri binary and
 real gameplay require local build/runtime verification; neither can be
 validated solely from the repository contents.
+
+## Development watcher noise
+
+Phoenix's file watcher may notice transient Rust build directories under
+`clients/tauri/src-tauri/target` and log "Couldn't watch new directory".
+This is not an SSL or Ecto failure. To keep future Rust build output outside
+the umbrella while developing, launch Tauri using:
+
+```sh
+export CARGO_TARGET_DIR="$HOME/.cache/sbs-space-tauri-target"
+cd ~/darkorbit_umbrella/clients/tauri
+npm run dev
+```

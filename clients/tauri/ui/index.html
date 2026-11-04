@@ -15,8 +15,8 @@
       <p class="intro">Connect to the authoritative Elixir server. Your cockpit, Atlas, stereo view, combat and inventory are delivered by Phoenix.</p>
       <form id="connect-form" novalidate>
         <label for="server-url">Game server</label>
-        <input id="server-url" type="url" inputmode="url" autocomplete="url" spellcheck="false" placeholder="http://127.0.0.1:4000" required>
-        <p class="hint">Local testing: http://127.0.0.1:4000. Public multiplayer servers must use HTTPS.</p>
+        <input id="server-url" type="url" inputmode="url" autocomplete="url" spellcheck="false" placeholder="https://localhost:4001" required>
+        <p class="hint">Local HTTPS: https://localhost:4001. Configure a trusted local certificate first; HTTP loopback is also supported.</p>
         <div class="actions">
           <button type="submit" class="primary">Launch cockpit</button>
           <button type="button" id="use-local" class="secondary">Use local server</button>

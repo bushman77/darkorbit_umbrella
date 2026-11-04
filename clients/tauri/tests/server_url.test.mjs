@@ -1,8 +1,10 @@
 import test from "node:test"
 import assert from "node:assert/strict"
-import { serverOrigin, gameUrl } from "../ui/server_url.mjs"
+import { DEFAULT_SERVER_URL, serverOrigin, gameUrl } from "../ui/server_url.mjs"
 
 test("localhost launches authenticated Phoenix play route", () => {
+  assert.equal(DEFAULT_SERVER_URL, "https://localhost:4001")
+  assert.equal(gameUrl(DEFAULT_SERVER_URL), "https://localhost:4001/play")
   assert.equal(gameUrl("http://127.0.0.1:4000"), "http://127.0.0.1:4000/play")
   assert.equal(gameUrl("http://localhost:4000/"), "http://localhost:4000/play")
   assert.equal(gameUrl("http://[::1]:4000"), "http://[::1]:4000/play")

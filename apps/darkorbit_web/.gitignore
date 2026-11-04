@@ -35,3 +35,7 @@ darkorbit_web-*.tar
 npm-debug.log
 /assets/node_modules/
 
+
+# Developer HTTPS keypair; never commit local TLS private keys.
+/priv/cert/localhost.pem
+/priv/cert/localhost-key.pem
