@@ -1,0 +1,138 @@
+#!/usr/bin/env bash
+# Space Nova build & release helper for Pop!_OS.
+set -euo pipefail
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+CLIENT="$ROOT/clients/tauri"
+REPO=bushman77/darkorbit_umbrella
+BRANCH=sbs
+die() { echo "Error: $*" >&2; exit 1; }
+require() { command -v "$1" >/dev/null 2>&1 || die "Install $1 first."; }
+gh_ready() { require gh; gh auth status >/dev/null 2>&1 || die "Run 'gh auth login' first."; }
+on_branch() { [[ "$(git -C "$ROOT" branch --show-current)" == "$BRANCH" ]] || die "Switch to the sbs branch first."; }
+clean_tree() { [[ -z "$(git -C "$ROOT" status --porcelain)" ]] || die "Commit or stash existing changes first."; }
+version_now() { python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "$CLIENT/src-tauri/tauri.conf.json"; }
+usage() {
+cat <<'EOF'
+Space Nova build and release menu:
+  ./scripts/space-nova             Interactive menu
+  ./scripts/space-nova test        Run launcher tests
+  ./scripts/space-nova linux       Build Linux .deb + AppImage
+  ./scripts/space-nova windows     Request Windows .exe build on GitHub
+  ./scripts/space-nova download    Download .exe for the current commit
+  ./scripts/space-nova status      Show recent GitHub Actions runs
+  ./scripts/space-nova version X.Y.Z  Update desktop version
+  ./scripts/space-nova publish X.Y.Z  Publish signed release (confirmation)
+GitHub commands require 'gh auth login' first. No private keys are read here.
+EOF
+}
+test_client() {
+  require npm
+  (cd "$CLIENT" && npm install && npm test)
+}
+linux_build() {
+  require npm
+  (cd "$CLIENT" && npm install && npm test && npm run build)
+  echo "Bundles: $CLIENT/src-tauri/target/release/bundle"
+}
+windows_build() {
+  require git; on_branch; gh_ready
+  gh workflow run space-nova-windows.yml --repo "$REPO" --ref "$BRANCH"
+  echo "Windows build queued. View: https://github.com/$REPO/actions/workflows/space-nova-windows.yml"
+  echo "Once successful: ./scripts/space-nova download"
+}
+download_windows() {
+  require git; on_branch; gh_ready
+  local sha run_id folder
+  sha="$(git -C "$ROOT" rev-parse HEAD)"
+  run_id="$(gh run list --repo "$REPO" --workflow space-nova-windows.yml --branch "$BRANCH" \
+    --limit 40 --json databaseId,headSha,conclusion \
+    --jq ".[] | select(.headSha == \"$sha\" and .conclusion == \"success\") | .databaseId" | head -n1)"
+  [[ -n "$run_id" ]] || die "No successful Windows build for this exact commit. Run 'windows', check 'status', then retry."
+  folder="$CLIENT/dist/windows-$(version_now)"
+  mkdir -p "$folder"
+  gh run download "$run_id" --repo "$REPO" --name space-nova-windows-x86_64 --dir "$folder"
+  echo "Installer extracted to: $folder"
+}
+prepare_version() {
+  local v="${1:-}"
+  [[ "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "Use: ./scripts/space-nova version 0.3.1"
+  require git; require python3; on_branch; clean_tree
+  python3 - "$CLIENT" "$v" <<'PY'
+import json, pathlib, re, sys
+root, new = pathlib.Path(sys.argv[1]), sys.argv[2]
+config_path = root / "src-tauri/tauri.conf.json"
+package_path = root / "package.json"
+cargo_path = root / "src-tauri/Cargo.toml"
+config = json.loads(config_path.read_text())
+package = json.loads(package_path.read_text())
+cargo = cargo_path.read_text()
+match = re.search(r'(?m)^version = "([0-9]+\.[0-9]+\.[0-9]+)"$', cargo)
+if not match:
+    raise SystemExit("Cannot find Cargo.toml [package] version")
+old = config["version"]
+if old != package["version"] or old != match.group(1):
+    raise SystemExit("Current Tauri, npm and Cargo versions do not match")
+if tuple(map(int, new.split("."))) <= tuple(map(int, old.split("."))):
+    raise SystemExit(f"{new} must be newer than {old}")
+config["version"] = new
+package["version"] = new
+config_path.write_text(json.dumps(config, indent=2) + "\n")
+package_path.write_text(json.dumps(package, indent=2) + "\n")
+cargo_path.write_text(cargo[:match.start(1)] + new + cargo[match.end(1):])
+print(f"Prepared Space Nova {new} (was {old})")
+PY
+  echo "Next: ./scripts/space-nova test"
+  echo "Review changes, then run:"
+  echo "  git add clients/tauri/src-tauri/tauri.conf.json clients/tauri/src-tauri/Cargo.toml clients/tauri/package.json"
+  echo "  git commit -m 'Release Space Nova $v'"
+  echo "  git push origin sbs"
+  echo "  ./scripts/space-nova publish $v"
+}
+publish_release() {
+  local v="${1:-}" confirmed
+  [[ "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "Use: ./scripts/space-nova publish 0.3.0"
+  require git; require python3; on_branch; clean_tree; gh_ready
+  [[ "$(version_now)" == "$v" ]] || die "Version mismatch: run 'version $v' before publishing."
+  git -C "$ROOT" fetch --quiet origin "$BRANCH"
+  [[ "$(git -C "$ROOT" rev-parse HEAD)" == "$(git -C "$ROOT" rev-parse "origin/$BRANCH")" ]] ||
+    die "Push your release commit to origin/sbs before publishing."
+  if gh release view "v$v" --repo "$REPO" >/dev/null 2>&1; then
+    die "v$v is already published; bump the version."
+  fi
+  echo "Publish a signed Windows and Linux release v$v?"
+  read -r -p "Type PUBLISH to confirm: " confirmed
+  [[ "$confirmed" == PUBLISH ]] || die "Cancelled."
+  gh workflow run space-nova-release.yml --repo "$REPO" --ref "$BRANCH" --field "version=$v"
+  echo "Release queued: https://github.com/$REPO/actions/workflows/space-nova-release.yml"
+  echo "GitHub Actions must have TAURI_SIGNING_PRIVATE_KEY and TAURI_SIGNING_PRIVATE_KEY_PASSWORD secrets."
+}
+menu() {
+  cat <<'EOF'
+
+Space Nova desktop build manager
+  1) Test
+  2) Build Linux installers
+  3) Build Windows .exe
+  4) Download Windows .exe
+  5) Build status
+  6) Prepare new version
+  7) Publish signed release
+  0) Exit
+EOF
+  local answer ver
+  read -r -p 'Choose: ' answer
+  case "$answer" in
+    1) test_client;; 2) linux_build;; 3) windows_build;; 4) download_windows;;
+    5) gh_ready; gh run list --repo "$REPO" --branch "$BRANCH" --limit 12;;
+    6) read -r -p 'Version (X.Y.Z): ' ver; prepare_version "$ver";;
+    7) read -r -p 'Version (X.Y.Z): ' ver; publish_release "$ver";;
+    0) exit 0;; *) die "Invalid choice";;
+  esac
+}
+case "${1:-menu}" in
+  menu) menu;; help|-h|--help) usage;; test) test_client;;
+  linux) linux_build;; windows) windows_build;; download) download_windows;;
+  status) gh_ready; gh run list --repo "$REPO" --branch "$BRANCH" --limit 12;;
+  version) prepare_version "${2:-}";; publish) publish_release "${2:-}";;
+  *) usage; exit 1;;
+esac

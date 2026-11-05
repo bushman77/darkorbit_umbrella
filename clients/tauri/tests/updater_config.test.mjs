@@ -11,9 +11,10 @@ const rustSource = readText("../src-tauri/src/main.rs")
 const cargoSource = readText("../src-tauri/Cargo.toml")
 
 test("desktop version and updater verification settings are consistent", () => {
-  assert.equal(config.version, "0.3.0")
+  assert.match(config.version, /^\d+\.\d+\.\d+$/)
   assert.equal(packageConfig.version, config.version)
-  assert.match(cargoSource, /version = "0\.3\.0"/)
+  const cargoVersion = cargoSource.match(/^version = "([^"]+)"$/m)?.[1]
+  assert.equal(cargoVersion, config.version)
   assert.equal(config.identifier, "game.sbs.space")
   assert.match(config.plugins.updater.pubkey, /^[A-Za-z0-9+/=]+$/)
   assert.ok(config.plugins.updater.pubkey.length > 100)

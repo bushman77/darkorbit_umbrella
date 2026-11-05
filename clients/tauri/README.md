@@ -61,6 +61,51 @@ For local TLS, set up mkcert as documented in the umbrella project and run
 Phoenix with `DARKORBIT_DEV_HTTPS=1`, then enter `https://localhost:4001`.
 Do not send HTTPS requests to the HTTP-only port 4000.
 
+## Easy desktop build and release manager
+
+From the root of the `sbs` checkout on Pop!_OS:
+
+```sh
+cd ~/darkorbit_umbrella
+./scripts/space-nova
+```
+
+The menu can run tests, build Linux installers, trigger a Windows `.exe`
+build on GitHub Actions, download its installer, view build status, prepare
+a version bump, or trigger a signed release. Each action is also available
+directly as a command:
+
+```sh
+./scripts/space-nova test
+./scripts/space-nova linux
+./scripts/space-nova windows
+./scripts/space-nova status
+./scripts/space-nova download
+./scripts/space-nova version 0.3.1
+./scripts/space-nova publish 0.3.1
+```
+
+For GitHub commands install and authenticate the GitHub CLI once:
+
+```sh
+sudo apt install gh
+gh auth login
+```
+
+`download` selects only a successful Windows installer for the checked-out
+commit, then extracts it into `clients/tauri/dist/windows-X.Y.Z/`. If GitHub
+is still building, inspect `status` and retry `download` after success.
+
+For signed updates, run `version X.Y.Z` and follow the printed test, commit,
+and push instructions before running `publish X.Y.Z`. This second command
+checks that your checkout is clean, is synchronized to `origin/sbs`, and
+has no existing release of the same version. It asks you to type `PUBLISH`
+before triggering the signed workflow. Configure `TAURI_SIGNING_PRIVATE_KEY`
+and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` **only as GitHub Actions secrets**.
+The helper never reads or prints them, and ordinary Windows test installers
+do not require signing credentials. Version `0.3.0` may be published using
+`./scripts/space-nova publish 0.3.0` once its secrets are configured.
+
 ## Build and distribute
 
 ```sh
