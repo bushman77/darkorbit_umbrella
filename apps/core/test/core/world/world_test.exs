@@ -163,10 +163,12 @@ defmodule Core.WorldTest do
     assert Enum.find(sector.entities, &(&1.id == 981)).position ==
       %{x: 1_000.0, y: 1_000.0}
     refute Enum.any?(sector.entities, &(&1.kind == :npc))
-    assert {:ok, %{status: :idle, location_id: "earth",
+    assert {:ok, %{status: :idle, location_id: nil,
                     propulsion_mode: :conventional}} =
       World.solar_cancel_course(session.id, opts)
-    assert {:ok, %{destination: %{x: 1_200, y: 1_200}}} =
+    # The old Earth tactical map is no longer a valid way to move a pilot
+    # whose authoritative SOL location is now in deep space.
+    assert {:error, :wrong_flight_region} =
       World.move(session.id, %{x: 1_200, y: 1_200}, opts)
   end
 
