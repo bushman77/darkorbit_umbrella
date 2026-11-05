@@ -26,12 +26,10 @@ defmodule DarkorbitWeb.RegistrationController do
       case Accounts.register_account(params) do
         {:ok, account} ->
           verification_url =
-            DarkorbitWeb.Endpoint.url() <>
-              "/verify-account?" <>
-              URI.encode_query(%{
-                "id" => Integer.to_string(account.id),
-                "token" => account.verification["hash"]
-              })
+            url(~p"/verify-account?#{%{
+              id: account.id,
+              token: account.verification["hash"]
+            }}")
 
           case Mailer.deliver(RegistrationEmail.verification(account, verification_url)) do
             {:ok, _response} ->
