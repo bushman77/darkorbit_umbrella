@@ -180,6 +180,66 @@ defmodule Core.Universe.Traffic do
     do: {:error, :invalid_contact}
 
   @doc """
+  Launch one server-scheduled trader on an actual planet-to-planet lane.
+  No pilot action or requested destination chooses this vessel. Its stable
+  route and origin are shared by all pilots, including free-waypoint pilots.
+  Cargo is a temporary fixture until resource terminals produce stock.
+  """
+  @spec launch_scheduled_trader(map(), String.t(), String.t(), pos_integer()) ::
+          {:ok, map()} | {:error, atom()}
+  def launch_scheduled_trader(ships, from_id, to_id, serial)
+      when is_map(ships) and is_binary(from_id) and is_binary(to_id) and
+           is_integer(serial) and serial > 0 do
+    id = "traffic:sol:cruise-" <> Integer.to_string(serial)
+    active = Enum.count(ships, fn {_key, ship} ->
+      Map.get(ship, :procedural?, false)
+    end)
+
+    cond do
+      active >= @max_procedural_contacts -> {:error, :traffic_capacity}
+      not Sol.destination?(from_id) or not Sol.destination?(to_id) or
+          from_id == to_id -> {:error, :invalid_route}
+      Map.has_key?(ships, id) -> {:error, :duplicate_contact}
+      true ->
+        provisional_cargo = %{"industrial_parts" => 32}
+        dist = Sol.cruise_distance_km(from_id, to_id)
+        vessel = %{
+          id: id,
+          call_sign: "Hauler-" <> Integer.to_string(serial),
+          kind: :independent_trader,
+          ship_class: "scow",
+          faction_id: "independent",
+          disposition: :neutral,
+          purpose: :trade_route,
+          state: :in_transit,
+          origin_id: from_id,
+          destination_id: to_id,
+          home_origin_id: from_id,
+          home_destination_id: to_id,
+          location_id: from_id,
+          cargo: provisional_cargo,
+          outbound_cargo: provisional_cargo,
+          return_cargo: provisional_cargo,
+          combat: initial_condition(:independent_trader),
+          settled_encounters: MapSet.new(),
+          cruise_speed_km_s: @cruise_speed_km_s,
+          voyage_number: 1,
+          elapsed_ms: 0,
+          dwell_remaining_ms: 0,
+          distance_km: dist,
+          position_km: position!(from_id),
+          procedural?: true,
+          lifetime_remaining_ms: @procedural_lifetime_ms
+        }
+
+        {:ok, Map.put(ships, id, Map.put(vessel, :duration_ms, duration(vessel)))}
+    end
+  end
+
+  def launch_scheduled_trader(_ships, _from, _to, _serial),
+    do: {:error, :invalid_route}
+
+  @doc """
   Advance every ship on the SOL clock. A vessel currently leased to a
   tactical encounter continues toward its destination but cannot finish
   its strategic voyage and reuse its voyage number while combat is active.
