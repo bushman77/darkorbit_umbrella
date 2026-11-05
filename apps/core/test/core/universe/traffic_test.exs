@@ -102,7 +102,8 @@ defmodule Core.Universe.TrafficTest do
     fleet = Traffic.seed()
     {:ok, earth} = Sol.game_position_km("earth")
     contacts = Traffic.contacts(fleet, earth)
-    assert [%{id: "traffic:sol:meridian-01", disposition: :neutral}] = contacts
+    assert [%{id: "traffic:sol:meridian-01", disposition: :neutral,
+      faction_id: "sol_merchant_league", faction_name: "Solar Merchant League"}] = contacts
     refute Map.has_key?(hd(contacts), :cargo)
     refute Map.has_key?(hd(contacts), :manifest)
 
@@ -120,6 +121,9 @@ defmodule Core.Universe.TrafficTest do
     assert {:ok, communication} = Traffic.hail(fleet, earth, "traffic:sol:meridian-01")
     assert communication.cargo == %{"industrial_machinery" => 120}
     assert communication.disposition == :neutral
+    assert communication.faction_id == "sol_merchant_league"
+    assert communication.faction_name == "Solar Merchant League"
+    assert String.contains?(communication.message, "Solar Merchant League")
     assert communication.purpose == :scheduled_delivery
     assert is_binary(communication.message)
     assert fleet == Traffic.seed()
@@ -135,6 +139,8 @@ defmodule Core.Universe.TrafficTest do
     contact = Map.fetch!(traffic, "traffic:sol:cruise-1")
     assert contact.kind == :independent_trader
     assert contact.ship_class == "scow"
+    assert contact.faction_name == nil or
+      Core.Factions.name(contact.faction_id) != nil
     assert contact.origin_id == "venus"
     assert contact.destination_id == "earth"
     assert contact.state == :in_transit
