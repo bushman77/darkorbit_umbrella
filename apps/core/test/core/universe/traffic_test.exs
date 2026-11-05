@@ -139,8 +139,7 @@ defmodule Core.Universe.TrafficTest do
     contact = Map.fetch!(traffic, "traffic:sol:cruise-1")
     assert contact.kind == :independent_trader
     assert contact.ship_class == "scow"
-    assert contact.faction_name == nil or
-      Core.Factions.name(contact.faction_id) != nil
+    assert Core.Factions.name(contact.faction_id) != nil
     assert contact.origin_id == "venus"
     assert contact.destination_id == "earth"
     assert contact.state == :in_transit
