@@ -77,3 +77,21 @@ test("future solar tactical ship classes can surrender without a lock", () => {
   assert.equal(surrenderedHudLabel(client({entities: [
     {...own, npcTypeId: "ambient-dart-3"}], tactical: true})), null)
 })
+
+test("the headset's authenticated surrender event drives the 3D stereo HUD directly", () => {
+  const hmd = client({helmet: true})
+  hmd.helmetSurrender = {surrendered: true, call_sign: "Hauler-2"}
+  assert.equal(surrenderedHudLabel(hmd), "SURRENDERED · Hauler-2")
+})
+
+test("the headset does not need a target lock, ship list or tactical flag", () => {
+  const hmd = {helmetSurrender: {surrendered: true, call_sign: "Merchant-1"}}
+  assert.equal(surrenderedHudLabel(hmd), "SURRENDERED · Merchant-1")
+})
+
+test("a cleared headset event overrides stale selected or world NPC state", () => {
+  const ship = {id: "npc-one", ...scow(3)}
+  const hmd = client({entities: [ship], selected: "npc-one", tactical: true, helmet: true})
+  hmd.helmetSurrender = {surrendered: false}
+  assert.equal(surrenderedHudLabel(hmd), null)
+})
