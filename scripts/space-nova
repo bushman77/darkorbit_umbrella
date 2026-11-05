@@ -9,7 +9,7 @@ die() { echo "Error: $*" >&2; exit 1; }
 require() { command -v "$1" >/dev/null 2>&1 || die "Install $1 first."; }
 gh_ready() { require gh; gh auth status >/dev/null 2>&1 || die "Run 'gh auth login' first."; }
 on_branch() { [[ "$(git -C "$ROOT" branch --show-current)" == "$BRANCH" ]] || die "Switch to the sbs branch first."; }
-clean_tree() { [[ -z "$(git -C "$ROOT" status --porcelain)" ]] || die "Commit or stash existing changes first."; }
+clean_tree() { [[ -z "$(git -C "$ROOT" status --porcelain --untracked-files=no)" ]] || die "Commit or stash existing changes first."; }
 version_now() { python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "$CLIENT/src-tauri/tauri.conf.json"; }
 usage() {
 cat <<'EOF'

@@ -98,7 +98,7 @@ is still building, inspect `status` and retry `download` after success.
 
 For signed updates, run `version X.Y.Z` and follow the printed test, commit,
 and push instructions before running `publish X.Y.Z`. This second command
-checks that your checkout is clean, is synchronized to `origin/sbs`, and
+checks for uncommitted tracked edits, is synchronized to `origin/sbs`, and
 has no existing release of the same version. It asks you to type `PUBLISH`
 before triggering the signed workflow. Configure `TAURI_SIGNING_PRIVATE_KEY`
 and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` **only as GitHub Actions secrets**.
