@@ -159,13 +159,53 @@ defmodule DarkorbitWeb.WorldChannelTest do
     ref = push(cockpit, "solar_resume_cruise", %{})
     assert_reply ref, :ok, %{navigation: %{free_flight: false,
       propulsion_mode: :interplanetary_cruise, status: :traveling}}
-    assert_push "world_region_changed", %{map_id: "1-1"}
+    # Displaying the deep-space cockpit during cruise no longer redirects to
+    # the departure planet. Only actual arrivals change orbital regions.
+    refute_push "world_region_changed", %{map_id: "1-1"}
     leave_and_wait(cockpit)
 
     refute Core.World.MapServer.available?(Core.World.Registry, map_id)
     server = Module.concat(SessionManager, Core.Universe.Navigation)
     assert {:ok, %{free_flight: false, destination_id: "mars"}} =
       Core.Universe.Navigation.snapshot(server, account.id)
+  end
+
+  test "SOL accepts free XY game-km routes and keeps a cancelled pilot in deep space" do
+    account = verified_player_account_fixture()
+    {:ok, socket} = authenticated_socket(account)
+    {:ok, _response, joined} =
+      subscribe_and_join(socket, WorldChannel, "world:1-1")
+
+    {:ok, earth} = Core.Universe.Sol.game_position_km("earth")
+    invalid = %{"x" => earth.x, "y" => earth.y, "z" => 0}
+    ref = push(joined, "solar_set_course", %{"point" => invalid})
+    assert_reply ref, :error, %{reason: "invalid_solar_waypoint"}
+
+    point = %{"x" => earth.x + 4_000_000.0, "y" => earth.y, "z" => 0}
+    ref = push(joined, "solar_set_course", %{"point" => point,
+      "player_id" => -10, "origin_id" => "pluto"})
+    assert_reply ref, :ok, %{navigation: %{status: :traveling,
+      destination_id: nil, destination_position_km: %{x: x, y: y, z: 0.0}}}
+    assert_in_delta x, point["x"], 0.01
+    assert_in_delta y, point["y"], 0.01
+
+    deep_space_id = Core.Universe.FreeFlightRegion.map_id(account.id)
+    assert_push "world_region_changed", %{map_id: ^deep_space_id}
+    server = Module.concat(SessionManager, Core.Universe.Navigation)
+    assert :ok = Core.Universe.Navigation.tick(server)
+    assert {:ok, underway} = Core.Universe.Navigation.snapshot(server, account.id)
+    ref = push(joined, "solar_cancel_course", %{})
+    assert_reply ref, :ok, %{navigation: %{status: :idle,
+      location_id: nil, destination_id: nil}}
+    leave_and_wait(joined)
+
+    {:ok, reconnect} = authenticated_socket(account)
+    {:ok, response, cockpit} =
+      subscribe_and_join(reconnect, WorldChannel, "world:" <> deep_space_id)
+    assert response.map.planet_id == nil
+    assert response.solar_navigation.location_id == nil
+    assert response.solar_navigation.position_km == underway.position_km
+    leave_and_wait(cockpit)
   end
 
   test "arriving at Venus switches to a shared planet map with an incoming entry pose" do
