@@ -148,13 +148,13 @@ defmodule DarkorbitWeb.WorldChannelTest do
     {:ok, response, cockpit} =
       subscribe_and_join(reconnect, WorldChannel, "world:" <> map_id)
     assert response.map.map_id == map_id
-    assert response.map.planet_id == "earth" # no physical planet in this map
+    assert response.map.planet_id == nil # deep space has no physical planet
     assert response.solar_navigation.free_flight
     assert response.solar_navigation.status == :traveling
     assert response.solar_navigation.planetary_view == nil
 
     ref = push(cockpit, "flight_controls", %{"throttle" => 0.5})
-    assert_reply ref, :ok, %{accepted: true}
+    assert_reply ref, :ok, %{entity: %{kind: :player}}
 
     ref = push(cockpit, "solar_resume_cruise", %{})
     assert_reply ref, :ok, %{navigation: %{free_flight: false,
