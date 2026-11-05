@@ -1,0 +1,57 @@
+name: Validate Space Nova HUD and pilot screens
+
+on:
+  push:
+    branches: [sbs]
+    paths:
+      - "apps/darkorbit_web/assets/css/app.css"
+      - "apps/darkorbit_web/lib/darkorbit_web/controllers/**/*.heex"
+      - "apps/darkorbit_web/test/darkorbit_web/controllers/**/*.exs"
+      - "clients/tauri/**"
+      - ".github/workflows/space-nova-hud.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  phoenix-hud:
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: darkorbit_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      MIX_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: "27.3"
+          elixir-version: "1.18.4"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Fetch Elixir dependencies
+        run: mix deps.get
+      - name: Compile Phoenix templates
+        run: mix compile
+      - name: Render pilot onboarding and game screens
+        run: |
+          mix test apps/darkorbit_web/test/darkorbit_web/controllers/page_controller_test.exs
+          mix test apps/darkorbit_web/test/darkorbit_web/controllers/session_controller_test.exs
+          mix test apps/darkorbit_web/test/darkorbit_web/controllers/registration_controller_test.exs
+      - name: Compile frontend assets
+        run: mix assets.build
+      - name: Verify Atlas JS UI hooks
+        run: node --test apps/darkorbit_web/assets/js/game/solar_atlas_view_test.mjs

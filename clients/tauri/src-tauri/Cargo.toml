@@ -1,6 +1,6 @@
 [package]
 name = "space-nova-client"
-version = "0.3.0"
+version = "0.3.1"
 description = "Space Nova desktop client for the authoritative Elixir space MMO"
 authors = ["Space Nova contributors"]
 edition = "2021"

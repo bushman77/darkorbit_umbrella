@@ -3,33 +3,61 @@
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="#030914">
+    <meta name="theme-color" content="#020914">
     <meta name="description" content="Connect to Space Nova, a server-authoritative multiplayer space adventure.">
     <title>Space Nova — Desktop Client</title>
     <link rel="stylesheet" href="./launcher.css">
     <script type="module" src="./launcher.mjs"></script>
   </head>
   <body>
-    <main class="shell">
-      <div class="eyebrow">SPACE NOVA / DESKTOP CLIENT</div>
-      <div class="mark" aria-hidden="true">✦</div>
-      <h1>Your ship. Your choices.<br>An entire system.</h1>
-      <p class="intro">Explore Sol, take the helm in 3D or stereo SBS, and engage hostile vessels. Connect to the authoritative Space Nova server to begin your flight.</p>
-      <form id="connect-form" novalidate>
-        <label for="server-url">Game server</label>
-        <input id="server-url" type="url" inputmode="url" autocomplete="url" spellcheck="false" placeholder="https://spacenova.ddns.net:4000" required>
-        <p class="hint">Live server: https://spacenova.ddns.net:4000. Use the local server button for a Phoenix development server on 127.0.0.1:4000.</p>
-        <div class="actions">
-          <button type="submit" class="primary">Launch game</button>
-          <button type="button" id="register-pilot" class="secondary">Create pilot account</button>
-          <button type="button" id="visit-home" class="secondary">Visit homepage</button>
-        </div>
-        <div class="local-server">
-          <button type="button" id="use-local" class="text-button">Use local server</button>
-        </div>
-        <p role="alert" id="error" class="error" hidden></p>
-      </form>
-      <footer>Space Nova is an online multiplayer game. Registration may be temporarily closed until email verification is enabled on the server.</footer>
-    </main>
+    <div class="launcher-stage">
+      <header class="launcher-rail">
+        <span class="launcher-brand"><span aria-hidden="true">✦</span> SPACE NOVA</span>
+        <span class="launcher-rail-status">FLIGHT SYSTEMS // DESKTOP CLIENT</span>
+      </header>
+
+      <main class="shell">
+        <section class="launcher-briefing" aria-label="Space Nova flight briefing">
+          <p class="eyebrow">NAVIGATION DECK / SOL SYSTEM</p>
+          <div class="launcher-orbit" aria-hidden="true"><span></span></div>
+          <h1>Your ship.<br>Your choices.<br><strong>An entire system.</strong></h1>
+          <p class="intro">Chart a course through Sol, take the helm in 3D or stereo SBS, and meet other pilots in a living Solar System.</p>
+          <div class="launcher-readouts">
+            <div><small>THEATRE</small><strong>SOLAR SYSTEM / SOL</strong></div>
+            <div><small>CONTROL</small><strong>3D / STEREO SBS</strong></div>
+            <div><small>AUTHORITY</small><strong>ELIXIR / PHOENIX</strong></div>
+          </div>
+        </section>
+
+        <section class="launcher-console" aria-label="Server uplink">
+          <div class="console-heading">
+            <span class="console-light" aria-hidden="true"></span>
+            <span>UPLINK CONTROL // CONNECT</span>
+          </div>
+          <h2>Establish uplink</h2>
+          <p class="console-subtitle">Select the authoritative Space Nova server to begin your flight.</p>
+          <form id="connect-form" novalidate>
+            <label for="server-url">Game server address</label>
+            <input id="server-url" type="url" inputmode="url" autocomplete="url" spellcheck="false" placeholder="https://spacenova.ddns.net:4000" required>
+            <p class="hint">Secure public server: <code>https://spacenova.ddns.net:4000</code>. For local Phoenix development, use <code>http://127.0.0.1:4000</code>.</p>
+            <div class="actions">
+              <button type="submit" class="primary">Launch game <span aria-hidden="true">→</span></button>
+              <button type="button" id="register-pilot" class="secondary">Create pilot account</button>
+              <button type="button" id="visit-home" class="secondary">Visit homepage</button>
+            </div>
+            <div class="local-server">
+              <button type="button" id="use-local" class="text-button">Use local server / port 4000</button>
+            </div>
+            <p role="alert" id="error" class="error" hidden></p>
+          </form>
+          <footer>Authentication is handled by your selected Phoenix server. Public registration may be closed until verified email delivery is configured.</footer>
+        </section>
+      </main>
+
+      <div class="launcher-commandbar">
+        <span>SPACE NOVA // PILOT ACCESS</span>
+        <span>TCP 4000 · AUTHORITATIVE SERVER</span>
+      </div>
+    </div>
   </body>
 </html>
