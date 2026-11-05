@@ -24,6 +24,7 @@ defmodule Core.Universe.Sol do
     "pluto" => %{id: "pluto", name: "Pluto", kind: :dwarf_planet, au: 39.482, radius_km: 1188.3, phase_deg: 226}
   }
 
+  @type point :: %{x: float(), y: float(), z: float()}
   @type body :: %{
     id: String.t(), name: String.t(), kind: atom(), au: float(),
     radius_km: float() | nil, phase_deg: non_neg_integer()
@@ -36,6 +37,10 @@ defmodule Core.Universe.Sol do
   @outer_threshold_au 10.0
   @cruise_speed_km_s 65_000.0
   @light_speed_km_s 299_792.458
+  @maximum_waypoint_radius_km 200_000_000.0
+  @maximum_waypoint_altitude_km 10_000_000.0
+  @minimum_sun_clearance_km 1_000_000.0
+  @planet_waypoint_clearance_km 100_000.0
 
   @spec cruise_speed_km_s() :: float()
   def cruise_speed_km_s, do: @cruise_speed_km_s
@@ -85,6 +90,47 @@ defmodule Core.Universe.Sol do
       :error -> :error
     end
   end
+
+  @doc """
+  Validate a free destination in compressed SOL game kilometres, not AU or
+  local cockpit units. Reject nonfinite values and celestial collisions.
+  Named planetary targets still use safe orbital entry geometry.
+  """
+  @spec waypoint(term()) :: {:ok, point()} | {:error, :invalid_solar_waypoint}
+  def waypoint(%{x: x, y: y, z: z}) do
+    if Enum.all?([x, y, z], &finite_coordinate?/1) do
+      point = %{x: x * 1.0, y: y * 1.0, z: z * 1.0}
+      distance = :math.sqrt(point.x * point.x + point.y * point.y)
+      clear_of_planets =
+        Enum.all?(planets(), fn body ->
+          {:ok, center} = game_position_km(body.id)
+          dx = point.x - center.x
+          dy = point.y - center.y
+          dz = point.z - center.z
+          dx * dx + dy * dy + dz * dz >
+            :math.pow(body.radius_km + @planet_waypoint_clearance_km, 2)
+        end)
+
+      if distance <= @maximum_waypoint_radius_km and
+           distance >= @minimum_sun_clearance_km and
+           abs(point.z) <= @maximum_waypoint_altitude_km and clear_of_planets do
+        {:ok, point}
+      else
+        {:error, :invalid_solar_waypoint}
+      end
+    else
+      {:error, :invalid_solar_waypoint}
+    end
+  end
+
+  def waypoint(%{"x" => x, "y" => y, "z" => z}),
+    do: waypoint(%{x: x, y: y, z: z})
+
+  def waypoint(_), do: {:error, :invalid_solar_waypoint}
+
+  defp finite_coordinate?(value) when is_number(value),
+    do: value == value and abs(value) < 1.0e300
+  defp finite_coordinate?(_), do: false
 
   @spec cruise_distance_km(String.t(), String.t()) :: float()
   def cruise_distance_km(from_id, to_id) do
