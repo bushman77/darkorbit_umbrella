@@ -63,6 +63,10 @@ config :darkorbit_web, DarkorbitWeb.Endpoint,
     ]
   ]
 
+# Development registration emails remain local (Swoosh.Local).
+config :darkorbit_web, registration_email_enabled: true,
+  registration_from: "noreply@localhost"
+
 # Enable dev routes for dashboard and mailbox
 config :darkorbit_web, dev_routes: true
 
