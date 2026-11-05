@@ -22,7 +22,14 @@ defmodule Core.Universe.FreeFlightRegionTest do
     assert entry.map_id == "sol:free_19"
     assert entry.position.z == 0.0
     assert is_number(entry.attitude.yaw)
-    assert {:error, :free_flight_unavailable} =
+    assert {:ok, cruise_cockpit} =
       FreeFlightRegion.entry(19, %{voyage | free_flight: false})
+    assert cruise_cockpit.map_id == entry.map_id
+    assert {:ok, idle_space} =
+      FreeFlightRegion.entry(19, %{status: :idle, location_id: nil,
+        position_km: earth})
+    assert idle_space.map_id == entry.map_id
+    assert {:error, :free_flight_unavailable} =
+      FreeFlightRegion.entry(19, %{status: :idle, location_id: "earth"})
   end
 end
