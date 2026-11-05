@@ -40,6 +40,7 @@ export class HelmetClient {
     this.entities = new Map()
     this.selfId = null
     this.selectedTargetId = null
+    this.helmetSurrender = null
     this.beams = []
     this.lastLaserFeedback = null
     this.view = null
@@ -92,7 +93,7 @@ export class HelmetClient {
     // Explicit status is pushed on changes and reconnect; the world snapshot
     // remains a second path so the paired phone never depends on target lock.
     this.channel.on("helmet_surrender", payload => {
-      if (this.mode === "combat") renderHelmetSurrender(this.surrenderNode, payload)
+      if (this.mode === "combat") this.updateSurrender(payload)
     })
     this.channel.on("laser_fired", shot => this.laserFired(shot))
     this.channel.on("helmet_encounter", payload => {
@@ -441,7 +442,8 @@ export class HelmetClient {
     this.running = false
     this.frameCount = 0
     renderHelmetEncounter(this.encounterNode, null)
-    renderHelmetSurrender(this.surrenderNode, null)
+    this.updateSurrender(null)
+    this.helmetSurrender = null
     this.canvas.hidden = true
     this.entities.clear()
     this.navComputer.solarNavigation = {planetary_view: null}
@@ -452,6 +454,15 @@ export class HelmetClient {
   resize() {
     if (!this.view) return
     this.view.resize(window.innerWidth, window.innerHeight, Math.min(window.devicePixelRatio || 1, 1.5))
+  }
+
+  updateSurrender(payload) {
+    // This field is consumed by StereoSpaceView.updateHud(), so the status
+    // is part of the actual stereoscopic WebGL instrument, not HTML alone.
+    this.helmetSurrender = payload?.surrendered === true
+      ? {surrendered: true, call_sign: payload.call_sign}
+      : {surrendered: false}
+    renderHelmetSurrender(this.surrenderNode, this.helmetSurrender)
   }
 
   applyWorld(map) {
@@ -492,8 +503,7 @@ export class HelmetClient {
       if (!active.has(id)) this.entities.delete(id)
     }
     this.selectedTargetId = this.entities.get(this.selfId)?.targetId || null
-    renderHelmetSurrender(this.surrenderNode,
-      helmetSurrenderFromEntities(this.entities, this.selfId))
+    this.updateSurrender(helmetSurrenderFromEntities(this.entities, this.selfId))
   }
 
   laserFired(shot) {
