@@ -24,6 +24,34 @@ defmodule Core.Universe.NavigationTest do
     end
   end
 
+  test "free flight pauses SOL progress and the same AI voyage resumes", %{server: server} do
+    assert {:error, :no_active_course} = Navigation.enter_free_flight(server, 11)
+    assert {:error, :not_in_free_flight} = Navigation.resume_cruise(server, 11)
+    assert {:ok, started} = Navigation.set_course(server, 11, "mars")
+    assert {:ok, stopped} = Navigation.enter_free_flight(server, 11)
+    assert stopped.status == :traveling
+    assert stopped.free_flight
+    assert stopped.propulsion_mode == :conventional
+    assert stopped.cruise_paused
+    assert stopped.position_km == started.position_km
+    assert {:error, :already_in_free_flight} = Navigation.enter_free_flight(server, 11)
+    assert {:error, :free_flight_active} = Navigation.cancel_course(server, 11)
+    for _ <- 1..5, do: assert(:ok = Navigation.tick(server))
+    assert {:ok, held} = Navigation.snapshot(server, 11)
+    assert held.progress == 0.0
+    assert held.elapsed_ms == 0
+    assert held.position_km == stopped.position_km
+    assert held.pending_encounter == nil
+    assert {:ok, resumed} = Navigation.resume_cruise(server, 11)
+    refute resumed.free_flight
+    refute resumed.cruise_paused
+    assert resumed.propulsion_mode == :interplanetary_cruise
+    assert resumed.voyage_number == started.voyage_number
+    assert :ok = Navigation.tick(server)
+    assert {:ok, moving} = Navigation.snapshot(server, 11)
+    assert moving.progress > 0.0
+  end
+
   test "a new pilot starts at Earth with no travel or combat encounter", %{server: server} do
     assert {:ok, state} = Navigation.snapshot(server, 11)
     assert state.system_id == "sol"

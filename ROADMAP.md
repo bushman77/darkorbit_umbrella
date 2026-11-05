@@ -723,3 +723,14 @@ Source: [Symbrella `symbolic_generation`](https://github.com/bushman77/Symbrella
 - [ ] **First vertical slice:** one merchant captain recalls a prior attack or rescue, chooses an appropriate goal/response, and retains memory across tactical encounters and a server restart. Add deterministic tests for identity isolation, recall, intention validation, and fallback when cognition is unavailable.
 
 **Non-goals for V1:** dictionary/brain-cell import, LIFG language parsing or lambda sentence composition, full Thalamus/ACC/OFC/DLPFC/neuromodulator processes, image/camera input, llama.cpp, and a GenServer per NPC. Keep Symbrella's personal companion identity/memory completely separate. Run cognition outside the map tick; reuse the existing bounded `Core.NPC.AI` for movement/combat, with safe deterministic fallback. Benchmark CPU, RAM, and decision latency before scaling NPC counts.
+
+
+### Voluntary SOL free-flight cockpit (2026-11-05)
+
+- [x] Atlas cruise represents AI-assisted strategic propulsion and avoids physical debris collision simulation.
+- [x] Authenticated pilot can suspend a real SOL journey at the current position for conventional cockpit flight without encountering another vessel.
+- [x] Each pilot receives an isolated, empty deep-space region under a supervised DynamicSupervisor; local coordinates never substitute for shared SOL position.
+- [x] Returning to Atlas resumes exactly the stored journey and requires a surviving, server-authorized ship.
+- [ ] Implement debris entities, swept collisions, physical hull damage and cockpit-only hazards; no random Atlas damage.
+- [ ] Upgrade private local maps to shared, location-grounded tactical instances when co-located pilots interact.
+- [ ] Verify Mix/JavaScript suites, browser transition, reconnect, server restart and SBS headset.

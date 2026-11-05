@@ -7,6 +7,7 @@ defmodule Core.World do
   """
 
   alias Core.Universe.Navigation, as: SolarNavigation
+  alias Core.Universe.FreeFlightRegion
   alias Core.World.MapDefinition
   alias Core.World.MapServer
   alias Core.World.Session
@@ -92,6 +93,37 @@ defmodule Core.World do
       _ = MapServer.stop_navigation(registry, session.map_id, session.id, session.entity_id)
       _ = MapServer.disengage_combat(registry, session.map_id, session.id, session.entity_id)
       {:ok, navigation}
+    end
+  end
+
+
+  @doc "Leave automated cruise at the current server-owned SOL position."
+  def solar_enter_free_flight(session_id, opts \\ []) do
+    sessions = Keyword.get(opts, :sessions, SessionManager)
+    server = solar_navigation_server(opts)
+    with {:ok, session} <- fetch_session(sessions, session_id),
+         {:ok, navigation} <- SolarNavigation.snapshot(server, session.player_id),
+         :ok <- free_flight_entry_allowed(navigation),
+         :ok <- FreeFlightRegion.ensure_started(session.player_id,
+           registry: Keyword.get(opts, :registry, Core.World.Registry),
+           supervisor: Keyword.get(opts, :free_flight_maps,
+             Module.concat(sessions, FreeFlightMaps)),
+           solar_navigation_server: server) do
+      SolarNavigation.enter_free_flight(server, session.player_id)
+    end
+  end
+
+  @doc "Resume the AI drive only if the authenticated ship is alive."
+  def solar_resume_cruise(session_id, opts \\ []) do
+    sessions = Keyword.get(opts, :sessions, SessionManager)
+    registry = Keyword.get(opts, :registry, Core.World.Registry)
+    with {:ok, session} <- fetch_session(sessions, session_id),
+         {:ok, %{combat: %{status: :alive}}} <-
+           MapServer.ship_condition(registry, session.map_id, session.id, session.entity_id) do
+      SolarNavigation.resume_cruise(solar_navigation_server(opts), session.player_id)
+    else
+      {:ok, %{combat: %{status: :destroyed}}} -> {:error, :ship_destroyed}
+      error -> error
     end
   end
 
@@ -390,6 +422,14 @@ defmodule Core.World do
     MapServer.tick(registry, map_id)
   end
 
+  defp free_flight_entry_allowed(%{status: :traveling, free_flight: false,
+        pending_encounter: nil, tactical_encounter: nil}), do: :ok
+  defp free_flight_entry_allowed(%{status: :traveling, free_flight: true}),
+    do: {:error, :already_in_free_flight}
+  defp free_flight_entry_allowed(%{status: :traveling}),
+    do: {:error, :encounter_decision_required}
+  defp free_flight_entry_allowed(_), do: {:error, :no_active_course}
+
   defp require_tactical_closed(%Session{player_id: player_id}, opts)
        when is_integer(player_id) and player_id > 0 do
     case SolarNavigation.snapshot(solar_navigation_server(opts), player_id) do
@@ -404,10 +444,13 @@ defmodule Core.World do
   # Enforce the propulsion boundary at the authoritative game API, not
   # solely in browser controls or Phoenix. Test worlds also support
   # symbolic player IDs for deterministic combat fixtures.
-  defp require_conventional(%Session{player_id: player_id}, opts)
-       when is_integer(player_id) and player_id > 0 do
+    defp require_conventional(%Session{player_id: player_id, map_id: map_id}, opts)
+        when is_integer(player_id) and player_id > 0 do
     case SolarNavigation.snapshot(solar_navigation_server(opts), player_id) do
       {:ok, %{status: :traveling, tactical_encounter: %{}}} -> :ok
+      {:ok, %{status: :traveling, free_flight: true}} ->
+        if(map_id == FreeFlightRegion.map_id(player_id),
+          do: :ok, else: {:error, :wrong_flight_region})
       {:ok, %{status: :traveling}} -> {:error, :interplanetary_cruise_active}
       {:ok, _navigation} -> :ok
       error -> error

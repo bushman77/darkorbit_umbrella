@@ -50,6 +50,19 @@ defmodule Core.Universe.Navigation do
     GenServer.call(server, {:cancel_course, player_id})
   end
 
+
+  @doc "Suspend interplanetary drive at its actual SOL position for conventional free flight."
+  @spec enter_free_flight(GenServer.server(), pos_integer()) :: {:ok, map()} | {:error, atom()}
+  def enter_free_flight(server, player_id) when is_integer(player_id) and player_id > 0 do
+    GenServer.call(server, {:enter_free_flight, player_id})
+  end
+
+  @doc "Reengage automated cruise after the flight server confirms a surviving ship."
+  @spec resume_cruise(GenServer.server(), pos_integer()) :: {:ok, map()} | {:error, atom()}
+  def resume_cruise(server, player_id) when is_integer(player_id) and player_id > 0 do
+    GenServer.call(server, {:resume_cruise, player_id})
+  end
+
   @doc "Resolve the exact pending close pass for this authenticated pilot."
   @spec resolve_encounter(GenServer.server(), pos_integer(), term(), term()) ::
           {:ok, map()} | {:error, atom()}
@@ -132,6 +145,38 @@ defmodule Core.Universe.Navigation do
     {:reply, {:ok, public(voyage, state, player_id)}, state}
   end
 
+
+  def handle_call({:enter_free_flight, player_id}, _from, state) do
+    {voyage, state} = ensure_player(state, player_id)
+
+    cond do
+      voyage.status != :traveling ->
+        {:reply, {:error, :no_active_course}, state}
+      voyage.free_flight ->
+        {:reply, {:error, :already_in_free_flight}, state}
+      voyage.pending_encounter != nil or voyage.tactical_encounter != nil ->
+        {:reply, {:error, :encounter_decision_required}, state}
+      true ->
+        updated = %{voyage | free_flight: true, propulsion_mode: :conventional}
+        state = put_voyage(state, player_id, updated)
+        broadcast(state, player_id, updated)
+        {:reply, {:ok, public(updated, state, player_id)}, state}
+    end
+  end
+
+  def handle_call({:resume_cruise, player_id}, _from, state) do
+    {voyage, state} = ensure_player(state, player_id)
+    if voyage.status == :traveling and voyage.free_flight and
+         voyage.tactical_encounter == nil do
+      updated = %{voyage | free_flight: false, propulsion_mode: :interplanetary_cruise}
+      state = put_voyage(state, player_id, updated)
+      broadcast(state, player_id, updated)
+      {:reply, {:ok, public(updated, state, player_id)}, state}
+    else
+      {:reply, {:error, :not_in_free_flight}, state}
+    end
+  end
+
   def handle_call({:set_course, player_id, destination_id}, _from, state) do
     {voyage, state} = ensure_player(state, player_id)
 
@@ -181,6 +226,9 @@ defmodule Core.Universe.Navigation do
 
       voyage.pending_encounter != nil ->
         {:reply, {:error, :encounter_decision_required}, state}
+
+      voyage.free_flight ->
+        {:reply, {:error, :free_flight_active}, state}
 
       true ->
         # An aborted course stays at its departure region. Preserve the last
@@ -407,8 +455,9 @@ defmodule Core.Universe.Navigation do
       origin_position_km: position_km, position_km: position_km,
       destination_position_km: nil,
       pending_encounter: nil,
-      tactical_encounter: nil,
-      cruise_speed_km_s: 0.0,
+             tactical_encounter: nil,
+       free_flight: false,
+       cruise_speed_km_s: 0.0,
       travel_distance_km: 0.0, distance_travelled_km: 0.0,
       elapsed_ms: 0, duration_ms: 0}
   end
@@ -425,7 +474,7 @@ defmodule Core.Universe.Navigation do
     Enum.reduce(state.voyages, state, fn
       {player_id, %{status: :traveling} = voyage}, current ->
         updated =
-          if voyage.pending_encounter != nil do
+          if voyage.pending_encounter != nil or voyage.free_flight do
             # Only this pilot's voyage is stopped. The shared clock, other
             # pilots and independent NPC traffic continue moving.
             voyage
@@ -486,12 +535,13 @@ defmodule Core.Universe.Navigation do
       remaining_ms: remaining_ms,
       contacts: Traffic.contacts(traffic, voyage.position_km),
       encounter: EncounterDirector.evaluate(traffic, voyage, reputations_for(state, player_id)),
-      cruise_paused: voyage.pending_encounter != nil,
+      cruise_paused: voyage.pending_encounter != nil or voyage.free_flight,
       # Tactical combat currently takes place in the pilot's existing
       # orbital map. Show that map's ACTUAL planet and collision geometry,
       # not the approaching destination (which would be misleading).
-      planetary_view: PlanetaryView.describe(
-        if(voyage.tactical_encounter, do: %{voyage | status: :idle}, else: voyage)),
+      planetary_view: if(voyage.free_flight, do: nil,
+        else: PlanetaryView.describe(
+          if(voyage.tactical_encounter, do: %{voyage | status: :idle}, else: voyage))),
       territory: %{
         status: jurisdiction.status,
         faction_ids: Enum.map(jurisdiction.claims, & &1.faction_id)
@@ -553,6 +603,8 @@ defmodule Core.Universe.Navigation do
   # A real traffic vessel can pass multiple pilots. The flyby is published
   # only on a pilot's first proximity crossing for that vessel/voyage;
   # repeated SOL snapshots still carry its current relative position.
+  defp announce_encounter(state, _player_id, %{free_flight: true}), do: state
+
   defp announce_encounter(state, _player_id, %{pending_encounter: pending})
        when not is_nil(pending), do: state
 
