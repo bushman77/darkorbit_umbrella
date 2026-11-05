@@ -26,6 +26,10 @@ defmodule DarkorbitWeb.Router do
     get "/helmet", HelmetController, :show
     get "/login", SessionController, :new
     post "/login", SessionController, :create
+    get "/register", RegistrationController, :new
+    post "/register", RegistrationController, :create
+    get "/register/success", RegistrationController, :success
+    get "/verify-account", RegistrationController, :verify
     delete "/logout", SessionController, :delete
   end
 
