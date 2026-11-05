@@ -849,9 +849,10 @@ class SpaceClient {
       .receive("timeout", () => done(false, null, "timeout"))
   }
 
-  solarSetCourse(bodyId, done) {
+  solarSetCourse(target, done) {
     if(this.channel?.state!=="joined")return done(false,null,"relay offline")
-    this.channel.push("solar_set_course",{body_id:bodyId},5000)
+    const payload=typeof target==="string" ? {body_id:target} : {point:target}
+    this.channel.push("solar_set_course",payload,5000)
       .receive("ok",response=>done(true,response.navigation))
       .receive("error",response=>done(false,null,response.reason))
       .receive("timeout",()=>done(false,null,"timeout"))
