@@ -324,14 +324,46 @@ defmodule Core.Universe.NavigationTest do
     assert a.progress > b.progress
   end
 
-  test "aborting a cruise returns to the origin in this sector-free prototype", %{server: server} do
-    assert {:ok, _state} = Navigation.set_course(server, 11, "neptune")
+  test "aborting a cruise preserves its actual SOL position", %{server: server} do
+    assert {:ok, started} = Navigation.set_course(server, 11, "neptune")
     assert :ok = Navigation.tick(server)
+    assert {:ok, in_flight} = Navigation.snapshot(server, 11)
     assert {:ok, canceled} = Navigation.cancel_course(server, 11)
-    assert canceled.location_id == "earth"
+    assert canceled.location_id == nil
     assert canceled.status == :idle
     assert canceled.destination_id == nil
+    assert canceled.position_km == in_flight.position_km
+    refute canceled.position_km == started.position_km
     assert {:error, :no_active_course} = Navigation.cancel_course(server, 11)
+  end
+
+  test "arbitrary-coordinate course arrives in deep space and can launch another leg", %{server: server} do
+    {:ok, earth} = Core.Universe.Sol.game_position_km("earth")
+    point = %{x: earth.x + 3_000_000.0, y: earth.y, z: 0.0}
+    assert {:ok, trip} = Navigation.set_course(server, 221, point)
+    assert trip.destination_id == nil
+    assert trip.destination_position_km == point
+    tick_and_resolve(server, 221, ceil(trip.duration_ms / 1_000))
+    assert {:ok, arrived} = Navigation.snapshot(server, 221)
+    assert arrived.status == :idle
+    assert arrived.location_id == nil
+    assert arrived.position_km == point
+    assert arrived.planetary_view == nil
+    assert {:error, :already_at_destination} = Navigation.set_course(server, 221, point)
+    assert {:ok, departing} = Navigation.set_course(server, 221, "mars")
+    assert departing.origin_id == nil
+    assert departing.origin_position_km == point
+  end
+
+  test "malformed, out-of-range and colliding coordinates are rejected", %{server: server} do
+    {:ok, earth} = Core.Universe.Sol.game_position_km("earth")
+    for point <- [%{x: 0, y: 0, z: 0},
+                  %{x: earth.x, y: earth.y, z: 0},
+                  %{"x" => 1.0e300, "y" => 2.0, "z" => 0},
+                  %{"x" => "2000", "y" => 0, "z" => 0},
+                  %{"x" => 300_000_000.0, "y" => 0, "z" => 0}] do
+      assert {:error, :invalid_solar_waypoint} = Navigation.set_course(server, 44, point)
+    end
   end
 
   test "jurisdiction follows server-owned SOL cruise positions", %{server: server} do
