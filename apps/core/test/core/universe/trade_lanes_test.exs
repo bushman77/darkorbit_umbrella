@@ -18,6 +18,30 @@ defmodule Core.Universe.TradeLanesTest do
     assert TradeLanes.band(outside) == :quiet
   end
 
+  test "inbound vector, not destination type, controls approach encounter bonus" do
+    {:ok, earth} = Sol.game_position_km("earth")
+    {:ok, mars} = Sol.game_position_km("mars")
+    approach = Sol.interpolate_game_position(earth, mars, 0.95)
+
+    toward_mars = %{
+      position_km: approach,
+      origin_position_km: earth,
+      destination_position_km: mars,
+      destination_id: nil
+    }
+    away_from_mars = %{
+      position_km: approach,
+      origin_position_km: mars,
+      destination_position_km: earth,
+      destination_id: nil
+    }
+
+    assert TradeLanes.inbound_pressure(toward_mars) >
+      TradeLanes.inbound_pressure(away_from_mars)
+    assert Encounters.encounter_radius_km(toward_mars) >
+      Encounters.encounter_radius_km(away_from_mars)
+  end
+
   test "corridors contribute pressure even far from planetary endpoints" do
     {:ok, earth} = Sol.game_position_km("earth")
     {:ok, mars} = Sol.game_position_km("mars")
