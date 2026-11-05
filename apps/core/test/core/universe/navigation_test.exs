@@ -26,10 +26,15 @@ defmodule Core.Universe.NavigationTest do
 
   test "scheduled merchant traffic exists without players and waypoint clicks do not spawn ships" do
     name = :"#{__MODULE__}.Shipping#{System.unique_integer([:positive])}"
-    start_supervised!({Navigation, name: name, auto_tick: false,
-      tick_ms: 1_000, scheduled_trader_interval_ms: 2_000,
-      procedural_contact_chance: 0.0,
-      event_sink: fn _map, _event, _payload -> :ok end})
+    start_supervised!(%{
+      id: {:shipping, name},
+      start: {Navigation, :start_link, [[
+        name: name, auto_tick: false,
+        tick_ms: 1_000, scheduled_trader_interval_ms: 2_000,
+        procedural_contact_chance: 0.0,
+        event_sink: fn _map, _event, _payload -> :ok end
+      ]]}
+    })
 
     assert map_size(:sys.get_state(name).traffic) == 6
     assert :ok = Navigation.tick(name)
