@@ -4,5 +4,8 @@ import {planetaryRenderSpec} from "./planetary_view.mjs"
 // or accept a caller-provided planet on the viewer socket.
 export function helmetPlanetaryNavigation(payload) {
   const view = payload?.planetary_view
-  return {planetary_view: planetaryRenderSpec(view) ? view : null}
+  return {
+    planetary_view: planetaryRenderSpec(view) ? view : null,
+    tactical_active: payload?.tactical_active === true,
+  }
 }
