@@ -2,7 +2,7 @@ import {
   MAX_WAYPOINTS, chartProjection, chartWorldPoint,
   appendWaypoint, routeDistance, parseCoordinates,
 } from "./navigation_math.mjs"
-import {findSolarBody, SOLAR_FOCUSES} from "./solar_system.mjs"
+import {findSolarBody, SOLAR_FOCUSES, solarChartToPosition} from "./solar_system.mjs"
 import {drawSolarAtlas, renderSolarDetails} from "./solar_atlas.mjs"
 import {solarMenuTarget,canNavigateSolar} from "./solar_context_menu.mjs"
 import {setupAtlasHudDrag} from "./atlas_hud_layout.mjs"
@@ -61,6 +61,7 @@ export class NavigationComputer {
     this.view = "system"
     this.solarFocus = "system"
     this.solarSelection = "earth"
+    this.solarWaypoint = null
     this.solarNavigation = null
     this.solarPending = false
     this.solarStatusMessage = "Connecting to the system navigation computer…"
@@ -80,26 +81,30 @@ export class NavigationComputer {
     this.solarSvg?.addEventListener("contextmenu", event => {
       event.preventDefault()
       const clicked=event.target?.closest?.("[data-body-id]")?.getAttribute("data-body-id")
-      this.openSolarContextMenu(clicked,event.clientX,event.clientY)
+      this.openSolarContextMenu(clicked,event.clientX,event.clientY,
+        clicked ? null : this.solarPointForEvent(event))
     })
     this.solarSvg?.addEventListener("keydown",event => {
       if(event.key!=="ContextMenu" && !(event.key==="F10"&&event.shiftKey))return
       event.preventDefault()
       const rect=this.solarSvg.getBoundingClientRect()
       const clicked=event.target?.closest?.("[data-body-id]")?.getAttribute("data-body-id")
-      this.openSolarContextMenu(clicked,rect.left+rect.width/2,rect.top+rect.height/2)
+      this.openSolarContextMenu(clicked,rect.left+rect.width/2,rect.top+rect.height/2,
+        clicked ? null : this.solarPointForEvent({
+          clientX:rect.left+rect.width/2,clientY:rect.top+rect.height/2}))
     })
     this.solarMenu?.addEventListener("click",event => {
       const action=event.target?.closest?.("[data-solar-action]")?.dataset.solarAction
-      const id=this.solarContextBodyId
-      if(!action || !id)return
+      const target=this.solarContextTarget
+      if(!action || !target)return
       this.closeSolarContextMenu()
-      this.selectSolarBody(id)
+      if(typeof target==="string")this.selectSolarBody(target)
+      else this.selectSolarWaypoint(target)
       if(action==="analyze"){
         const detail=this.root.querySelector("#nav-solar-analysis")
         if(detail)detail.open=true
       }else if(action==="navigate" &&
-        canNavigateSolar(id,this.solarNavigation,this.isConnected(),this.solarPending)){
+        canNavigateSolar(target,this.solarNavigation,this.isConnected(),this.solarPending)){
         this.engageSolarCourse()
       }
     })
@@ -116,6 +121,10 @@ export class NavigationComputer {
       () => this.engageSolarCourse())
     this.root.querySelector("#nav-solar-cancel")?.addEventListener("click",
       () => this.cancelSolarCourse())
+    this.root.querySelector("#nav-solar-manual")?.addEventListener("click",
+      () => this.enterSolarManualFlight())
+    this.root.querySelector("#nav-solar-resume")?.addEventListener("click",
+      () => this.resumeSolarAutoCruise())
     this.root.querySelector("#nav-traffic-contacts")?.addEventListener("click", event => {
       const id = event.target?.closest?.("[data-traffic-hail]")?.dataset.trafficHail
       if (id) this.hailTraffic(id)
@@ -128,6 +137,10 @@ export class NavigationComputer {
       this.closeSolarContextMenu()
       const id = event.target?.closest?.("[data-body-id]")?.getAttribute("data-body-id")
       if(id)this.selectSolarBody(id)
+      else{
+        const point=this.solarPointForEvent(event)
+        if(point)this.selectSolarWaypoint(point)
+      }
     })
     this.solarSvg?.addEventListener("keydown", event => {
       if(!["Enter"," "].includes(event.key))return
@@ -248,16 +261,31 @@ export class NavigationComputer {
     if(this.isOpen&&this.view==="system")this.draw(0,true)
   }
 
-  openSolarContextMenu(clickedId,clientX,clientY) {
+  solarPointForEvent(event) {
+    if(!this.solarSvg?.createSVGPoint || !this.solarSvg.getScreenCTM)return null
+    const transform=this.solarSvg.getScreenCTM()
+    if(!transform)return null
+    const point=this.solarSvg.createSVGPoint()
+    point.x=event.clientX
+    point.y=event.clientY
+    const projected=point.matrixTransform(transform.inverse())
+    return solarChartToPosition(projected.x,projected.y,this.solarFocus,
+      this.solarNavigation?.position_km?.z ?? 0)
+  }
+
+  openSolarContextMenu(clickedId,clientX,clientY,point=null) {
     if(!this.isOpen || this.view!=="system" || !this.solarMenu || !this.solarSvg)return
-    const id=solarMenuTarget(clickedId,this.solarSelection)
-    if(!id)return
-    this.solarContextBodyId=id
-    const target=this.root.querySelector("#nav-solar-context-target")
-    if(target)target.textContent="TARGET / "+findSolarBody(id).name.toUpperCase()+
-      (findSolarBody(clickedId)?"":" (SELECTED)")
+    const target=solarMenuTarget(clickedId,this.solarSelection,point)
+    if(!target)return
+    this.solarContextTarget=target
+    const body=typeof target==="string" ? findSolarBody(target) : null
+    const label=body ? body.name.toUpperCase() :
+      `FREE WAYPOINT / ${number(target.x)}, ${number(target.y)}`
+    const title=this.root.querySelector("#nav-solar-context-target")
+    if(title)title.textContent="TARGET / "+label
     const navigate=this.solarMenu.querySelector('[data-solar-action="navigate"]')
-    if(navigate)navigate.disabled=!canNavigateSolar(id,this.solarNavigation,this.isConnected(),this.solarPending)
+    if(navigate)navigate.disabled=!canNavigateSolar(target,
+      this.solarNavigation,this.isConnected(),this.solarPending)
     this.solarMenu.hidden=false
     const rect=this.solarMenu.parentElement?.getBoundingClientRect()
     if(!rect)return
@@ -271,18 +299,27 @@ export class NavigationComputer {
 
   closeSolarContextMenu() {
     if(this.solarMenu)this.solarMenu.hidden=true
-    this.solarContextBodyId=null
+    this.solarContextTarget=null
   }
 
   selectSolarBody(id) {
     if(!findSolarBody(id))return
     this.solarSelection=id
-    // Selection is deliberate: reveal the compact overlay, never a sidebar.
+    this.solarWaypoint=null
     const targetPanel=this.root.querySelector("#nav-target-panel")
     if(targetPanel)targetPanel.hidden=false
     if(this.solarFocus==="inner"&&findSolarBody(id).au>1.524){
       this.setSolarFocus("system")
     }
+    if(this.isOpen&&this.view==="system")this.draw(0,true)
+  }
+
+  selectSolarWaypoint(point) {
+    if(!canNavigateSolar(point,{system_id:"sol",status:"idle"},
+        true,false))return
+    this.solarWaypoint=point
+    const targetPanel=this.root.querySelector("#nav-target-panel")
+    if(targetPanel)targetPanel.hidden=false
     if(this.isOpen&&this.view==="system")this.draw(0,true)
   }
 
@@ -299,8 +336,8 @@ export class NavigationComputer {
 
   engageSolarCourse() {
     const navigation=this.solarNavigation
-    if(!canNavigateSolar(this.solarSelection,navigation,this.isConnected(),this.solarPending))return
-    const destination=this.solarSelection
+    const destination=this.solarWaypoint || this.solarSelection
+    if(!canNavigateSolar(destination,navigation,this.isConnected(),this.solarPending))return
     this.solarPending=true
     this.solarStatusMessage="Submitting course to the SOL helm…"
     this.renderSolarNavigation()
@@ -324,6 +361,34 @@ export class NavigationComputer {
         "Transit aborted. Remaining at departure region." :
         `Abort rejected: ${reason || "unavailable"}`
       if(ok&&updated)this.solarNavigation=updated
+      if(this.isOpen&&this.view==="system")this.renderSolarView()
+    })
+  }
+
+  enterSolarManualFlight() {
+    const nav=this.solarNavigation
+    if(this.solarPending || !this.isConnected() || nav?.status!=="traveling" ||
+       nav.free_flight || nav.pending_encounter || nav.tactical_encounter)return
+    this.solarPending=true
+    this.solarEnterFreeFlight((ok,updated,reason)=>{
+      this.solarPending=false
+      if(ok&&updated)this.solarNavigation=updated
+      this.solarStatusMessage=ok ? "MANUAL FLIGHT · CRUISE PAUSED" :
+        `Manual flight unavailable: ${reason||"relay error"}`
+      if(this.isOpen&&this.view==="system")this.renderSolarView()
+    })
+  }
+
+  resumeSolarAutoCruise() {
+    const nav=this.solarNavigation
+    if(this.solarPending || !this.isConnected() || nav?.status!=="traveling" ||
+       !nav.free_flight || nav.tactical_encounter)return
+    this.solarPending=true
+    this.solarResumeCruise((ok,updated,reason)=>{
+      this.solarPending=false
+      if(ok&&updated)this.solarNavigation=updated
+      this.solarStatusMessage=ok ? "SUBLIGHT CRUISE RESUMED" :
+        `Cruise unavailable: ${reason||"relay error"}`
       if(this.isOpen&&this.view==="system")this.renderSolarView()
     })
   }
@@ -378,7 +443,7 @@ export class NavigationComputer {
 
   renderSolarNavigation() {
     const nav=this.solarNavigation
-    const name=id=>findSolarBody(id)?.name || "Unknown"
+    const name=id=>findSolarBody(id)?.name || "Deep space"
     const traveling=nav?.status==="traveling"
     const connected=this.isConnected()
     const status=this.root.querySelector("#nav-solar-state")
@@ -387,7 +452,7 @@ export class NavigationComputer {
     if(location)location.textContent=nav?name(nav.location_id):"—"
     const route=this.root.querySelector("#nav-solar-route")
     if(route)route.textContent=traveling?
-      `${name(nav.origin_id)} → ${name(nav.destination_id)}`:"NO ACTIVE TRANSIT"
+      `${name(nav.origin_id)} → ${nav.destination_id ? name(nav.destination_id) : "Free waypoint"}`:"NO ACTIVE TRANSIT"
     const progress=this.root.querySelector("#nav-solar-progress")
     const percent=Math.max(0,Math.min(100,Math.round((nav?.progress || 0)*100)))
     if(progress)progress.value=percent
@@ -399,7 +464,7 @@ export class NavigationComputer {
     }
     if(percentLabel)percentLabel.textContent=traveling?
       `${percent}% · ${duration(nav.remaining_ms)} remaining`:
-      "Conventional flight · choose a planet to begin sublight cruise"
+      "Conventional flight · select a planet or free coordinate"
     const drive=this.root.querySelector("#nav-solar-drive")
     if(drive)drive.textContent=nav?.cruise_paused ? "ENCOUNTER HOLD · CRUISE PAUSED" :
       traveling ? "SUBLIGHT INTERPLANETARY CRUISE" : "CONVENTIONAL"
@@ -415,42 +480,43 @@ export class NavigationComputer {
     if(eta)eta.textContent=traveling ? duration(nav.remaining_ms) : "—"
     const button=this.root.querySelector("#nav-solar-engage")
     if(button){
-      button.disabled=!canNavigateSolar(this.solarSelection,nav,connected,this.solarPending)
+      const target=this.solarWaypoint || this.solarSelection
+      button.disabled=!canNavigateSolar(target,nav,connected,this.solarPending)
       button.textContent=traveling?"Transit in progress":
+        this.solarWaypoint?"Set course to free waypoint":
         `Set course to ${name(this.solarSelection)}`
     }
     const abort=this.root.querySelector("#nav-solar-cancel")
-    if(abort)abort.disabled=this.solarPending||!connected||!traveling||Boolean(nav?.pending_encounter)
+    if(abort)abort.disabled=this.solarPending||!connected||!traveling||
+      Boolean(nav?.pending_encounter)||Boolean(nav?.free_flight)
+    const manual=this.root.querySelector("#nav-solar-manual")
+    if(manual)manual.disabled=this.solarPending||!connected||!traveling||
+      Boolean(nav?.free_flight)||Boolean(nav?.pending_encounter)||Boolean(nav?.tactical_encounter)
+    const resume=this.root.querySelector("#nav-solar-resume")
+    if(resume)resume.disabled=this.solarPending||!connected||!traveling||
+      !nav?.free_flight||Boolean(nav?.tactical_encounter)
     this.renderTrafficContacts()
   }
 
   renderSolarView() {
     drawSolarAtlas(this.solarSvg,{
       focus:this.solarFocus,selectedId:this.solarSelection,
-      navigation:this.solarNavigation,
+      navigation:this.solarNavigation,waypoint:this.solarWaypoint,
     })
     renderSolarDetails(this.root,this.solarSelection)
+    if(this.solarWaypoint){
+      const set=(id,text)=>{const node=this.root.querySelector(id);if(node)node.textContent=text}
+      set("#nav-solar-name","Free waypoint")
+      set("#nav-solar-type","SOL game-kilometre position")
+      set("#nav-solar-distance",`X ${number(this.solarWaypoint.x)} · Y ${number(this.solarWaypoint.y)}`)
+      set("#nav-solar-period",`Z ${number(this.solarWaypoint.z)} game km`)
+    }
     this.renderSolarNavigation()
   }
 
   open() {
-    if (this.isOpen || this.solarPending) return
-    if (this.solarNavigation?.status === "traveling" &&
-        this.solarNavigation?.free_flight &&
-        !this.solarNavigation?.tactical_encounter) {
-      this.solarPending = true
-      this.solarResumeCruise((ok, navigation, reason) => {
-        this.solarPending = false
-        if (!ok) {
-          this.solarStatusMessage = "AI drive unavailable: " + (reason || "relay error")
-          return
-        }
-        if (navigation) this.solarNavigation = navigation
-        this.openNow()
-      })
-      return
-    }
-    this.openNow()
+    // Display changes never alter propulsion or advance/rewind SOL travel.
+    if(!this.isOpen)this.openNow()
   }
 
   openNow() {
@@ -472,28 +538,7 @@ export class NavigationComputer {
   }
 
   close() {
-    if (!this.isOpen || this.solarPending) return
-    if (this.solarNavigation?.status === "traveling" &&
-        !this.solarNavigation?.free_flight &&
-        !this.solarNavigation?.tactical_encounter) {
-      if (this.solarNavigation?.pending_encounter) {
-        this.solarStatusMessage = "Resolve the current encounter before free flight."
-        return
-      }
-      this.solarPending = true
-      this.solarEnterFreeFlight((ok, navigation, reason) => {
-        this.solarPending = false
-        if (!ok) {
-          this.solarStatusMessage = "Manual flight unavailable: " + (reason || "relay error")
-          if (this.isOpen && this.view === "system" && this.solarSvg) this.renderSolarNavigation()
-          return
-        }
-        if (navigation) this.solarNavigation = navigation
-        this.closeNow()
-      })
-      return
-    }
-    this.closeNow()
+    if(this.isOpen)this.closeNow()
   }
 
   closeNow() {
