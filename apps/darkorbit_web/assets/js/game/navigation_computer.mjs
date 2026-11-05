@@ -4,6 +4,7 @@ import {
 } from "./navigation_math.mjs"
 import {findSolarBody, SOLAR_FOCUSES} from "./solar_system.mjs"
 import {drawSolarAtlas, renderSolarDetails} from "./solar_atlas.mjs"
+import {solarMenuTarget,canNavigateSolar} from "./solar_context_menu.mjs"
 
 const NS = "http://www.w3.org/2000/svg"
 const number = value => Math.round(value).toLocaleString("en-US")
@@ -67,6 +68,39 @@ export class NavigationComputer {
 
   start() {
     this.solarSvg = this.root.querySelector("#nav-solar-chart")
+    this.solarMenu = this.root.querySelector("#nav-solar-context-menu")
+    this.solarContextBodyId = null
+    this.solarSvg?.addEventListener("contextmenu", event => {
+      event.preventDefault()
+      const clicked=event.target?.closest?.("[data-body-id]")?.getAttribute("data-body-id")
+      this.openSolarContextMenu(clicked,event.clientX,event.clientY)
+    })
+    this.solarSvg?.addEventListener("keydown",event => {
+      if(event.key!=="ContextMenu" && !(event.key==="F10"&&event.shiftKey))return
+      event.preventDefault()
+      const rect=this.solarSvg.getBoundingClientRect()
+      const clicked=event.target?.closest?.("[data-body-id]")?.getAttribute("data-body-id")
+      this.openSolarContextMenu(clicked,rect.left+rect.width/2,rect.top+rect.height/2)
+    })
+    this.solarMenu?.addEventListener("click",event => {
+      const action=event.target?.closest?.("[data-solar-action]")?.dataset.solarAction
+      const id=this.solarContextBodyId
+      if(!action || !id)return
+      this.closeSolarContextMenu()
+      this.selectSolarBody(id)
+      if(action==="analyze"){
+        const detail=this.root.querySelector("#nav-solar-analysis")
+        if(detail)detail.open=true
+      }else if(action==="navigate" &&
+        canNavigateSolar(id,this.solarNavigation,this.isConnected(),this.solarPending)){
+        this.engageSolarCourse()
+      }
+    })
+    this.root.addEventListener?.("pointerdown",event=>{
+      if(!event.target?.closest?.("#nav-solar-context-menu,#nav-solar-chart")){
+        this.closeSolarContextMenu()
+      }
+    })
     this.root.querySelector("#nav-solar-engage")?.addEventListener("click",
       () => this.engageSolarCourse())
     this.root.querySelector("#nav-solar-cancel")?.addEventListener("click",
@@ -80,6 +114,7 @@ export class NavigationComputer {
     this.root.querySelector("#nav-view-sector")?.addEventListener("click",
       () => this.setView("sector"))
     this.root.querySelector("#nav-solar-chart")?.addEventListener("click", event => {
+      this.closeSolarContextMenu()
       const id = event.target?.closest?.("[data-body-id]")?.getAttribute("data-body-id")
       if(id)this.selectSolarBody(id)
     })
@@ -169,6 +204,7 @@ export class NavigationComputer {
 
   setView(view) {
     if(view!=="system"&&view!=="sector")return
+    this.closeSolarContextMenu()
     this.view=view
     const system=view==="system"
     this.root.querySelector("#nav-solar-view").hidden=!system
@@ -201,6 +237,32 @@ export class NavigationComputer {
     if(this.isOpen&&this.view==="system")this.draw(0,true)
   }
 
+  openSolarContextMenu(clickedId,clientX,clientY) {
+    if(!this.isOpen || this.view!=="system" || !this.solarMenu || !this.solarSvg)return
+    const id=solarMenuTarget(clickedId,this.solarSelection)
+    if(!id)return
+    this.solarContextBodyId=id
+    const target=this.root.querySelector("#nav-solar-context-target")
+    if(target)target.textContent="TARGET / "+findSolarBody(id).name.toUpperCase()+
+      (findSolarBody(clickedId)?"":" (SELECTED)")
+    const navigate=this.solarMenu.querySelector('[data-solar-action="navigate"]')
+    if(navigate)navigate.disabled=!canNavigateSolar(id,this.solarNavigation,this.isConnected(),this.solarPending)
+    this.solarMenu.hidden=false
+    const rect=this.solarMenu.parentElement?.getBoundingClientRect()
+    if(!rect)return
+    const width=this.solarMenu.offsetWidth||210
+    const height=this.solarMenu.offsetHeight||110
+    const left=Math.max(8,Math.min(clientX-rect.left,rect.width-width-8))
+    const top=Math.max(8,Math.min(clientY-rect.top,rect.height-height-8))
+    this.solarMenu.style.left=left+"px"
+    this.solarMenu.style.top=top+"px"
+  }
+
+  closeSolarContextMenu() {
+    if(this.solarMenu)this.solarMenu.hidden=true
+    this.solarContextBodyId=null
+  }
+
   selectSolarBody(id) {
     if(!findSolarBody(id))return
     this.solarSelection=id
@@ -223,10 +285,7 @@ export class NavigationComputer {
 
   engageSolarCourse() {
     const navigation=this.solarNavigation
-    if(this.solarPending || !this.isConnected() || !navigation ||
-        navigation.status==="traveling" ||
-        navigation.location_id===this.solarSelection ||
-        this.solarSelection==="sun")return
+    if(!canNavigateSolar(this.solarSelection,navigation,this.isConnected(),this.solarPending))return
     const destination=this.solarSelection
     this.solarPending=true
     this.solarStatusMessage="Submitting course to the SOL helm…"
@@ -342,8 +401,7 @@ export class NavigationComputer {
     if(eta)eta.textContent=traveling ? duration(nav.remaining_ms) : "—"
     const button=this.root.querySelector("#nav-solar-engage")
     if(button){
-      button.disabled=this.solarPending||!connected||!nav||traveling||
-        nav.location_id===this.solarSelection||this.solarSelection==="sun"
+      button.disabled=!canNavigateSolar(this.solarSelection,nav,connected,this.solarPending)
       button.textContent=traveling?"Transit in progress":
         `Set course to ${name(this.solarSelection)}`
     }
@@ -426,6 +484,7 @@ export class NavigationComputer {
 
   closeNow() {
     if (!this.isOpen) return
+    this.closeSolarContextMenu()
     this.isOpen = false
     this.root.hidden = true
     this.onClose?.()
@@ -435,7 +494,8 @@ export class NavigationComputer {
     if (event.defaultPrevented || event.repeat) return false
     if (this.isOpen && event.code === "Escape") {
       event.preventDefault()
-      this.close()
+      if(this.solarMenu && !this.solarMenu.hidden)this.closeSolarContextMenu()
+      else this.close()
       return true
     }
     // Tab and Shift+Tab remain inside the modal navigation computer.

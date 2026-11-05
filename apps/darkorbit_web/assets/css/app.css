@@ -1434,3 +1434,89 @@ body:has(#helmet-client) {
   .hud-auth-specs>div { display:flex; justify-content:space-between; gap:.7rem; }
   .hud-auth-layout { min-height:auto; }
 }
+
+/* SOL: single-screen Atlas and planet actions. Physical destinations remain
+   server-defined celestial bodies, never invented coordinates on the SVG. */
+@media (min-width: 980px) and (min-height: 670px) {
+  .navigation-computer { overflow:hidden; }
+  .navigation-computer .nav-shell { height:100dvh; min-height:0; overflow:hidden; }
+  .navigation-computer #nav-solar-view { flex:1 1 auto; min-height:0; }
+}
+.navigation-computer .solar-atlas-layout {
+  grid-template-columns:minmax(0,1fr) minmax(240px,306px);
+  grid-template-areas:"map details"; align-items:stretch;
+}
+.navigation-computer .solar-atlas-frame {
+  position:relative;display:flex;flex-direction:column;
+  min-width:0;min-height:0;height:100%;
+}
+.navigation-computer #nav-solar-chart {
+  flex:1 1 auto; min-height:0; height:100%; width:100%;
+  aspect-ratio:auto;
+}
+.navigation-computer .solar-chart-controls { flex:0 0 auto; padding:.42rem .75rem;gap:.45rem; }
+.navigation-computer .solar-chart-controls p { font-size:.58rem; }
+.navigation-computer .solar-zoom-button { padding:.3rem .52rem; }
+.navigation-computer .solar-atlas-panel {
+  overflow:auto; min-height:0;height:100%; padding:.7rem; gap:.43rem;
+  scrollbar-width:thin; scrollbar-color:#27738b transparent;
+}
+.navigation-computer .solar-system-count { font-size:.6rem;letter-spacing:.06em; }
+.navigation-computer .solar-body-list { gap:.25rem; }
+.navigation-computer .solar-body-button { min-height:1.8rem; padding:.32rem .4rem;font-size:.68rem; }
+.navigation-computer .solar-selected-body { padding-top:.46rem; }
+.navigation-computer .solar-selected-inline { display:flex; align-items:baseline; gap:.6rem; }
+.navigation-computer .solar-selected-body h3 { margin:.1rem 0; font-size:1.25rem; }
+.navigation-computer #nav-solar-type { margin:0;font-size:.66rem; }
+.navigation-computer .solar-navigation-console { padding-top:.45rem;gap:.4rem; }
+.navigation-computer .solar-navigation-console .nav-state { margin:0;padding:.38rem .55rem;font-size:.69rem; }
+.navigation-computer .solar-body-metrics { gap:.28rem; }
+.navigation-computer .solar-body-metrics>div { padding:.36rem .5rem; }
+.navigation-computer .solar-body-metrics dt {font-size:.52rem;}
+.navigation-computer .solar-body-metrics dd {margin-top:.12rem;font-size:.75rem;overflow-wrap:anywhere;}
+.navigation-computer .solar-progress-label {font-size:.61rem!important;}
+.navigation-computer .solar-navigation-console progress {height:.48rem;}
+.navigation-computer .solar-navigation-console .nav-button {padding:.42rem .5rem;font-size:.68rem;}
+.solar-aux-details {border:1px solid #26657b;border-radius:.25rem;background:#061827;}
+.solar-aux-details summary {cursor:pointer;padding:.42rem .55rem;color:#a6eafa;font:750 .64rem/1.35 ui-monospace,monospace;letter-spacing:.04em;}
+.solar-aux-details summary:hover {background:#104054;}
+.solar-aux-details summary:focus-visible {outline:2px solid #80f3ff;outline-offset:2px;}
+.solar-aux-details[open]>.solar-body-metrics,
+.solar-aux-details[open]>.solar-contacts-content {margin:.35rem;margin-top:0;}
+.solar-contacts-content { margin-top:.2rem; }
+.solar-contacts-content p {margin-top:.35rem;margin-bottom:.35rem;}
+.solar-contacts-content #nav-traffic-contacts {max-height:12rem;overflow-y:auto;}
+.solar-context-menu {
+  position:absolute;z-index:25;width:clamp(175px,18vw,226px);
+  padding:.4rem;border:1px solid #65e1eb;border-radius:.35rem;
+  background:linear-gradient(140deg,#0c3247,#041321);
+  box-shadow:0 16px 50px #000e,0 0 18px #05d6ef30;
+}
+.solar-context-menu[hidden] {display:none!important;}
+.solar-context-target {
+  padding:.4rem .5rem;color:#96eefa;
+  font:800 .65rem ui-monospace,monospace;letter-spacing:.12em;
+  border-bottom:1px solid #34798b;
+}
+.solar-context-menu button {
+  display:block;width:100%;padding:.65rem .55rem;
+  border:1px solid transparent;border-radius:.25rem;
+  background:transparent;color:#e2f7ff;text-align:left;
+  font:750 .76rem ui-monospace,monospace;cursor:pointer;
+}
+.solar-context-menu button:hover:not(:disabled),
+.solar-context-menu button:focus-visible {border-color:#6de0ed;background:#15536a;}
+.solar-context-menu button:disabled {color:#668b9b;cursor:not-allowed;}
+@media (max-width:979px), (max-height:669px) {
+  .navigation-computer .nav-shell {height:auto;min-height:100dvh;overflow:visible;}
+  .navigation-computer {overflow:auto;}
+  .navigation-computer .solar-atlas-layout {height:auto;}
+  .navigation-computer .solar-atlas-frame {height:auto;min-height:0;}
+  .navigation-computer #nav-solar-chart {flex:0 0 auto;height:auto;min-height:260px;aspect-ratio:5/3;}
+  .navigation-computer .solar-atlas-panel {height:auto;max-height:none;}
+}
+@media(max-width:700px) {
+  .navigation-computer .solar-atlas-layout {
+    grid-template-columns:minmax(0,1fr);grid-template-areas:"map" "details";
+  }
+}
