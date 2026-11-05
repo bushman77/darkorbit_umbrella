@@ -468,6 +468,9 @@ defmodule Core.World do
         if(map_id == FreeFlightRegion.map_id(player_id),
           do: :ok, else: {:error, :wrong_flight_region})
       {:ok, %{status: :traveling}} -> {:error, :interplanetary_cruise_active}
+      {:ok, %{status: :idle, location_id: nil}} ->
+        if(map_id == FreeFlightRegion.map_id(player_id),
+          do: :ok, else: {:error, :wrong_flight_region})
       {:ok, _navigation} -> :ok
       error -> error
     end
