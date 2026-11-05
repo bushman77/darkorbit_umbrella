@@ -329,14 +329,9 @@ defmodule DarkorbitWeb.WorldChannel do
     # keeps the isolated legacy test sector and future system namespaces
     # consistent instead of guessing a planet map from the navigation status.
     region_map =
-      if navigation.status == :idle or navigation.free_flight or
-           String.starts_with?(socket.assigns.map_id, "sol:free_") do
-        case World.region_for_player(player_id) do
-          {:ok, %{map_id: map_id}} -> map_id
-          _ -> nil
-        end
-      else
-        nil
+      case World.region_for_player(player_id) do
+        {:ok, %{map_id: map_id}} -> map_id
+        _ -> nil
       end
 
     if region_map && region_map != socket.assigns.map_id do
