@@ -51,7 +51,7 @@ defmodule DarkorbitWeb.RegistrationController do
             | changes: Map.delete(changeset.changes, :password),
               params:
                 changeset.params
-                |> Kernel.||(%{})
+                |> then(&(&1 || %{}))
                 |> Map.delete("password")
                 |> Map.delete(:password)
           }
