@@ -8,6 +8,7 @@ import {targetRange, LASER_FEEDBACK_MS} from "./laser_feedback.mjs"
 import {createDartModel, dartHeadingRotation} from "./dart_model.mjs"
 import {createScowModel} from "./scow_model.mjs"
 import {npcVisualClass} from "./ship_model_selection.mjs"
+import {surrenderedTargetLabel} from "./target_hud_status.mjs"
 import {PlanetaryBody} from "./planetary_body.js"
 import {EncounterShipVisual} from "./encounter_ship.js"
 
@@ -348,6 +349,7 @@ export class StereoSpaceView {
     this.lastHudAt = time
     const own = client.entities.get(client.selfId)
     const selected = client.entities.get(client.selectedTargetId)
+    const surrenderLabel = surrenderedTargetLabel(selected)
     const ctx = this.hudCanvas.getContext("2d")
     ctx.fillStyle = "#071b2c"
     ctx.fillRect(0, 0, 1024, 256)
@@ -375,10 +377,10 @@ export class StereoSpaceView {
       "  ROLL " + degrees(attitude.roll) + "  V " + speed, 30, 135)
     const feedback = client.lastLaserFeedback
     const recent = feedback && time - feedback.at < LASER_FEEDBACK_MS
-    ctx.fillStyle = recent ? (feedback.hit ? "#81ffaf" : "#ff9a99") :
+    ctx.fillStyle = surrenderLabel ? "#81ffaf" : recent ? (feedback.hit ? "#81ffaf" : "#ff9a99") :
       selected ? "#ffbe89" : "#7aa9cb"
-    ctx.font = recent ? "bold 36px monospace" : "30px monospace"
-    ctx.fillText(recent ? feedback.label :
+    ctx.font = (surrenderLabel || recent) ? "bold 36px monospace" : "30px monospace"
+    ctx.fillText(surrenderLabel ? surrenderLabel : recent ? feedback.label :
       selected ? "TARGET " +
         (npcVisualClass(selected.npcTypeId, selected.shipClass) === "generic"
           ? "" : npcVisualClass(selected.npcTypeId, selected.shipClass).toUpperCase() + " ") +
