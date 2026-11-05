@@ -331,7 +331,6 @@ defmodule DarkorbitWeb.WorldChannel do
 
     # World transition is a server-owned consequence of completing an actual
     # SOL voyage. Client never selects map identity or spawn coordinates.
-    navigation = payload.navigation
     # Resolve through the same region policy as authenticated joins. This
     # keeps the isolated legacy test sector and future system namespaces
     # consistent instead of guessing a planet map from the navigation status.
