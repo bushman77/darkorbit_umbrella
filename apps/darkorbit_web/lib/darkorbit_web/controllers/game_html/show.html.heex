@@ -168,7 +168,7 @@
         aria-labelledby="nav-view-system">
         <div class="solar-atlas-frame">
           <svg id="nav-solar-chart" viewBox="0 0 1000 600"
-            aria-label="Schematic solar system orbital chart. Select the Sun, a planet, or Pluto."
+            aria-label="SOL system chart. Select a planet, or click empty space to plot a free coordinate."
             role="group">
             <g id="nav-solar-content"></g>
           </svg>
@@ -179,7 +179,7 @@
           </div>
           <div class="nav-map-caption">
             <span>SOL // ORBITAL OVERVIEW</span>
-            <span>SCHEMATIC / NOT LIVE POSITIONS</span>
+            <span>PLANETS SCHEMATIC / WAYPOINTS USE SOL GAME KM</span>
           </div>
           <div class="solar-chart-controls">
             <div class="solar-zoom-group" aria-label="Solar map view">
@@ -188,7 +188,7 @@
               <button class="solar-zoom-button" data-solar-focus="inner"
                 aria-pressed="false" type="button">Inner planets</button>
             </div>
-            <p>SCHEMATIC / NOT LIVE POSITIONS</p>
+            <p>CLICK EMPTY SPACE TO PLOT A WAYPOINT · RIGHT-CLICK FOR ACTIONS</p>
           </div>
         </div>
         <aside class="atlas-hud-right" aria-label="Navigation instrument overlays">
@@ -223,12 +223,20 @@
               Set course to Earth
             </button>
             <button id="nav-solar-cancel" type="button" class="nav-button nav-danger" disabled>
-              Abort transit
+              Abort transit at current position
             </button>
+            <button id="nav-solar-manual" type="button" class="nav-button" disabled>
+              Disengage cruise · manual flight
+            </button>
+            <button id="nav-solar-resume" type="button" class="nav-button" disabled>
+              Resume automated cruise
+            </button>
+            <p class="nav-subtitle">Atlas and cockpit display modes do not change propulsion.
+              Manual flight pauses the cruise at your current SOL position.</p>
           </div>
           </section>
           <section id="nav-target-panel" class="solar-atlas-panel hud-target-widget"
-            aria-label="Selected celestial target" hidden>
+            aria-label="Selected SOL navigation target" hidden>
             <div class="hud-widget-heading">
               <span>TARGET / ANALYSIS</span>
               <button id="nav-target-dismiss" type="button" class="hud-widget-dismiss"
@@ -319,7 +327,7 @@
       <header class="atlas-hud-top" aria-label="Space Nova navigation controls">
         <span class="hud-brand"><.icon name="hero-rocket-launch" class="size-5" /> SPACE NOVA</span>
         <h2 id="nav-title">Solar System Atlas</h2>
-        <p id="nav-subtitle" class="sr-only">One star system · Sun, eight planets and Pluto · select a world to inspect.</p>
+        <p id="nav-subtitle" class="sr-only">One star system · choose a planet or chart waypoint; cockpit and propulsion are independent.</p>
         <div class="atlas-view-tabs" role="tablist" aria-label="Atlas navigation level">
           <button id="nav-view-system" class="atlas-view-tab is-active" type="button"
             role="tab" aria-selected="true" aria-controls="nav-solar-view">
