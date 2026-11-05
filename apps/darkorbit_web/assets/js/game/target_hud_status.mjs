@@ -8,6 +8,17 @@ export const surrenderedTargetLabel = entity =>
 // embedded in its authoritative NPC type ID (solar-<class>-<pilot_id>).
 // No target lock is required, and other pilots' NPCs are excluded.
 export function surrenderedHudLabel(client) {
+  // The paired phone receives a verified, pilot-scoped surrender feed.
+  // Render it in the same stereo-correct WebGL instrument as laptop telemetry,
+  // independently of target selection and the SOL navigation snapshot.
+  // An explicit "false" also clears stale entity-derived surrender labels.
+  if (client?.helmetSurrender != null) {
+    return client.helmetSurrender.surrendered === true
+      ? "SURRENDERED · " +
+        String(client.helmetSurrender.call_sign || "CONTACT").slice(0, 19)
+      : null
+  }
+
   const selected = client?.entities?.get(client.selectedTargetId)
   const selectedLabel = surrenderedTargetLabel(selected)
   if (selectedLabel) return selectedLabel
