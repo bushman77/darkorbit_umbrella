@@ -247,7 +247,8 @@ defmodule DarkorbitWeb.HelmetChannel do
 
   defp helmet_encounter(%{pending_encounter: encounter}) when is_map(encounter) do
     %{paused: true, encounter: Map.take(encounter,
-      [:id, :call_sign, :kind, :classification, :distance_km])}
+      [:id, :call_sign, :kind, :classification, :distance_km,
+       :faction_id, :faction_name])}
   end
 
   defp helmet_encounter(_navigation), do: %{paused: false, encounter: nil}
