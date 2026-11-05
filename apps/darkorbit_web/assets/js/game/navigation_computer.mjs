@@ -413,6 +413,7 @@ export class NavigationComputer {
         this.solarPending = false
         if (!ok) {
           this.solarStatusMessage = "Manual flight unavailable: " + (reason || "relay error")
+          if (this.isOpen && this.view === "system" && this.solarSvg) this.renderSolarNavigation()
           return
         }
         if (navigation) this.solarNavigation = navigation

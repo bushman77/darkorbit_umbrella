@@ -733,4 +733,5 @@ Source: [Symbrella `symbolic_generation`](https://github.com/bushman77/Symbrella
 - [x] Returning to Atlas resumes exactly the stored journey and requires a surviving, server-authorized ship.
 - [ ] Implement debris entities, swept collisions, physical hull damage and cockpit-only hazards; no random Atlas damage.
 - [ ] Upgrade private local maps to shared, location-grounded tactical instances when co-located pilots interact.
+- [x] Add channel and headless tests for authenticated entry/exit, remote map authorization, flight controls and ship condition gating.
 - [ ] Verify Mix/JavaScript suites, browser transition, reconnect, server restart and SBS headset.

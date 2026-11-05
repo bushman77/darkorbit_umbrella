@@ -121,6 +121,53 @@ defmodule DarkorbitWeb.WorldChannelTest do
     leave_and_wait(joined)
   end
 
+  test "authenticated pilot freely switches from AI cruise to deep-space cockpit and back" do
+    account = verified_player_account_fixture()
+    {:ok, socket} = authenticated_socket(account)
+    {:ok, _response, joined} =
+      subscribe_and_join(socket, WorldChannel, "world:1-1")
+
+    ref = push(joined, "solar_enter_free_flight", %{})
+    assert_reply ref, :error, %{reason: "no_active_course"}
+
+    ref = push(joined, "solar_set_course", %{"body_id" => "mars"})
+    assert_reply ref, :ok, %{navigation: %{status: :traveling, free_flight: false,
+      destination_id: "mars"}}
+
+    ref = push(joined, "solar_enter_free_flight", %{})
+    assert_reply ref, :ok, %{navigation: %{free_flight: true,
+      propulsion_mode: :conventional, status: :traveling}}
+    map_id = Core.Universe.FreeFlightRegion.map_id(account.id)
+    assert_push "world_region_changed", %{map_id: ^map_id}
+
+    ref = push(joined, "flight_controls", %{"throttle" => 0.5})
+    assert_reply ref, :error, %{reason: "wrong_flight_region"}
+    leave_and_wait(joined)
+
+    {:ok, reconnect} = authenticated_socket(account)
+    {:ok, response, cockpit} =
+      subscribe_and_join(reconnect, WorldChannel, "world:" <> map_id)
+    assert response.map.map_id == map_id
+    assert response.map.planet_id == "earth" # no physical planet in this map
+    assert response.solar_navigation.free_flight
+    assert response.solar_navigation.status == :traveling
+    assert response.solar_navigation.planetary_view == nil
+
+    ref = push(cockpit, "flight_controls", %{"throttle" => 0.5})
+    assert_reply ref, :ok, %{accepted: true}
+
+    ref = push(cockpit, "solar_resume_cruise", %{})
+    assert_reply ref, :ok, %{navigation: %{free_flight: false,
+      propulsion_mode: :interplanetary_cruise, status: :traveling}}
+    assert_push "world_region_changed", %{map_id: "1-1"}
+    leave_and_wait(cockpit)
+
+    refute Core.World.MapServer.available?(Core.World.Registry, map_id)
+    server = Module.concat(SessionManager, Core.Universe.Navigation)
+    assert {:ok, %{free_flight: false, destination_id: "mars"}} =
+      Core.Universe.Navigation.snapshot(server, account.id)
+  end
+
   test "arriving at Venus switches to a shared planet map with an incoming entry pose" do
     account = verified_player_account_fixture()
     {:ok, socket} = authenticated_socket(account)
