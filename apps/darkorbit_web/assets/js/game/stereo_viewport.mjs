@@ -24,3 +24,30 @@ export function inwardStereoProjectionOffset(signedGap, eyeWidth) {
   const inwardPerEyePx = Math.max(0, -(Number(signedGap) || 0)) / 2
   return 2 * inwardPerEyePx / Math.max(1, eyeWidth)
 }
+
+
+// The StereoCamera caches its per-eye projection matrices and may skip
+// recalculating them on the next frame. Mutating elements[8] permanently
+// causes the optical offset to accumulate every animation frame: the two
+// views appear to scroll sideways even when the ship and inputs are idle.
+//
+// Apply the optical correction only for the scope of one render/raycast and
+// ALWAYS restore the underlying matrices, including on a WebGL exception.
+export function applyTransientStereoOffset(leftProjection, rightProjection, signedGap, eyeWidth) {
+  const shift = inwardStereoProjectionOffset(signedGap, eyeWidth)
+  const left = leftProjection.elements
+  const right = rightProjection.elements
+  const baseLeft = left[8]
+  const baseRight = right[8]
+  if (shift !== 0) {
+    left[8] = baseLeft - shift
+    right[8] = baseRight + shift
+  }
+  let restored = false
+  return () => {
+    if (restored) return
+    restored = true
+    left[8] = baseLeft
+    right[8] = baseRight
+  }
+}
