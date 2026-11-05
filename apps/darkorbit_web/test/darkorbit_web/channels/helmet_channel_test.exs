@@ -64,6 +64,10 @@ defmodule DarkorbitWeb.HelmetChannelTest do
     assert_reply ref, :ok, %{mode: "combat"}
     assert_push "helmet_mode", %{mode: "combat"}
     assert_push "helmet_snapshot", %{player_id: ^id, map: %{entities: _}}
+    # A paired viewer must get the planet preview from the pilot's own
+    # SOL navigation snapshot, or Three.js cannot draw planetary bodies.
+    assert_push "helmet_navigation",
+      %{planetary_view: %{body_id: "earth", stage: :orbital_preview}}
 
     # A real encounter hold is mirrored only to the paired pilot's HMD.
     # The viewer receives a read-only alert, not cargo or a flight command.
@@ -89,6 +93,24 @@ defmodule DarkorbitWeb.HelmetChannelTest do
       {:solar_navigation_updated, %{player_id: id,
                                     navigation: %{pending_encounter: nil}}})
     assert_push "helmet_encounter", %{paused: false, encounter: nil}
+    assert_push "helmet_navigation", %{planetary_view: nil}
+
+    # Only presentation metadata from the paired pilot may reach the HMD.
+    visual = %{body_id: "venus", stage: :approach_preview,
+      visual_only: true, angular_diameter_deg: 4.0,
+      radius_km: 6051.8, visual_distance_km:
+        6051.8 / :math.sin(4.0 * :math.pi() / 360)}
+    Phoenix.PubSub.broadcast(Darkorbit.PubSub, Darkorbit.World.PubSub.topic("sol"),
+      {:solar_navigation_updated, %{player_id: id,
+        navigation: %{planetary_view: visual, pending_encounter: nil,
+          cargo: %{secret: 1}}}})
+    assert_push "helmet_navigation", %{planetary_view: ^visual}
+    assert_push "helmet_encounter", %{paused: false, encounter: nil}
+
+    Phoenix.PubSub.broadcast(Darkorbit.PubSub, Darkorbit.World.PubSub.topic("sol"),
+      {:solar_navigation_updated, %{player_id: id + 1,
+        navigation: %{planetary_view: %{body_id: "mars"}, pending_encounter: nil}}})
+    refute_push "helmet_navigation", %{planetary_view: %{body_id: "mars"}}, 30
 
     ref = push(viewer, "solar_resolve_encounter",
       %{"encounter_id" => encounter_id, "choice" => "continue"})
