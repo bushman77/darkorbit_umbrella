@@ -6,6 +6,8 @@ import {helmetSocketParams} from "./helmet_auth.mjs"
 import {adjustedHelmetAlignment, HELMET_GAP_MIN, HELMET_GAP_MAX} from "./helmet_alignment.mjs"
 import {restoredHelmetCalibration} from "./helmet_calibration_restore.mjs"
 import {renderHelmetEncounter} from "./helmet_encounter_view.mjs"
+import {helmetPlanetaryNavigation} from "./helmet_planetary_navigation.mjs"
+import {HelmetScreenWake} from "./helmet_screen_wake.mjs"
 
 const STORAGE_KEY = "darkorbit:pilot_hmd_credential"
 const GAP_KEY = "darkorbit:pilot_hmd_eye_gap"
@@ -39,6 +41,9 @@ export class HelmetClient {
     this.beams = []
     this.lastLaserFeedback = null
     this.view = null
+    // StereoSpaceView reads the same navComputer.visual data on laptop and HMD.
+    this.navComputer = {solarNavigation: {planetary_view: null}}
+    this.screenWake = new HelmetScreenWake()
     this.running = false
     this.frameCount = 0
   }
@@ -86,6 +91,9 @@ export class HelmetClient {
     this.channel.on("helmet_encounter", payload => {
       renderHelmetEncounter(this.encounterNode, payload)
     })
+    this.channel.on("helmet_navigation", payload => {
+      this.navComputer.solarNavigation = helmetPlanetaryNavigation(payload)
+    })
     this.channel.on("helmet_revoked", () => {
       localStorage.removeItem(STORAGE_KEY)
       this.credential = null
@@ -131,6 +139,7 @@ export class HelmetClient {
     window.addEventListener("orientationchange", () => this.resize())
     window.visualViewport?.addEventListener("resize", () => this.resize())
     document.addEventListener("visibilitychange", () => {
+      this.screenWake.onVisibilityChange()
       if (document.hidden) {
         // Best-effort write before the OS backgrounds the browser.
         this.persistCalibration()
@@ -140,7 +149,13 @@ export class HelmetClient {
         this.startRendering()
       }
     })
-    window.addEventListener("pagehide", () => this.persistCalibration())
+    window.addEventListener("pagehide", () => {
+      this.persistCalibration()
+      this.screenWake.disable()
+    })
+    window.addEventListener("pageshow", () => {
+      if (this.immersiveReady) this.screenWake.enable()
+    })
     setInterval(() => {
       this.report(this.running && this.frameCount > 0 && !document.hidden)
       if (localStorage.getItem(CALIBRATION_DIRTY_KEY) === "1" &&
@@ -254,6 +269,9 @@ export class HelmetClient {
         return
       }
       try {
+        // Request wake lock within the same explicit tap as fullscreen. The
+        // browser may reject it on insecure LAN HTTP or low battery.
+        this.screenWake.enable()
         // Must execute within the direct tap: mobile browsers do not grant
         // fullscreen automatically when a QR navigation loads the page.
         await this.root.requestFullscreen()
@@ -264,10 +282,12 @@ export class HelmetClient {
         this.resize()
         if (this.mode === "combat") this.startRendering()
       } catch (_error) {
+        this.screenWake.disable()
         if (hint) hint.textContent = "Fullscreen was blocked. Open in Chrome/Samsung Internet, or use Continue without fullscreen."
       }
     })
     windowed?.addEventListener("click", () => {
+      this.screenWake.enable()
       this.windowed = true
       this.immersiveReady = true
       if (setup) setup.hidden = true
@@ -280,6 +300,7 @@ export class HelmetClient {
         if (setup) setup.hidden = true
         if (this.mode === "combat") this.startRendering()
       } else if (!this.windowed && this.immersiveReady) {
+        this.screenWake.disable()
         this.immersiveReady = false
         this.stop()
         if (setup) setup.hidden = false
@@ -452,6 +473,7 @@ export class HelmetClient {
     renderHelmetEncounter(this.encounterNode, null)
     this.canvas.hidden = true
     this.entities.clear()
+    this.navComputer.solarNavigation = {planetary_view: null}
     this.beams = []
     this.report(false)
   }
