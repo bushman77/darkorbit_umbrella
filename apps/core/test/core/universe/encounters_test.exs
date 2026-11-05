@@ -37,6 +37,8 @@ defmodule Core.Universe.EncountersTest do
     assert encounter = Encounters.nearest(traffic, cruise)
     assert encounter.contact_id == "traffic:sol:vesper-02"
     assert encounter.call_sign == "Vesper-02"
+    assert encounter.faction_id == "helios_couriers"
+    assert encounter.faction_name == "Helios Courier Cooperative"
     assert encounter.mode == :strategic_flyby
     assert encounter.disposition == :neutral
     assert encounter.distance_km < Encounters.encounter_radius_km()
