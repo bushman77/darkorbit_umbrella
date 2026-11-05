@@ -37,8 +37,8 @@ defmodule DarkorbitWeb.RegistrationController do
             {:ok, _response} ->
               redirect(conn, to: ~p"/register/success")
 
-            {:error, reason} ->
-              Logger.error("Space Nova registration verification email failed: #{inspect(reason)}")
+            {:error, _reason} ->
+              Logger.error("Space Nova registration verification email delivery failed")
 
               conn
               |> put_flash(:error, "Your account was created, but confirmation email delivery failed. Please contact the server operator for activation.")
@@ -58,8 +58,8 @@ defmodule DarkorbitWeb.RegistrationController do
               as: :registration, action: :insert)
           )
 
-        {:error, reason} ->
-          Logger.error("Space Nova registration provisioning failed: #{inspect(reason)}")
+        {:error, _reason} ->
+          Logger.error("Space Nova registration provisioning failed")
 
           conn
           |> put_flash(:error, "We couldn't provision your starter ship. Please try again later.")
