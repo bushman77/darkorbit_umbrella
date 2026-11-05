@@ -31,7 +31,7 @@
       </div>
       <.input field={@form[:email]} type="email" label="Email address" maxlength="260" autocomplete="email" required placeholder="pilot@example.com"
         class="mt-2 w-full rounded-xl border border-slate-700 bg-slate-900/90 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/70 focus:ring-4 focus:ring-cyan-400/10" />
-      <.input field={@form[:password]} type="password" label="Account password" minlength="8" maxlength="72" autocomplete="new-password" required placeholder="At least 8 characters"
+      <.input field={@form[:password]} value="" type="password" label="Account password" minlength="8" maxlength="72" autocomplete="new-password" required placeholder="At least 8 characters"
         class="mt-2 w-full rounded-xl border border-slate-700 bg-slate-900/90 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/70 focus:ring-4 focus:ring-cyan-400/10" />
       <p class="text-xs leading-6 text-slate-500">Your starter ship and loadouts are provisioned by the server. You'll receive a confirmation email before your first login.</p>
       <button id="pilot-register-button" type="submit" class="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-cyan-300 px-6 py-3.5 text-sm font-bold text-slate-950 transition hover:bg-cyan-200">
