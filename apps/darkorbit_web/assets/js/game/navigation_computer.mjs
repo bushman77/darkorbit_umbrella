@@ -232,10 +232,6 @@ export class NavigationComputer {
         "Course accepted. En route.": `Course rejected: ${reason || "unavailable"}`
       if(ok&&updated)this.solarNavigation=updated
       if(this.isOpen&&this.view==="system")this.renderSolarView()
-      // A course is a propulsion command, not a requirement to stay on the
-      // Atlas. Return to the cockpit after the server accepts the journey;
-      // M always reopens the chart and navigation continues independently.
-      if(ok&&updated?.status==="traveling"&&this.isOpen)this.close()
     })
   }
 
