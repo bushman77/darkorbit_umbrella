@@ -6,7 +6,7 @@ defmodule Core.Universe.FreeFlightRegion do
   unrelated ships into a false shared battlefield. Navigation retains the
   authoritative SOL position; local cockpit units are independent.
   """
-  alias Core.Universe.Sol
+
   alias Core.World.{MapDefinition, MapServer, NoopEventSink, Position, SessionManager}
 
   @size 24_000
@@ -46,6 +46,22 @@ defmodule Core.Universe.FreeFlightRegion do
   end
 
   def entry(_player_id, _navigation), do: {:error, :free_flight_unavailable}
+
+  @doc "Stop an empty private flight map when its only pilot disconnects."
+  def stop_started(player_id, opts \\ []) when is_integer(player_id) and player_id > 0 do
+    registry = Keyword.get(opts, :registry, Core.World.Registry)
+    supervisor = Keyword.get(opts, :supervisor,
+      Module.concat(SessionManager, FreeFlightMaps))
+    case Registry.lookup(registry, {:world_map, map_id(player_id)}) do
+      [{pid, _}] ->
+        case DynamicSupervisor.terminate_child(supervisor, pid) do
+          :ok -> :ok
+          {:error, :not_found} -> :ok
+          error -> error
+        end
+      [] -> :ok
+    end
+  end
 
   @doc "Register the empty map before publishing a free-flight mode transition."
   @spec ensure_started(pos_integer(), keyword()) :: :ok | {:error, term()}

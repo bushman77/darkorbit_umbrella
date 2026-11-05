@@ -104,12 +104,19 @@ defmodule Core.World do
     with {:ok, session} <- fetch_session(sessions, session_id),
          {:ok, navigation} <- SolarNavigation.snapshot(server, session.player_id),
          :ok <- free_flight_entry_allowed(navigation),
+         {:ok, %{combat: %{status: :alive}}} <-
+           MapServer.ship_condition(Keyword.get(opts, :registry, Core.World.Registry),
+             session.map_id, session.id, session.entity_id),
          :ok <- FreeFlightRegion.ensure_started(session.player_id,
-           registry: Keyword.get(opts, :registry, Core.World.Registry),
-           supervisor: Keyword.get(opts, :free_flight_maps,
-             Module.concat(sessions, FreeFlightMaps)),
-           solar_navigation_server: server) do
+           [registry: Keyword.get(opts, :registry, Core.World.Registry),
+            supervisor: Keyword.get(opts, :free_flight_maps,
+              Module.concat(sessions, FreeFlightMaps)),
+            solar_navigation_server: server] ++
+             Keyword.take(opts, [:tick_ms, :event_sink, :auto_tick])) do
       SolarNavigation.enter_free_flight(server, session.player_id)
+    else
+      {:ok, %{combat: %{status: :destroyed}}} -> {:error, :ship_destroyed}
+      error -> error
     end
   end
 
@@ -118,10 +125,12 @@ defmodule Core.World do
     sessions = Keyword.get(opts, :sessions, SessionManager)
     registry = Keyword.get(opts, :registry, Core.World.Registry)
     with {:ok, session} <- fetch_session(sessions, session_id),
+         true <- session.map_id == FreeFlightRegion.map_id(session.player_id),
          {:ok, %{combat: %{status: :alive}}} <-
            MapServer.ship_condition(registry, session.map_id, session.id, session.entity_id) do
       SolarNavigation.resume_cruise(solar_navigation_server(opts), session.player_id)
     else
+      false -> {:error, :wrong_flight_region}
       {:ok, %{combat: %{status: :destroyed}}} -> {:error, :ship_destroyed}
       error -> error
     end
@@ -264,7 +273,14 @@ defmodule Core.World do
          :ok <- require_tactical_closed(session, opts),
          :ok <- MapServer.leave(registry, session.map_id, session.id, session.entity_id),
          {:ok, _session} <- SessionManager.close(sessions, session.id) do
-      :ok
+      if is_integer(session.player_id) and session.player_id > 0 and
+           session.map_id == FreeFlightRegion.map_id(session.player_id) do
+        FreeFlightRegion.stop_started(session.player_id,
+          registry: registry, supervisor: Keyword.get(opts, :free_flight_maps,
+            Module.concat(sessions, FreeFlightMaps)))
+      else
+        :ok
+      end
     end
   end
 

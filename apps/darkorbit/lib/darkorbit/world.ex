@@ -39,12 +39,12 @@ defmodule Darkorbit.World do
       else
         if @legacy_test_earth_sector and navigation.location_id == "earth" and
              navigation.arrival_origin_id == nil do
-        {:ok, %{
-          map_id: "1-1",
-          position: MapDefinition.starting_map().spawn,
-          attitude: %{yaw: 0.0, pitch: 0.0, roll: 0.0}
-        }}
-      else
+          {:ok, %{
+            map_id: "1-1",
+            position: MapDefinition.starting_map().spawn,
+            attitude: %{yaw: 0.0, pitch: 0.0, roll: 0.0}
+          }}
+        else
           OrbitalEntry.entry(
             navigation.arrival_origin_id, navigation.location_id,
             user_id, navigation.voyage_number

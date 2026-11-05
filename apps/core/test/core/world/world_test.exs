@@ -3,6 +3,7 @@ defmodule Core.WorldTest do
 
   alias Core.Ships.Stats
   alias Core.Universe.Navigation, as: SolarNavigation
+  alias Core.Universe.FreeFlightRegion
   alias Core.World
   alias Core.World.MapDefinition
   alias Core.World.Orientation
@@ -36,6 +37,39 @@ defmodule Core.WorldTest do
     %{stats: stats,
       world_options: [registry: @registry, sessions: @sessions,
         solar_navigation_server: @solar_navigation_server]}
+  end
+
+  @tag no_initial_encounter: true
+  test "manual free-flight is isolated to its private map and resumes the same voyage", context do
+    options = Keyword.merge(context.world_options,
+      event_sink: fn _map, _event, _payload -> :ok end, auto_tick: false,
+      tick_ms: 100)
+
+    assert {:ok, original} = World.connect(341, context.stats, options)
+    assert {:ok, started} = World.solar_set_course(original.id, "mars", options)
+    assert {:error, :interplanetary_cruise_active} =
+      World.flight_controls(original.id, %{"throttle" => 0.5}, options)
+
+    assert {:ok, paused} = World.solar_enter_free_flight(original.id, options)
+    assert paused.free_flight
+    assert paused.position_km == started.position_km
+    assert {:error, :wrong_flight_region} =
+      World.flight_controls(original.id, %{"throttle" => 0.5}, options)
+
+    assert :ok = World.disconnect(original.id, options)
+    assert {:ok, entry} = FreeFlightRegion.entry(341, paused)
+    assert {:ok, free} = World.connect(341, context.stats,
+      Keyword.merge(options, map_id: entry.map_id, entry: entry))
+    assert {:ok, _} = World.flight_controls(free.id, %{"throttle" => 0.5}, options)
+    assert {:ok, continued} = World.solar_resume_cruise(free.id, options)
+    assert continued.position_km == paused.position_km
+    assert continued.voyage_number == started.voyage_number
+    assert {:error, :interplanetary_cruise_active} =
+      World.flight_controls(free.id, %{"throttle" => 0.5}, options)
+    assert :ok = World.disconnect(free.id, options)
+    refute Core.World.MapServer.available?(@registry, entry.map_id)
+    assert {:ok, snapshot} = SolarNavigation.snapshot(@solar_navigation_server, 341)
+    refute snapshot.free_flight
   end
 
   @tag no_initial_encounter: true

@@ -2,8 +2,7 @@ defmodule DarkorbitWeb.WorldChannel do
   use DarkorbitWeb, :channel
 
   alias Darkorbit.World
-  alias Core.Universe.OrbitalEntry
-  alias Core.Universe.FreeFlightRegion
+
   alias DarkorbitWeb.{WorldStreamDelta, WorldStreamPolicy}
 
   @impl true
@@ -326,11 +325,18 @@ defmodule DarkorbitWeb.WorldChannel do
     # World transition is a server-owned consequence of completing an actual
     # SOL voyage. Client never selects map identity or spawn coordinates.
     navigation = payload.navigation
+    # Resolve through the same region policy as authenticated joins. This
+    # keeps the isolated legacy test sector and future system namespaces
+    # consistent instead of guessing a planet map from the navigation status.
     region_map =
-      if navigation.status == :traveling and navigation.free_flight do
-        FreeFlightRegion.map_id(player_id)
+      if navigation.status == :idle or navigation.free_flight or
+           String.starts_with?(socket.assigns.map_id, "sol:free_") do
+        case World.region_for_player(player_id) do
+          {:ok, %{map_id: map_id}} -> map_id
+          _ -> nil
+        end
       else
-        OrbitalEntry.map_id(navigation.location_id)
+        nil
       end
 
     if region_map && region_map != socket.assigns.map_id do
