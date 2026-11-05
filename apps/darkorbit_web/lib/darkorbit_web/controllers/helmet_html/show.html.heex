@@ -29,6 +29,27 @@
     </div>
   </section>
 
+  <%!-- A separate read-only surrender instrument on the paired phone.
+       Each SBS eye gets the same notification, independent of laptop target
+       selection. It does not obscure the cockpit or accept input. --%>
+  <section id="helmet-surrender" hidden class="helmet-surrender-overlay"
+           role="status" aria-live="polite" aria-label="Tactical surrender">
+    <div class="helmet-surrender-eye">
+      <div class="helmet-surrender-card">
+        <span>TARGET SURRENDERED</span>
+        <strong data-helmet-surrender-name>CONTACT</strong>
+        <small>ACCEPT OR RETREAT ON LAPTOP</small>
+      </div>
+    </div>
+    <div class="helmet-surrender-eye" aria-hidden="true">
+      <div class="helmet-surrender-card">
+        <span>TARGET SURRENDERED</span>
+        <strong data-helmet-surrender-name>CONTACT</strong>
+        <small>ACCEPT OR RETREAT ON LAPTOP</small>
+      </div>
+    </div>
+  </section>
+
   <div id="helmet-message" hidden
        class="pointer-events-none absolute inset-x-0 top-1/2 z-20 mx-auto max-w-md -translate-y-1/2 px-6 text-center text-sm text-cyan-100"
        role="status"></div>
