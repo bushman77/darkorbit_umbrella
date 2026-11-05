@@ -472,7 +472,7 @@ export class NavigationComputer {
     const traffic=this.root.querySelector("#nav-solar-traffic-density")
     if(traffic) {
       const pressure=Math.round(Math.max(0,Math.min(1,Number(nav?.traffic_pressure)||0))*100)
-      traffic.textContent=`${String(nav?.traffic_band||"quiet").toUpperCase()} · ${pressure}%`
+      traffic.textContent=`${String(nav?.traffic_band||"quiet").toUpperCase()} · ${pressure}/100 index`
     }
     const speed=this.root.querySelector("#nav-solar-speed")
     if(speed)speed.textContent=nav?.free_flight ? "0 game km/s · manual flight" :
