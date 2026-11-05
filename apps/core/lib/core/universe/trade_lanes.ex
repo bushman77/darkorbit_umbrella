@@ -60,6 +60,46 @@ defmodule Core.Universe.TradeLanes do
 
   def pressure(_), do: 0.0
 
+  @doc """
+  Extra encounter pressure from approaching a planet *ahead* of the ship.
+  Departure traffic remains visible, but does not inherit the inbound bonus.
+  This uses the actual course vector, not the name/type of its destination.
+  """
+  @spec inbound_pressure(map()) :: float()
+  def inbound_pressure(%{position_km: position,
+                         origin_position_km: start,
+                         destination_position_km: finish}) do
+    vx = finish.x - start.x
+    vy = finish.y - start.y
+    vz = finish.z - start.z
+    magnitude = :math.sqrt(vx * vx + vy * vy + vz * vz)
+
+    if magnitude <= 0.0 do
+      0.0
+    else
+      Sol.planets()
+      |> Enum.map(fn planet ->
+        {:ok, center} = Sol.game_position_km(planet.id)
+        dx = center.x - position.x
+        dy = center.y - position.y
+        dz = center.z - position.z
+        distance_km = :math.sqrt(dx * dx + dy * dy + dz * dz)
+        forward =
+          if distance_km > 0.0 do
+            max(0.0, (dx * vx + dy * vy + dz * vz) /
+              (magnitude * distance_km))
+          else
+            0.0
+          end
+
+        fade(distance_km, @approach_radius_km) * forward
+      end)
+      |> Enum.max(fn -> 0.0 end)
+    end
+  end
+
+  def inbound_pressure(_), do: 0.0
+
   @spec band(map()) :: :quiet | :light | :moderate | :busy
   def band(position) do
     case pressure(position) do
