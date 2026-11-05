@@ -237,6 +237,9 @@ defmodule Core.Universe.Traffic do
     end
   end
 
+  def launch_scheduled_trader(_ships, _from, _to, _serial),
+    do: {:error, :invalid_route}
+
   # A regular shipping line keeps its allegiance for every leg of the
   # route. Selection is world-defined, not derived from the player's course.
   defp scheduled_trader_faction(from, to) do
@@ -244,9 +247,6 @@ defmodule Core.Universe.Traffic do
     if from in outer or to in outer,
       do: "outer_rim_traders", else: "sol_merchant_league"
   end
-
-  def launch_scheduled_trader(_ships, _from, _to, _serial),
-    do: {:error, :invalid_route}
 
   @doc """
   Advance every ship on the SOL clock. A vessel currently leased to a
