@@ -101,6 +101,10 @@ export class NavigationComputer {
         this.closeSolarContextMenu()
       }
     })
+    this.root.querySelector("#nav-target-dismiss")?.addEventListener("click",() => {
+      const panel=this.root.querySelector("#nav-target-panel")
+      if(panel)panel.hidden=true
+    })
     this.root.querySelector("#nav-solar-engage")?.addEventListener("click",
       () => this.engageSolarCourse())
     this.root.querySelector("#nav-solar-cancel")?.addEventListener("click",
@@ -266,6 +270,9 @@ export class NavigationComputer {
   selectSolarBody(id) {
     if(!findSolarBody(id))return
     this.solarSelection=id
+    // Selection is deliberate: reveal the compact overlay, never a sidebar.
+    const targetPanel=this.root.querySelector("#nav-target-panel")
+    if(targetPanel)targetPanel.hidden=false
     if(this.solarFocus==="inner"&&findSolarBody(id).au>1.524){
       this.setSolarFocus("system")
     }
