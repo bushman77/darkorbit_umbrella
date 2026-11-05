@@ -62,8 +62,8 @@ defmodule DarkorbitWeb.RegistrationControllerTest do
   test "public signup ignores client-controlled ship and progression fields", %{conn: conn} do
     attrs =
       unique_account_attributes(%{
-        "ship_id" => 999, "credits" => 100_000,
-        "faction_id" => 3, "verification" => %{"verified" => true}
+        ship_id: 999, credits: 100_000,
+        faction_id: 3, verification: %{"verified" => true}
       })
 
     assert redirected_to(post(conn, ~p"/register", %{"registration" => attrs})) ==
