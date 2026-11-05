@@ -1,6 +1,8 @@
-export const DEFAULT_SERVER_URL = "https://localhost:4001"
+export const DEFAULT_SERVER_URL = "https://spacenova.ddns.net"
+export const LOCAL_SERVER_URL = "http://127.0.0.1:4000"
 
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"])
+const LAUNCH_ROUTES = new Set(["/", "/play", "/register"])
 
 // Only accept a server origin. Never carry arbitrary paths, credentials or
 // query strings into an authenticated Phoenix browser session.
@@ -31,6 +33,21 @@ export function serverOrigin(raw) {
   return url.origin
 }
 
+export function destinationUrl(raw, route) {
+  if (!LAUNCH_ROUTES.has(route)) {
+    throw new Error("Unsupported launcher destination.")
+  }
+  return new URL(route, serverOrigin(raw)).href
+}
+
 export function gameUrl(raw) {
-  return new URL("/play", serverOrigin(raw)).href
+  return destinationUrl(raw, "/play")
+}
+
+export function registrationUrl(raw) {
+  return destinationUrl(raw, "/register")
+}
+
+export function homeUrl(raw) {
+  return destinationUrl(raw, "/")
 }

@@ -1,9 +1,9 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    // The packaged launcher navigates to Phoenix /play. No native commands
-    // or OS capabilities are exposed to server-delivered game JavaScript.
+    // The local launcher navigates to the public Space Nova pages or /play.
+    // Server-hosted pages receive no native Tauri commands or OS capabilities.
     tauri::Builder::default()
         .run(tauri::generate_context!())
-        .expect("failed to launch the SBS Space desktop client");
+        .expect("failed to launch the Space Nova desktop client");
 }

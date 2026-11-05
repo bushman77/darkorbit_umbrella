@@ -1,6 +1,6 @@
 {
-  "name": "sbs-space-client",
-  "version": "0.1.0",
+  "name": "space-nova-client",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "scripts": {

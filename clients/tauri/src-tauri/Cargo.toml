@@ -1,8 +1,8 @@
 [package]
-name = "sbs-space-client"
-version = "0.1.0"
-description = "Native desktop client for the server-authoritative SBS space MMO"
-authors = ["SBS Space contributors"]
+name = "space-nova-client"
+version = "0.2.0"
+description = "Space Nova desktop client for the authoritative Elixir space MMO"
+authors = ["Space Nova contributors"]
 edition = "2021"
 
 [build-dependencies]

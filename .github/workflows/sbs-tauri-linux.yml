@@ -1,4 +1,4 @@
-name: Build SBS Space Linux client
+name: Build Space Nova Linux client
 
 on:
   push:
@@ -47,7 +47,7 @@ jobs:
       - name: Upload Linux installers
         uses: actions/upload-artifact@v4
         with:
-          name: sbs-space-linux-x86_64
+          name: space-nova-linux-x86_64
           if-no-files-found: error
           path: |
             clients/tauri/src-tauri/target/release/bundle/deb/*.deb
