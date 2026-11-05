@@ -49,7 +49,11 @@ defmodule DarkorbitWeb.RegistrationController do
           safe_changeset = %{
             changeset
             | changes: Map.delete(changeset.changes, :password),
-              params: Map.delete(changeset.params || %{}, "password")
+              params:
+                changeset.params
+                |> Kernel.||(%{})
+                |> Map.delete("password")
+                |> Map.delete(:password)
           }
 
           conn
