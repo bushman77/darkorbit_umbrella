@@ -14,6 +14,26 @@ defmodule Core.FactionsTest do
     refute Factions.exists?(1)
   end
 
+  test "commercial factions have stable identities separate from planets" do
+    for {id, name} <- [
+      {"sol_merchant_league", "Solar Merchant League"},
+      {"helios_couriers", "Helios Courier Cooperative"},
+      {"outer_rim_traders", "Outer Rim Trading Guild"},
+      {"sol_surveyors", "Solar Survey Consortium"},
+      {"independent", "Independent Operators"}
+    ] do
+      assert Factions.exists?(id)
+      assert {:ok, %{id: ^id, name: ^name}} = Factions.fetch(id)
+      assert Factions.name(id) == name
+    end
+
+    assert Factions.name("venus") == "Venus"
+    assert Factions.name("unknown") == nil
+    assert Factions.fetch("sun") == :error
+    assert Enum.all?(Factions.organizations(), &(&1.kind != :planetary_authority))
+    refute Enum.any?(Factions.all(), &(&1.id == "sol_merchant_league"))
+  end
+
   test "standing thresholds are explicit, inclusive, and deterministic" do
     for {score, tier} <- [
           {-100, :hostile},
