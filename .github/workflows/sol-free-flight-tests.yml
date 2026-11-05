@@ -1,0 +1,70 @@
+name: Verify SOL free-flight mechanics
+
+on:
+  push:
+    branches: [sbs]
+    paths:
+      - "apps/core/lib/core/universe/navigation.ex"
+      - "apps/core/lib/core/universe/free_flight_region.ex"
+      - "apps/core/lib/core/world.ex"
+      - "apps/core/lib/core/world/supervisor.ex"
+      - "apps/core/lib/core/world/map_server.ex"
+      - "apps/core/test/core/universe/navigation_test.exs"
+      - "apps/core/test/core/universe/free_flight_region_test.exs"
+      - "apps/core/test/core/world/world_test.exs"
+      - "apps/darkorbit/lib/darkorbit/world.ex"
+      - "apps/darkorbit_web/lib/darkorbit_web/channels/world_channel.ex"
+      - "apps/darkorbit_web/test/darkorbit_web/channels/world_channel_test.exs"
+      - "apps/darkorbit_web/assets/js/game/navigation_computer.mjs"
+      - "apps/darkorbit_web/assets/js/game/client.js"
+      - "apps/darkorbit_web/assets/js/game/solar_atlas_view_test.mjs"
+      - "apps/darkorbit_web/assets/js/game/orbital_regions_test.mjs"
+      - ".github/workflows/sol-free-flight-tests.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  free-flight-tests:
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: darkorbit_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      MIX_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: "27.3"
+          elixir-version: "1.18.4"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Fetch dependencies
+        run: mix deps.get
+      - name: Compile Elixir test code
+        run: mix compile
+      - name: Test SOL cruise and headless free-flight
+        run: |
+          mix test apps/core/test/core/universe/navigation_test.exs
+          mix test apps/core/test/core/universe/free_flight_region_test.exs
+          mix test apps/core/test/core/world/world_test.exs
+      - name: Test authenticated Phoenix handoffs
+        run: mix test apps/darkorbit_web/test/darkorbit_web/channels/world_channel_test.exs
+      - name: Test navigation controls and map ID validation
+        run: |
+          node --test apps/darkorbit_web/assets/js/game/solar_atlas_view_test.mjs
+          node --test apps/darkorbit_web/assets/js/game/orbital_regions_test.mjs
