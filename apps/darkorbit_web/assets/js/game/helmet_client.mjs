@@ -243,26 +243,6 @@ export class HelmetClient {
     const hint = this.root.querySelector("#helmet-fullscreen-hint")
     const fullscreen = this.root.querySelector("#helmet-fullscreen")
     const windowed = this.root.querySelector("#helmet-windowed")
-    const gap = this.root.querySelector("#helmet-eye-gap")
-    const sep = this.root.querySelector("#helmet-eye-sep")
-
-    if (gap) gap.value = String(this.eyeGapPx)
-    if (sep) sep.value = String(this.eyeSepMm)
-    this.updateAlignmentLabels()
-
-    gap?.addEventListener("input", () => {
-      this.eyeGapPx = Math.max(HELMET_GAP_MIN, Math.min(HELMET_GAP_MAX, Number(gap.value) || 0))
-      this.rememberCalibration()
-      this.applyAlignment()
-      this.reportAlignment()
-    })
-    sep?.addEventListener("input", () => {
-      this.eyeSepMm = Math.max(40, Math.min(85, Number(sep.value) || 64))
-      this.rememberCalibration()
-      this.applyAlignment()
-      this.reportAlignment()
-    })
-
     fullscreen?.addEventListener("click", async () => {
       if (!this.root.requestFullscreen) {
         if (hint) hint.textContent = "Fullscreen is unavailable in this browser. Try Chrome or Samsung Internet, or continue windowed."
@@ -318,11 +298,6 @@ export class HelmetClient {
     this.eyeSepMm = next.eyeSepMm
     this.rememberCalibration()
 
-    const gap = this.root.querySelector("#helmet-eye-gap")
-    const separation = this.root.querySelector("#helmet-eye-sep")
-    if (gap) gap.value = String(this.eyeGapPx)
-    if (separation) separation.value = String(this.eyeSepMm)
-
     this.applyAlignment()
     this.reportAlignment()
   }
@@ -351,10 +326,6 @@ export class HelmetClient {
       localStorage.removeItem(CALIBRATION_DIRTY_KEY)
     }
 
-    const gap = this.root.querySelector("#helmet-eye-gap")
-    const separation = this.root.querySelector("#helmet-eye-sep")
-    if (gap) gap.value = String(this.eyeGapPx)
-    if (separation) separation.value = String(this.eyeSepMm)
     this.applyAlignment()
     this.reportAlignment()
   }
@@ -418,15 +389,7 @@ export class HelmetClient {
     })
   }
 
-  updateAlignmentLabels() {
-    const gap = this.root.querySelector("#helmet-eye-gap-value")
-    const sep = this.root.querySelector("#helmet-eye-sep-value")
-    if (gap) gap.textContent = this.eyeGapPx + "px"
-    if (sep) sep.textContent = this.eyeSepMm + "mm"
-  }
-
   applyAlignment() {
-    this.updateAlignmentLabels()
     this.view?.setHelmetAlignment({eyeGapPx: this.eyeGapPx, eyeSep: this.eyeSepMm / 1000})
   }
 
