@@ -66,6 +66,7 @@ defmodule Core.Universe.Encounters do
       kind: contact.kind,
       ship_class: Map.get(contact, :ship_class, "dart"),
       faction_id: contact.faction_id,
+      faction_name: contact.faction_name,
       disposition: contact.disposition,
       purpose: contact.purpose,
       origin_id: contact.origin_id,
