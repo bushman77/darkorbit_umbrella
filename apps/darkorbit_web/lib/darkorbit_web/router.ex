@@ -69,6 +69,7 @@ defmodule DarkorbitWeb.Router do
       pipe_through :browser
 
       live_dashboard "/dashboard", metrics: DarkorbitWeb.Telemetry
+      forward "/mailbox", Plug.Swoosh.MailboxPreview
     end
   end
 end
