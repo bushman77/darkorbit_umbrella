@@ -28,6 +28,9 @@ defmodule DarkorbitWeb.HelmetSurrenderTest do
 
     assert HelmetSurrender.from_world(%{entities: [npc]}, 3) ==
              %{surrendered: false}
+    assert HelmetSurrender.from_world(%{entities: [
+             %{npc | state: :surrendered, status: :destroyed}]}, 3) ==
+             %{surrendered: false}
     assert HelmetSurrender.from_world(%{entities: []}, 3) ==
              %{surrendered: false}
     assert HelmetSurrender.from_world(nil, 3) ==
