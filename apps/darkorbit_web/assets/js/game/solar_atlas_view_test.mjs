@@ -176,7 +176,7 @@ test("Sun cannot be a travel destination and missing relay disables SOL commands
 })
 
 
-test("free-flight requires a server approval, while idle Atlas can be closed freely",()=>{
+test("M changes only the display; manual cruise controls require explicit intent",()=>{
   const {nodes,root}=fakeRoot()
   const calls=[]
   nodes.set("#nav-close",{focus(){}})
@@ -185,25 +185,37 @@ test("free-flight requires a server approval, while idle Atlas can be closed fre
     root,getEntities:()=>new Map(),getSelfId:()=>42,
     getBoundaries:()=>({width:20000,height:12000,altitude_min:-3000,altitude_max:3000}),
     isConnected:()=>true,engage:()=>{},halt:()=>{},
-    solarEnterFreeFlight:done=>{calls.push("enter");done(true,{system_id:"sol",status:"traveling",free_flight:true})},
-    solarResumeCruise:done=>{calls.push("resume");done(true,{system_id:"sol",status:"traveling",free_flight:false})},
+    solarEnterFreeFlight:done=>{
+      calls.push("manual")
+      done(true,{system_id:"sol",status:"traveling",free_flight:true})
+    },
+    solarResumeCruise:done=>{
+      calls.push("resume")
+      done(true,{system_id:"sol",status:"traveling",free_flight:false})
+    },
   })
   nav.renderSolarView=()=>{}
+  nav.solarNavigation={system_id:"sol",status:"traveling",free_flight:false}
+  nav.open()
+  nav.close()
+  assert.equal(nav.isOpen,false)
+  assert.equal(nav.solarNavigation.free_flight,false)
+  assert.deepEqual(calls,[])
   nav.open()
   assert.equal(nav.isOpen,true)
   assert.deepEqual(calls,[])
-  nav.solarNavigation={system_id:"sol",status:"traveling",free_flight:false}
-  nav.close()
-  assert.deepEqual(calls,["enter"])
-  assert.equal(nav.isOpen,false)
+  nav.enterSolarManualFlight()
+  assert.deepEqual(calls,["manual"])
   assert.equal(nav.solarNavigation.free_flight,true)
+  nav.close()
   nav.open()
-  assert.deepEqual(calls,["enter","resume"])
-  assert.equal(nav.isOpen,true)
+  assert.deepEqual(calls,["manual"])
+  nav.resumeSolarAutoCruise()
+  assert.deepEqual(calls,["manual","resume"])
   assert.equal(nav.solarNavigation.free_flight,false)
 })
 
-test("failed free-flight authorization keeps the Atlas visible",()=>{
+test("failed manual-flight authorization does not alter cruise or close Atlas",()=>{
   const {root}=fakeRoot()
   const nav=new NavigationComputer({
     root,getEntities:()=>new Map(),getSelfId:()=>42,
@@ -211,10 +223,38 @@ test("failed free-flight authorization keeps the Atlas visible",()=>{
     isConnected:()=>true,engage:()=>{},halt:()=>{},
     solarEnterFreeFlight:done=>done(false,null,"relay offline"),
   })
+  nav.renderSolarView=()=>{}
   nav.isOpen=true
   nav.solarNavigation={system_id:"sol",status:"traveling",free_flight:false}
-  nav.close()
+  nav.enterSolarManualFlight()
   assert.equal(nav.isOpen,true)
   assert.equal(nav.solarNavigation.free_flight,false)
   assert.match(nav.solarStatusMessage,/relay offline/)
+})
+
+test("unmarked Atlas destination is transmitted as an actual SOL waypoint",()=>{
+  const {nodes,root}=fakeRoot()
+  for(const id of ["#nav-solar-state","#nav-solar-location","#nav-solar-route",
+    "#nav-solar-progress","#nav-solar-progress-label","#nav-solar-engage",
+    "#nav-solar-cancel"])nodes.set(id,{textContent:"",disabled:false,value:0})
+  const requests=[]
+  const point={x:12500000,y:14000000,z:0}
+  const nav=new NavigationComputer({
+    root,getEntities:()=>new Map(),getSelfId:()=>42,
+    getBoundaries:()=>({width:20000,height:12000}),
+    isConnected:()=>true,engage:()=>{},halt:()=>{},
+    solarSetCourse:(target,done)=>{
+      requests.push(target)
+      done(true,{system_id:"sol",status:"traveling",origin_id:"earth",
+        destination_id:null,destination_position_km:target,free_flight:false,
+        progress:0,remaining_ms:120000})
+    },
+  })
+  nav.isOpen=true
+  nav.renderSolarView=()=>nav.renderSolarNavigation()
+  nav.setSolarNavigation({system_id:"sol",status:"idle",location_id:"earth"})
+  nav.selectSolarWaypoint(point)
+  nav.engageSolarCourse()
+  assert.deepEqual(requests,[point])
+  assert.equal(nodes.get("#nav-solar-route").textContent,"Earth → Free waypoint")
 })
