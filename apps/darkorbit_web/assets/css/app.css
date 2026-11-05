@@ -1520,3 +1520,315 @@ body:has(#helmet-client) {
     grid-template-columns:minmax(0,1fr);grid-template-areas:"map" "details";
   }
 }
+
+
+/* =======================================================================
+   SPACE NOVA / FULL-SCREEN ATLAS HUD
+   The map is the entire play surface; instrument windows float on top.
+   The same authoritative SVG, server calls, and cockpit transition remain.
+======================================================================= */
+.navigation-computer {
+  position:absolute; inset:0; display:block; padding:0;
+  overflow:hidden; background:#020b18;
+}
+.navigation-computer .atlas-hud-shell {
+  position:relative; inset:0; display:block;
+  width:100%; height:100%; height:100dvh; min-height:0;
+  max-width:none; padding:0; margin:0; overflow:hidden;
+  border:0; border-radius:0; box-shadow:none; background:transparent;
+}
+.navigation-computer .atlas-hud-shell::before {
+  content:""; position:absolute; inset:0; pointer-events:none; z-index:1;
+  background:linear-gradient(180deg,#02081249,transparent 24%,transparent 76%,#030b16ab);
+}
+.navigation-computer #nav-solar-view,
+.navigation-computer #nav-sector-view {
+  position:absolute; inset:0; margin:0;
+  width:100%; height:100%; padding:0; overflow:hidden;
+  min-height:0; z-index:0;
+}
+.navigation-computer #nav-solar-view.solar-atlas-layout {
+  display:block; grid-template-columns:none; grid-template-areas:none;
+}
+.navigation-computer .solar-atlas-frame {
+  position:absolute; inset:0;
+  display:block; width:100%; height:100%;
+  min-width:0; min-height:0; overflow:hidden;
+  border:0; border-radius:0; box-shadow:none;
+  background:radial-gradient(circle at 50% 50%,#0a2943,#020a17 76%);
+}
+.navigation-computer #nav-solar-chart {
+  display:block; position:absolute; inset:0;
+  width:100%; height:100%; min-width:0; min-height:0;
+  aspect-ratio:auto; max-width:none;
+  cursor:crosshair; touch-action:manipulation;
+  background:radial-gradient(circle at 50% 50%,#0a2943,#020a17 76%);
+}
+/* Small unobtrusive chart labels, not a block above the map. */
+.navigation-computer .solar-atlas-frame>.nav-map-caption {
+  position:absolute; left:14px; top:73px; z-index:8;
+  display:inline-flex; gap:1.2rem; padding:.38rem .6rem;
+  width:max-content; max-width:calc(100vw - 330px);
+  border:1px solid #27677a; border-radius:.25rem;
+  background:#041626b8; backdrop-filter:blur(8px);
+  color:#9fd8e8; pointer-events:none;
+  font-size:.57rem; letter-spacing:.12em;
+}
+.navigation-computer .solar-atlas-frame>.solar-chart-controls {
+  position:absolute; bottom:53px; left:12px; z-index:16;
+  display:flex; width:auto; padding:.33rem .42rem; margin:0;
+  border:1px solid #34788d; border-radius:.32rem;
+  background:#051928e8; backdrop-filter:blur(10px);
+  box-shadow:0 8px 20px #0009;
+  pointer-events:auto;
+}
+.navigation-computer .solar-chart-controls p { display:none; }
+.navigation-computer .solar-zoom-button {
+  padding:.4rem .65rem; font-size:.67rem;
+}
+
+/* A single tight control strip floats above the world. */
+.navigation-computer .atlas-hud-top {
+  position:absolute; z-index:50; top:8px; left:8px; right:8px;
+  display:flex; flex-wrap:nowrap; align-items:center; gap:clamp(.4rem,.9vw,1rem);
+  min-height:49px; max-height:56px; padding:.35rem .8rem;
+  border:1px solid #40879c; border-radius:.4rem;
+  background:linear-gradient(180deg,#082738f0,#03131fea);
+  box-shadow:0 12px 40px #000b,inset 0 1px 0 #b1f9ff25;
+  backdrop-filter:blur(14px);
+}
+.navigation-computer .atlas-hud-top .hud-brand {
+  flex:0 0 auto; gap:.45rem; letter-spacing:.16em;
+  font-size:clamp(.66rem,1vw,.84rem);
+}
+.navigation-computer .atlas-hud-top #nav-title {
+  flex:0 0 auto; margin:0;
+  font:800 clamp(.85rem,1.2vw,1rem)/1.15 ui-sans-serif,system-ui,sans-serif;
+  letter-spacing:.015em; color:#e5faff; white-space:nowrap;
+}
+.navigation-computer .atlas-hud-top .atlas-view-tabs {
+  display:flex; flex:0 0 auto; align-items:center; flex-wrap:nowrap;
+  gap:.25rem; margin:0 auto 0 0; padding:0; border:0;
+}
+.navigation-computer .atlas-hud-top .atlas-view-tab {
+  display:inline-flex; align-items:center; gap:.3rem;
+  padding:.41rem .55rem; border-radius:.24rem;
+  font-size:.63rem; font-weight:800; white-space:nowrap;
+}
+.navigation-computer .atlas-loadout-link {
+  flex:0 0 auto; padding:.44rem .4rem; font-size:.62rem;
+}
+.navigation-computer .atlas-hud-top .hud-mini-button {
+  flex:0 0 auto; padding:.48rem .65rem; font-size:.65rem;
+  white-space:nowrap; line-height:1.3;
+}
+.navigation-computer .atlas-hud-top #nav-close {
+  background:linear-gradient(105deg,#17617b,#11405a);
+  border-color:#69ddec; color:#d9fcff;
+}
+.navigation-computer #helmet-panel {
+  position:absolute; z-index:90; top:65px; right:14px;
+  width:min(540px,calc(100vw - 28px));
+  max-height:calc(100dvh - 127px); overflow:auto;
+  margin:0; padding:1rem; border-color:#3a9eb1;
+  box-shadow:0 20px 60px #000b; background:#041523f5;
+  backdrop-filter:blur(12px);
+}
+.navigation-computer #helmet-panel[hidden] {display:none!important;}
+
+/* Compact floating HUD windows; the map continues under and around them. */
+.navigation-computer .atlas-hud-right {
+  position:absolute; z-index:24; top:68px; right:12px; bottom:52px;
+  display:flex; flex-direction:column; align-items:stretch; gap:.55rem;
+  width:clamp(235px,21vw,290px);
+  max-height:calc(100dvh - 120px);
+  overflow-y:auto; overflow-x:hidden;
+  padding:.15rem .2rem .3rem .15rem;
+  pointer-events:auto;
+  scrollbar-width:thin; scrollbar-color:#408a9d transparent;
+}
+.navigation-computer .hud-flight-widget,
+.navigation-computer .hud-target-widget,
+.navigation-computer .atlas-hud-right>.solar-contacts-drawer {
+  position:relative; flex:0 0 auto; width:100%; min-width:0;
+  border:1px solid #337e95; border-radius:.35rem;
+  padding:.55rem; color:#d9f6ff;
+  background:linear-gradient(155deg,#08283bdc,#031423e7);
+  box-shadow:0 12px 36px #000a,inset 0 1px 0 #8defff24;
+  backdrop-filter:blur(13px);
+}
+.navigation-computer .hud-widget-heading {
+  display:flex; align-items:center; justify-content:space-between;
+  min-height:1.45rem; gap:.4rem; margin-bottom:.42rem;
+  border-bottom:1px solid #31758b; padding:0 0 .4rem;
+  color:#92eaf7;
+  font:800 .61rem/1.2 ui-monospace,monospace; letter-spacing:.12em;
+}
+.navigation-computer .hud-widget-dismiss {
+  display:grid; place-items:center; width:1.4rem; height:1.4rem;
+  border:1px solid #327b93; border-radius:.2rem;
+  background:#09283a; color:#a7eff8; font:700 1rem/1 ui-sans-serif,sans-serif;
+  cursor:pointer;
+}
+.navigation-computer .hud-widget-dismiss:hover,
+.navigation-computer .hud-widget-dismiss:focus-visible {
+  border-color:#7bf0ff; color:white;
+}
+.navigation-computer .hud-target-widget[hidden] {display:none!important;}
+.navigation-computer .hud-flight-widget .solar-navigation-console {
+  display:grid; gap:.42rem; padding:0; border:0; margin:0;
+}
+.navigation-computer .hud-flight-widget .solar-navigation-console>.nav-eyebrow {
+  display:none; /* duplicated by the floating widget title */
+}
+.navigation-computer .hud-flight-widget .nav-state {
+  margin:0; padding:.42rem .5rem; font-size:.64rem; line-height:1.35;
+}
+.navigation-computer .hud-flight-widget .solar-body-metrics {
+  display:grid; gap:.27rem;
+}
+.navigation-computer .hud-flight-widget .solar-body-metrics>div {
+  padding:.3rem .45rem; background:#041a29b0;
+}
+.navigation-computer .hud-flight-widget .solar-body-metrics dt {font-size:.53rem;}
+.navigation-computer .hud-flight-widget .solar-body-metrics dd {
+  font-size:.7rem; margin-top:.12rem; overflow-wrap:anywhere;
+}
+.navigation-computer .hud-flight-widget .solar-progress-label {
+  font-size:.61rem; line-height:1.35;
+}
+.navigation-computer .hud-flight-widget progress {height:.4rem; border-radius:.2rem;}
+.navigation-computer .hud-flight-widget .nav-button {
+  padding:.42rem .52rem; font-size:.67rem;
+}
+.navigation-computer .hud-target-widget {
+  display:flex; gap:.38rem; padding:.55rem;
+  flex-direction:column; height:auto; overflow:visible;
+}
+.navigation-computer .hud-target-widget .solar-selected-body {
+  border:0; padding:0;
+}
+.navigation-computer .hud-target-widget .solar-selected-inline {
+  display:flex; align-items:baseline; gap:.5rem;
+}
+.navigation-computer .hud-target-widget .solar-selected-body h3 {
+  font-size:1.15rem; margin:.15rem 0;
+}
+.navigation-computer .hud-target-widget #nav-solar-type {
+  font-size:.68rem; margin:0;
+}
+.navigation-computer .hud-target-widget .nav-eyebrow {
+  font-size:.57rem;
+}
+.navigation-computer .hud-target-widget .solar-body-metrics>div {
+  padding:.36rem .42rem; background:#041c2cc5;
+}
+.navigation-computer .hud-target-widget .solar-body-metrics dt {font-size:.53rem;}
+.navigation-computer .hud-target-widget .solar-body-metrics dd {font-size:.75rem;}
+.navigation-computer .hud-catalog-drawer .solar-body-list {
+  padding:.3rem; gap:.22rem;
+}
+.navigation-computer .hud-catalog-drawer .solar-body-button {
+  min-height:1.8rem; padding:.35rem .4rem;
+}
+.navigation-computer .atlas-hud-right>.solar-contacts-drawer {
+  padding:.15rem .3rem;
+}
+.navigation-computer .solar-contacts-drawer summary {
+  padding:.32rem; font-size:.64rem;
+}
+.navigation-computer .solar-contacts-drawer .hud-traffic-panel {
+  padding:.45rem; border:0; background:transparent;
+}
+.navigation-computer .solar-context-menu {
+  z-index:65; background:linear-gradient(130deg,#0d364b,#041421);
+  backdrop-filter:blur(12px);
+}
+
+/* Pilot preferences expand upward, away from the map controls. */
+.navigation-computer .hud-control-drawer {
+  position:absolute; bottom:105px; left:12px; z-index:28;
+  width:min(285px,calc(100vw - 24px));
+  border:1px solid #34788d; border-radius:.3rem;
+  background:#051b2ade; color:#a7e9f5;
+  box-shadow:0 10px 30px #000a; backdrop-filter:blur(10px);
+}
+.navigation-computer .hud-control-drawer>summary {
+  cursor:pointer; padding:.45rem .65rem;
+  font:800 .65rem ui-monospace,monospace; letter-spacing:.07em;
+}
+.navigation-computer .hud-control-drawer>summary:focus-visible {
+  outline:2px solid #88f9ff; outline-offset:2px;
+}
+.navigation-computer .hud-control-drawer .hud-preferences {
+  display:block; margin:0; padding:.65rem;
+  border:0; border-top:1px solid #32758a; background:#051a2bed;
+}
+.navigation-computer .hud-control-drawer .hud-preferences>p {display:block;}
+.navigation-computer .hud-control-drawer .hud-preferences input {accent-color:#6ce9f9;}
+
+/* Bottom hotkeys remain a HUD strip, not page furniture. */
+.navigation-computer .hud-keybar {
+  position:absolute; z-index:40; bottom:8px; left:8px; right:8px;
+  min-height:34px; margin:0; padding:.32rem .7rem;
+  border:1px solid #397f96; border-radius:.25rem;
+  background:#041725e5; backdrop-filter:blur(12px);
+  font-size:.6rem; pointer-events:none; gap:clamp(.5rem,1.3vw,1.2rem);
+}
+.navigation-computer .hud-keybar-title {font-size:.6rem;}
+
+/* Local sector navigation also fills the map surface while the existing
+   waypoint form becomes a floating instrument. */
+.navigation-computer #nav-sector-view .nav-layout {
+  position:absolute; inset:0; display:block; margin:0; padding:0;
+}
+.navigation-computer #nav-sector-view .nav-map-frame {
+  position:absolute; inset:0; display:block; margin:0;
+  border:0; border-radius:0; background:#020c1b;
+}
+.navigation-computer #nav-chart {
+  position:absolute; inset:0; width:100%; height:100%;
+  aspect-ratio:auto; cursor:crosshair;
+}
+.navigation-computer #nav-sector-view .nav-map-caption {
+  position:absolute; z-index:15; top:73px; left:12px;
+  width:max-content; max-width:calc(100vw - 345px);
+  border:1px solid #295d70; background:#051829db;
+}
+.navigation-computer #nav-sector-view .nav-legend {
+  position:absolute; z-index:15; bottom:55px; left:12px;
+  padding:.5rem .7rem; border:1px solid #295d70;
+  background:#041829db;
+}
+.navigation-computer #nav-sector-view .nav-console {
+  position:absolute; top:68px; right:12px; z-index:24;
+  width:min(300px,33vw); max-height:calc(100dvh - 125px);
+  overflow-y:auto; scrollbar-width:thin;
+  border-color:#337e95; border-radius:.35rem;
+  background:linear-gradient(155deg,#08283bdf,#031423ef);
+  box-shadow:0 12px 36px #000a;
+}
+@media (max-width:1120px) {
+  .navigation-computer .atlas-hud-top { gap:.35rem; padding:.3rem .55rem; }
+  .navigation-computer .atlas-hud-top .hud-brand {font-size:.7rem;letter-spacing:.06em;}
+  .navigation-computer .atlas-hud-top #nav-title {font-size:.8rem;}
+  .navigation-computer .atlas-hud-top .atlas-view-tab {padding:.35rem .42rem;}
+  .navigation-computer .atlas-loadout-link {display:none;}
+}
+@media (max-width:790px) {
+  .navigation-computer .atlas-hud-top .hud-brand {display:none;}
+  .navigation-computer .atlas-hud-top #nav-title {font-size:.75rem;}
+  .navigation-computer .atlas-hud-top #nav-helmet-open {display:none;}
+  .navigation-computer .atlas-hud-right {width:min(250px,40vw);}
+  .navigation-computer .solar-atlas-frame>.nav-map-caption span:last-child {display:none;}
+}
+@media (max-width:570px) {
+  .navigation-computer .atlas-hud-top #nav-title {display:none;}
+  .navigation-computer .atlas-hud-top .atlas-view-tabs {margin-right:auto;}
+  .navigation-computer .atlas-hud-right {
+    top:67px; right:8px; bottom:50px; width:min(225px,51vw);
+  }
+  .navigation-computer .hud-keybar-end {display:none;}
+  .navigation-computer .hud-keybar {gap:.35rem;font-size:.52rem;}
+  .navigation-computer .hud-keybar kbd {font-size:.52rem;}
+}
