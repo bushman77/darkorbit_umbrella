@@ -182,7 +182,7 @@ defmodule DarkorbitWeb.HelmetChannel do
       when player_id == helmet_player_id do
     push(socket, "helmet_encounter", helmet_encounter(navigation))
     push(socket, "helmet_navigation", visual_navigation(navigation))
-    {:noreply, socket}
+    {:noreply, follow_pilot_region(socket)}
   end
 
   def handle_info({:solar_encounter_started,
@@ -225,6 +225,38 @@ defmodule DarkorbitWeb.HelmetChannel do
 
   # Unrelated process messages must never tear down a registered HMD.
   def handle_info(_message, socket), do: {:noreply, socket}
+
+  # The laptop can switch from SOL deep space into a planet map without
+  # changing the headset operating mode. Follow its authoritative map ID,
+  # subscribe before dropping the previous map, and do not accept a map ID
+  # from the phone. When a map is still starting, its later world_state event
+  # is delivered through the already-subscribed topic.
+  defp follow_pilot_region(socket) do
+    player_id = socket.assigns.helmet_player_id
+    previous = socket.assigns[:helmet_map_id]
+
+    case World.region_for_player(player_id) do
+      {:ok, %{map_id: map_id}} when is_binary(map_id) and map_id != previous ->
+        :ok = World.subscribe(map_id)
+
+        if previous do
+          Phoenix.PubSub.unsubscribe(Darkorbit.PubSub,
+            Darkorbit.World.PubSub.topic(previous))
+        end
+
+        case World.snapshot(map_id) do
+          {:ok, map} ->
+            push(socket, "helmet_snapshot", %{map: map, player_id: player_id})
+          {:error, _} ->
+            :ok
+        end
+
+        assign(socket, :helmet_map_id, map_id)
+
+      _ ->
+        socket
+    end
+  end
 
   # Only the pilot's own authenticated viewer can receive this snapshot.
   # Rendering details are untrusted presentation hints, not physical state.
