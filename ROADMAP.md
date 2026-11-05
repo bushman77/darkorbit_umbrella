@@ -734,4 +734,5 @@ Source: [Symbrella `symbolic_generation`](https://github.com/bushman77/Symbrella
 - [ ] Implement debris entities, swept collisions, physical hull damage and cockpit-only hazards; no random Atlas damage.
 - [ ] Upgrade private local maps to shared, location-grounded tactical instances when co-located pilots interact.
 - [x] Add channel and headless tests for authenticated entry/exit, remote map authorization, flight controls and ship condition gating.
-- [ ] Verify Mix/JavaScript suites, browser transition, reconnect, server restart and SBS headset.
+- [x] Targeted Core, Phoenix Channel, and JavaScript tests passed in [SOL free-flight CI](https://github.com/bushman77/darkorbit_umbrella/actions/runs/42067967403) on 2026-11-05.
+- [ ] Manually verify browser transition, reconnect, server restart, and SBS headset; full repository suites remain a separate verification.
