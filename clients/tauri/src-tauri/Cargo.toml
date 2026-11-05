@@ -1,6 +1,6 @@
 [package]
 name = "space-nova-client"
-version = "0.2.0"
+version = "0.3.0"
 description = "Space Nova desktop client for the authoritative Elixir space MMO"
 authors = ["Space Nova contributors"]
 edition = "2021"
@@ -10,3 +10,5 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = [] }
+tauri-plugin-updater = "2"
+tauri-plugin-dialog = "2"
