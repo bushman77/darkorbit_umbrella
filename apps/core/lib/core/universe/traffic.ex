@@ -15,6 +15,7 @@ defmodule Core.Universe.Traffic do
   """
 
   alias Core.Universe.Sol
+  alias Core.Factions
   alias Core.NPC.Catalog, as: NPCCatalog
 
   @sensor_radius_km 2_000_000.0
@@ -32,23 +33,23 @@ defmodule Core.Universe.Traffic do
   def seed do
     routes = [
       # Preserve the original freighter and its published cargo/route.
-      {"meridian-01", "Meridian-01", :commercial_freighter, :neutral, "independent",
+      {"meridian-01", "Meridian-01", :commercial_freighter, :neutral, "sol_merchant_league",
        "earth", "mars", 0.0, :scheduled_delivery,
        %{"industrial_machinery" => 120}, %{"refined_minerals" => 85}},
       # Begins > 2M game-km from Earth, but is catchable mid Earth→Venus.
-      {"vesper-02", "Vesper-02", :courier, :neutral, "independent",
+      {"vesper-02", "Vesper-02", :courier, :neutral, "helios_couriers",
        "earth", "venus", 0.22, :express_delivery,
        %{"medical_supplies" => 48}, %{"civilian_mail" => 120}},
-      {"wayfinder-04", "Wayfinder-04", :survey_vessel, :neutral, "independent",
+      {"wayfinder-04", "Wayfinder-04", :survey_vessel, :neutral, "sol_surveyors",
        "earth", "mars", 0.22, :scientific_survey,
        %{"survey_equipment" => 25}, %{"rock_samples" => 18}},
       {"sentinel-07", "Sentinel-07", :patrol, :neutral, "venus",
        "venus", "mercury", 0.40, :sector_patrol,
        %{"patrol_supplies" => 40}, %{"patrol_supplies" => 40}},
-      {"aurora-12", "Aurora-12", :commercial_freighter, :neutral, "independent",
+      {"aurora-12", "Aurora-12", :commercial_freighter, :neutral, "outer_rim_traders",
        "mars", "jupiter", 0.43, :scheduled_delivery,
        %{"spare_parts" => 72}, %{"rare_ores" => 26}},
-      {"sable-18", "Sable-18", :independent_trader, :neutral, "independent",
+      {"sable-18", "Sable-18", :independent_trader, :neutral, "outer_rim_traders",
        "jupiter", "saturn", 0.37, :trade_route,
        %{"hydrogen_cells" => 65}, %{"research_data" => 21}}
     ]
@@ -128,7 +129,7 @@ defmodule Core.Universe.Traffic do
                :sector_patrol, %{"patrol_supplies" => 20}}
 
             :raider ->
-              {"Corsair", :raider, :hostile, "independent",
+              {"Corsair", :raider, :hostile, "independent_raiders",
                :intercept_traffic, %{"salvage" => 18}}
           end
 
@@ -208,7 +209,7 @@ defmodule Core.Universe.Traffic do
           call_sign: "Hauler-" <> Integer.to_string(serial),
           kind: :independent_trader,
           ship_class: "scow",
-          faction_id: "independent",
+          faction_id: scheduled_trader_faction(from_id, to_id),
           disposition: :neutral,
           purpose: :trade_route,
           state: :in_transit,
@@ -234,6 +235,14 @@ defmodule Core.Universe.Traffic do
 
         {:ok, Map.put(ships, id, Map.put(vessel, :duration_ms, duration(vessel)))}
     end
+  end
+
+  # A regular shipping line keeps its allegiance for every leg of the
+  # route. Selection is world-defined, not derived from the player's course.
+  defp scheduled_trader_faction(from, to) do
+    outer = ~w(jupiter saturn uranus neptune pluto)
+    if from in outer or to in outer,
+      do: "outer_rim_traders", else: "sol_merchant_league"
   end
 
   def launch_scheduled_trader(_ships, _from, _to, _serial),
@@ -386,6 +395,7 @@ defmodule Core.Universe.Traffic do
           kind: vessel.kind,
           ship_class: Map.get(vessel, :ship_class, ship_class(vessel.kind)),
           faction_id: vessel.faction_id,
+          faction_name: Factions.name(vessel.faction_id) || "Unregistered Organization",
           disposition: vessel.disposition,
           origin_id: vessel.origin_id,
           destination_id: vessel.destination_id,
@@ -445,13 +455,15 @@ defmodule Core.Universe.Traffic do
       call_sign: vessel.call_sign,
       ship_class: Map.get(vessel, :ship_class, ship_class(vessel.kind)),
       faction_id: vessel.faction_id,
+      faction_name: Factions.name(vessel.faction_id) || "Unregistered Organization",
       disposition: vessel.disposition,
       origin_id: vessel.origin_id,
       destination_id: vessel.destination_id,
       purpose: vessel.purpose,
       state: vessel.state,
       cargo: vessel.cargo,
-      message: vessel.call_sign <> ", " <> vessel.faction_id <> " service. " <>
+      message: vessel.call_sign <> ", " <>
+          (Factions.name(vessel.faction_id) || "unregistered organization") <> " service. " <>
         "Operating " <> Atom.to_string(vessel.purpose) <>
         " between " <> vessel.origin_id <> " and " <> vessel.destination_id <>
         ". Communications established."
