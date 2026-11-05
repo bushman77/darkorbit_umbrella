@@ -46,14 +46,15 @@ defmodule DarkorbitWeb.RegistrationController do
         {:error, %Ecto.Changeset{} = changeset} ->
           # Phoenix form fields may read values from changeset.params as well as
           # changeset.changes. Remove both copies before rendering an error.
+          safe_params =
+            (changeset.params || %{})
+            |> Map.delete("password")
+            |> Map.delete(:password)
+
           safe_changeset = %{
             changeset
             | changes: Map.delete(changeset.changes, :password),
-              params:
-                changeset.params
-                |> then(&(&1 || %{}))
-                |> Map.delete("password")
-                |> Map.delete(:password)
+              params: safe_params
           }
 
           conn
