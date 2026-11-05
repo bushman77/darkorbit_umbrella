@@ -240,7 +240,7 @@ export class NavigationComputer {
     this.root.querySelector("#nav-title").textContent=system?
       "Solar System Atlas":(this.regionName || "Sector 1-1") + " Navigation"
     this.root.querySelector("#nav-subtitle").textContent=system?
-      "One star system · Sun, eight planets and Pluto · select a world to inspect" :
+      "Select planets or a free SOL waypoint; cockpit view does not change propulsion" :
       "Local XY tactical chart · plot waypoints with independent Z altitude"
     if(this.isOpen)this.draw(0,true)
   }
@@ -358,7 +358,7 @@ export class NavigationComputer {
     this.solarCancelCourse((ok,updated,reason)=>{
       this.solarPending=false
       this.solarStatusMessage=ok?
-        "Transit aborted. Remaining at departure region." :
+        "Transit aborted at current SOL position." :
         `Abort rejected: ${reason || "unavailable"}`
       if(ok&&updated)this.solarNavigation=updated
       if(this.isOpen&&this.view==="system")this.renderSolarView()
@@ -466,10 +466,12 @@ export class NavigationComputer {
       `${percent}% · ${duration(nav.remaining_ms)} remaining`:
       "Conventional flight · select a planet or free coordinate"
     const drive=this.root.querySelector("#nav-solar-drive")
-    if(drive)drive.textContent=nav?.cruise_paused ? "ENCOUNTER HOLD · CRUISE PAUSED" :
+    if(drive)drive.textContent=nav?.free_flight ? "MANUAL FLIGHT · CRUISE PAUSED" :
+      nav?.pending_encounter ? "ENCOUNTER HOLD · CRUISE PAUSED" :
       traveling ? "SUBLIGHT INTERPLANETARY CRUISE" : "CONVENTIONAL"
     const speed=this.root.querySelector("#nav-solar-speed")
-    if(speed)speed.textContent=nav?.cruise_paused ? "0 game km/s · held at encounter" :
+    if(speed)speed.textContent=nav?.free_flight ? "0 game km/s · manual flight" :
+      nav?.pending_encounter ? "0 game km/s · held at encounter" :
       traveling ? `${Math.round(nav.cruise_speed_km_s || 0).toLocaleString("en-US")} game km/s` :
       "Conventional thrusters"
     const distance=this.root.querySelector("#nav-solar-distance-travelled")
