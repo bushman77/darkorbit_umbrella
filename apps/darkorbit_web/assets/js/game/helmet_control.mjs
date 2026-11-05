@@ -20,10 +20,6 @@ export class HelmetControl {
     this.root.querySelector("#nav-helmet-open")?.addEventListener("click", () => this.openPanel())
     this.root.querySelector("#nav-helmet-close")?.addEventListener("click", () => this.closePanel())
     this.root.querySelector("#helmet-forget")?.addEventListener("click", () => this.forget())
-    for (const button of this.root.querySelectorAll("[data-helmet-axis][data-helmet-direction]")) {
-      button.addEventListener("click", () =>
-        this.adjustAlignment(button.dataset.helmetAxis, Number(button.dataset.helmetDirection)))
-    }
     const host = this.root.querySelector("#helmet-host")
     host?.addEventListener("input", () => { this.hostEdited = true })
     host?.addEventListener("change", () => this.drawQR())
@@ -82,13 +78,14 @@ export class HelmetControl {
   }
 
   alignmentFeedback(value) {
-    const hint = this.root.querySelector("#cockpit-helmet-feedback")
-    if (hint) hint.textContent = value
+    // No floating calibration HUD: use the existing headset status label
+    // only when a keyboard adjustment fails.
+    const status = this.root.querySelector("#cockpit-helmet-status")
+    if (status && value) status.textContent = value
   }
 
   setCombat(active) {
     this.combatActive = Boolean(active)
-    this.updateCalibrationUi(this.status)
     if (this.channel?.state === "joined") {
       this.channel.push("set_mode", {mode: active ? "combat" : "standby"})
     }
@@ -153,7 +150,6 @@ export class HelmetControl {
 
   updateStatus(status = {}) {
     this.status = status
-    this.updateCalibrationUi(status)
     const label = status.rendering ? "SBS ACTIVE" :
       status.connected && status.mode === "combat" ? "CONNECTED / STARTING SBS" :
       status.connected ? "CONNECTED / STANDBY" :
@@ -173,20 +169,6 @@ export class HelmetControl {
     if (status.paired) {
       this.code = null
       this.clearQR()
-    }
-  }
-
-  updateCalibrationUi(status = {}) {
-    const calibrator = this.root.querySelector("#cockpit-helmet-calibration")
-    if (calibrator) calibrator.hidden = !this.canAdjustAlignment()
-    const label = this.root.querySelector("#cockpit-helmet-alignment")
-    if (label && status.alignment) {
-      label.textContent =
-        "CENTER " + status.alignment.eye_gap_px + "px · IPD " +
-        status.alignment.eye_sep_mm + "mm"
-      this.alignmentFeedback("")
-    } else if (label) {
-      label.textContent = "HMD CALIBRATION"
     }
   }
 
