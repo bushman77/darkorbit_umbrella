@@ -19,10 +19,18 @@ defmodule Core.Universe.Encounters do
   @spec encounter_radius_km() :: float()
   def encounter_radius_km, do: @encounter_radius_km
 
-  @doc "Interception range grows smoothly near shipping lanes and planets."
+  @doc "Inbound approaches gain range gradually; departures retain baseline range."
   @spec encounter_radius_km(map()) :: float()
+  def encounter_radius_km(%{position_km: position,
+                             origin_position_km: _from,
+                             destination_position_km: _to} = voyage)
+      when is_map(position),
+    do: @encounter_radius_km + @approach_radius_bonus_km *
+      TradeLanes.inbound_pressure(voyage)
+
   def encounter_radius_km(position) when is_map(position),
-    do: @encounter_radius_km + @approach_radius_bonus_km * TradeLanes.pressure(position)
+    do: @encounter_radius_km + @approach_radius_bonus_km *
+      TradeLanes.pressure(position)
 
   @spec nearest(map(), map()) :: map() | nil
   def nearest(ships, %{status: :traveling} = voyage) do
@@ -38,7 +46,7 @@ defmodule Core.Universe.Encounters do
       |> Traffic.contacts(voyage.position_km)
       |> Enum.filter(fn contact ->
         contact.state == :in_transit and
-          contact.distance_km <= encounter_radius_km(voyage.position_km)
+          contact.distance_km <= encounter_radius_km(voyage)
       end)
       |> Enum.sort_by(&{&1.distance_km, &1.id})
       |> List.first()
