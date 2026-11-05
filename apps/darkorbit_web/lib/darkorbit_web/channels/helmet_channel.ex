@@ -269,10 +269,15 @@ defmodule DarkorbitWeb.HelmetChannel do
     end
   end
 
+  # Tactical presence is a single display hint, not an encounter payload.
+  # The phone still receives no commands, cargo or reputation metadata.
   defp visual_navigation(navigation) when is_map(navigation),
-    do: %{planetary_view: Map.get(navigation, :planetary_view)}
+    do: %{
+      planetary_view: Map.get(navigation, :planetary_view),
+      tactical_active: is_map(Map.get(navigation, :tactical_encounter))
+    }
 
-  defp visual_navigation(_), do: %{planetary_view: nil}
+  defp visual_navigation(_), do: %{planetary_view: nil, tactical_active: false}
 
   defp helmet_encounter(%{tactical_encounter: tactical}) when is_map(tactical),
     do: %{paused: false, encounter: nil}
