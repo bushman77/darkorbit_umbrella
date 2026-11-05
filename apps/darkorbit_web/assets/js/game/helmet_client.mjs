@@ -6,6 +6,7 @@ import {helmetSocketParams} from "./helmet_auth.mjs"
 import {adjustedHelmetAlignment, HELMET_GAP_MIN, HELMET_GAP_MAX} from "./helmet_alignment.mjs"
 import {restoredHelmetCalibration} from "./helmet_calibration_restore.mjs"
 import {renderHelmetEncounter} from "./helmet_encounter_view.mjs"
+import {renderHelmetSurrender, helmetSurrenderFromEntities} from "./helmet_surrender_view.mjs"
 import {helmetPlanetaryNavigation} from "./helmet_planetary_navigation.mjs"
 import {HelmetScreenWake} from "./helmet_screen_wake.mjs"
 
@@ -23,6 +24,7 @@ export class HelmetClient {
     this.canvas = root.querySelector("#helmet-viewport")
     this.messageNode = root.querySelector("#helmet-message")
     this.encounterNode = root.querySelector("#helmet-encounter")
+    this.surrenderNode = root.querySelector("#helmet-surrender")
     this.pairCode = root.dataset.pairCode || null
     this.credential = localStorage.getItem(STORAGE_KEY)
     // Keep the QR invitation until the saved token has been verified.
@@ -86,6 +88,11 @@ export class HelmetClient {
     })
     this.channel.on("world_state", map => {
       if (this.mode === "combat") this.applyWorld(map)
+    })
+    // Explicit status is pushed on changes and reconnect; the world snapshot
+    // remains a second path so the paired phone never depends on target lock.
+    this.channel.on("helmet_surrender", payload => {
+      if (this.mode === "combat") renderHelmetSurrender(this.surrenderNode, payload)
     })
     this.channel.on("laser_fired", shot => this.laserFired(shot))
     this.channel.on("helmet_encounter", payload => {
@@ -434,6 +441,7 @@ export class HelmetClient {
     this.running = false
     this.frameCount = 0
     renderHelmetEncounter(this.encounterNode, null)
+    renderHelmetSurrender(this.surrenderNode, null)
     this.canvas.hidden = true
     this.entities.clear()
     this.navComputer.solarNavigation = {planetary_view: null}
@@ -484,6 +492,8 @@ export class HelmetClient {
       if (!active.has(id)) this.entities.delete(id)
     }
     this.selectedTargetId = this.entities.get(this.selfId)?.targetId || null
+    renderHelmetSurrender(this.surrenderNode,
+      helmetSurrenderFromEntities(this.entities, this.selfId))
   }
 
   laserFired(shot) {
