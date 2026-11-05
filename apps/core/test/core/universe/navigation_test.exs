@@ -24,6 +24,34 @@ defmodule Core.Universe.NavigationTest do
     end
   end
 
+  test "scheduled merchant traffic exists without players and waypoint clicks do not spawn ships" do
+    name = :"#{__MODULE__}.Shipping#{System.unique_integer([:positive])}"
+    start_supervised!({Navigation, name: name, auto_tick: false,
+      tick_ms: 1_000, scheduled_trader_interval_ms: 2_000,
+      procedural_contact_chance: 0.0,
+      event_sink: fn _map, _event, _payload -> :ok end})
+
+    assert map_size(:sys.get_state(name).traffic) == 6
+    assert :ok = Navigation.tick(name)
+    assert :ok = Navigation.tick(name)
+    assert map_size(:sys.get_state(name).traffic) == 7
+    trader = :sys.get_state(name).traffic["traffic:sol:cruise-1"]
+    assert trader.origin_id == "earth"
+    assert trader.destination_id == "mars"
+
+    {:ok, earth} = Core.Universe.Sol.game_position_km("earth")
+    empty_space = %{earth | z: 2_000_000.0}
+    assert {:ok, %{destination_id: nil, destination_position_km: ^empty_space}} =
+      Navigation.set_course(name, 1_901, empty_space)
+    assert {:ok, %{destination_id: "mars"}} = Navigation.set_course(name, 1_902, "mars")
+    # No player-triggered trader creation, even for different destination types.
+    assert map_size(:sys.get_state(name).traffic) == 7
+    assert :ok = Navigation.tick(name)
+    assert map_size(:sys.get_state(name).traffic) == 7
+    assert :ok = Navigation.tick(name)
+    assert map_size(:sys.get_state(name).traffic) == 8
+  end
+
   test "free flight pauses SOL progress and the same AI voyage resumes", %{server: server} do
     assert {:error, :no_active_course} = Navigation.enter_free_flight(server, 11)
     assert {:error, :not_in_free_flight} = Navigation.resume_cruise(server, 11)
