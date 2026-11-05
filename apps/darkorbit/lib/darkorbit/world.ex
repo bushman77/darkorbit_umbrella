@@ -32,7 +32,7 @@ defmodule Darkorbit.World do
       # Only the test environment runs the isolated legacy Sector 1-1
       # channel fixtures. In production EVERY planet (including Earth)
       # receives the same physical orbital region and collision mechanics.
-      if navigation.status == :traveling and navigation.free_flight do
+      if navigation.status == :traveling or is_nil(navigation.location_id) do
         with :ok <- FreeFlightRegion.ensure_started(user_id) do
           FreeFlightRegion.entry(user_id, navigation)
         end
