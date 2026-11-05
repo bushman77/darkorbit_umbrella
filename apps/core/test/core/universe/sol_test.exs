@@ -47,6 +47,17 @@ defmodule Core.Universe.SolTest do
     assert rem(mars, 1_000) == 0
   end
 
+  test "free waypoints validate game-km geometry and planetary clearance" do
+    {:ok, earth} = Sol.game_position_km("earth")
+    assert {:ok, %{z: 0.0}} =
+      Sol.waypoint(%{"x" => earth.x + 1_000_000.0, "y" => earth.y, "z" => 0})
+    assert {:error, :invalid_solar_waypoint} =
+      Sol.waypoint(%{x: earth.x, y: earth.y, z: 0})
+    assert {:error, :invalid_solar_waypoint} = Sol.waypoint(%{x: 0, y: 0, z: 0})
+    assert {:error, :invalid_solar_waypoint} =
+      Sol.waypoint(%{x: 100.0, y: 0.0, z: 1.0e200})
+  end
+
   test "gameplay SOL positions are finite and distinct from physical AU" do
     assert {:ok, earth} = Sol.game_position_km("earth")
     assert {:ok, mars} = Sol.game_position_km("mars")
