@@ -771,6 +771,10 @@ class SpaceClient {
       title.textContent = String(encounter.call_sign || "Unidentified vessel") +
         " · " + String(encounter.kind || "vessel").replaceAll("_", " ")
     }
+    for (const faction of panel.querySelectorAll("[data-encounter-faction]")) {
+      faction.textContent = "FACTION / " +
+        String(encounter.faction_name || "Unregistered Organization")
+    }
     for (const distance of panel.querySelectorAll("[data-encounter-distance]")) {
       distance.textContent = Math.round(encounter.distance_km || 0).toLocaleString("en-US") +
         " game km at detection · " + status + " · " +
