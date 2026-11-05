@@ -56,9 +56,12 @@ defmodule Core.World.Supervisor do
         {SessionManager, name: sessions},
         {SolarNavigation, name: solar_navigation_server, event_sink: event_sink,
          auto_tick: auto_tick?, tick_ms: 1_000,
-         # Playtest default: one shared converging contact per departure.
-         # Tune below 1.0 when testing encounter frequency after the modal.
-                   procedural_contact_chance: Keyword.get(opts, :procedural_contact_chance, 1.0)},
+         # Shared traffic departs on the SOL clock even without connected pilots.
+         # Course clicks (including named planets) never mint special ships.
+         scheduled_trader_interval_ms: Keyword.get(opts,
+           :scheduled_trader_interval_ms, 45_000),
+         # Older converging contacts remain opt-in for isolated regression tests.
+         procedural_contact_chance: Keyword.get(opts, :procedural_contact_chance, 0.0)},
         {DynamicSupervisor, strategy: :one_for_one, name: free_flight_maps}
       ] ++ map_children
 
