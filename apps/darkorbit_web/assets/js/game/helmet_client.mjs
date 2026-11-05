@@ -461,6 +461,7 @@ export class HelmetClient {
         shipClass: e.ship_class || null,
         course: e.course || null,
         displayName: e.display_name,
+        state: e.state,
         status: e.status,
         render: {...pos, z: pos.z || 0},
         destination: dest,
