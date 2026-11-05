@@ -5,6 +5,13 @@ on:
     branches: [sbs]
     paths:
       - "apps/core/lib/core/universe/navigation.ex"
+      - "apps/core/lib/core/universe/trade_lanes.ex"
+      - "apps/core/lib/core/universe/traffic.ex"
+      - "apps/core/lib/core/universe/encounters.ex"
+      - "apps/core/lib/core/world/supervisor.ex"
+      - "apps/core/test/core/universe/trade_lanes_test.exs"
+      - "apps/core/test/core/universe/encounters_test.exs"
+      - "apps/core/test/core/universe/traffic_test.exs"
       - "apps/core/lib/core/universe/free_flight_region.ex"
       - "apps/core/lib/core/world.ex"
       - "apps/core/lib/core/world/supervisor.ex"
@@ -59,6 +66,9 @@ jobs:
         run: mix compile
       - name: Test SOL cruise and headless free-flight
         run: |
+          mix test apps/core/test/core/universe/trade_lanes_test.exs
+          mix test apps/core/test/core/universe/encounters_test.exs
+          mix test apps/core/test/core/universe/traffic_test.exs
           mix test apps/core/test/core/universe/navigation_test.exs
           mix test apps/core/test/core/universe/free_flight_region_test.exs
           mix test apps/core/test/core/world/world_test.exs
