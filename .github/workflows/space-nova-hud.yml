@@ -51,6 +51,8 @@ jobs:
           mix test apps/darkorbit_web/test/darkorbit_web/controllers/page_controller_test.exs
           mix test apps/darkorbit_web/test/darkorbit_web/controllers/session_controller_test.exs
           mix test apps/darkorbit_web/test/darkorbit_web/controllers/registration_controller_test.exs
+      - name: Install frontend JavaScript dependencies
+        run: npm install --prefix apps/darkorbit_web/assets --no-audit --no-fund
       - name: Compile frontend assets
         run: mix assets.build
       - name: Verify Atlas JS UI hooks
