@@ -18,7 +18,7 @@ import {MinimapRenderer} from "./minimap_renderer.mjs"
 import {PointerNavigation} from "./pointer_navigation.mjs"
 import {StereoSpaceView} from "./stereo_view.js"
 import {HelmetControl} from "./helmet_control.mjs"
-import {helmetAlignmentKeyIntent} from "./helmet_alignment_keys.mjs"
+import {HelmetAlignmentKeyGate} from "./helmet_alignment_keys.mjs"
 import {NavigationComputer} from "./navigation_computer.mjs"
 import {FlightControls} from "./flight_controls.mjs"
 import {WorldStreamDelta} from "./world_stream_delta.mjs"
@@ -69,6 +69,7 @@ class SpaceClient {
     this.mouseSteering = new MouseSteering({sensitivity: this.mouseSteeringSensitivity})
     this.mouseIdleTimer = null
     this.mouseCaptureLost = false
+    this.helmetAlignmentKeys = new HelmetAlignmentKeyGate()
     this.entities = new Map()
     this.pilots = new Map()
     this.boundaries = {width: 20000, height: 12000}
@@ -124,18 +125,23 @@ class SpaceClient {
     })
     this.setupMouseSteering()
     window.addEventListener("keydown", event => this.flightControls.keyDown(event))
-    window.addEventListener("keyup", event => this.flightControls.keyUp(event))
+    window.addEventListener("keyup", event => {
+      this.flightControls.keyUp(event)
+      this.helmetAlignmentKeys.keyUp(event)
+    })
     // Only the cockpit hit canvas owns flight input; menus/Atlas retain
     // ordinary scrolling and right-click behavior.
     this.canvas.addEventListener("wheel", event => this.flightControls.wheel(event),
       {passive: false})
     window.addEventListener("blur", () => {
+      this.helmetAlignmentKeys.release()
       this.exitMouseSteering()
       this.flightControls.release()
       this.spaceLaser?.release()
     })
     document.addEventListener("visibilitychange", () => {
       if (document.hidden) {
+        this.helmetAlignmentKeys.release()
         this.exitMouseSteering()
         this.flightControls.release()
         this.spaceLaser?.release()
@@ -1598,22 +1604,20 @@ class SpaceClient {
   }
 
   handleHelmetAlignmentKey(event) {
-    const intent = helmetAlignmentKeyIntent(event, {
-      active: !this.navComputer?.isOpen && this.helmet?.canAdjustAlignment(),
+    // Reserve calibration shortcuts in cockpit mode, whether or not the
+    // headset is already rendering. Arrow keys must never scroll the DOM.
+    // No change is emitted for OS key-repeat, duplicates, text fields,
+    // Atlas input, or a suspended/closed cockpit.
+    const action = this.helmetAlignmentKeys.keyDown(event, {
+      active: !this.navComputer?.isOpen && !this.solarEncounter,
       typing: gameplayTypingTarget(event.target),
     })
-    if (!intent) return
+    if (!action.reserved) return
     event.preventDefault()
     event.stopPropagation()
 
-    // Holding Left/Right is convenient inside a headset. Rate-limit repeat
-    // packets instead of flooding Phoenix on a fast keyboard repeat setting.
-    if (intent.axis === "gap") {
-      const now = performance.now()
-      if (event.repeat && now - (this.lastHelmetArrowAt || 0) < 90) return
-      this.lastHelmetArrowAt = now
-    }
-    this.helmet.adjustAlignment(intent.axis, intent.direction)
+    if (action.intent && this.helmet?.canAdjustAlignment())
+      this.helmet.adjustAlignment(action.intent.axis, action.intent.direction)
   }
 
   handleDisplayModeKey(event) {
