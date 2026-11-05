@@ -177,44 +177,68 @@ defmodule Core.Universe.Navigation do
     end
   end
 
-  def handle_call({:set_course, player_id, destination_id}, _from, state) do
+  def handle_call({:set_course, player_id, target}, _from, state) do
     {voyage, state} = ensure_player(state, player_id)
 
-    cond do
-      not Sol.destination?(destination_id) ->
-        {:reply, {:error, :invalid_solar_destination}, state}
+    with {:ok, destination_id, destination_position} <- resolve_destination(target) do
+      distance_km = position_distance(voyage.position_km, destination_position)
 
-      voyage.status == :traveling ->
-        {:reply, {:error, :already_traveling}, state}
+      cond do
+        voyage.status == :traveling ->
+          {:reply, {:error, :already_traveling}, state}
 
-      voyage.location_id == destination_id ->
-        {:reply, {:error, :already_at_destination}, state}
+        distance_km < 1.0 ->
+          {:reply, {:error, :already_at_destination}, state}
 
-      true ->
-        duration_ms = Sol.travel_duration_ms(voyage.location_id, destination_id)
-        distance_km = Sol.cruise_distance_km(voyage.location_id, destination_id)
-        {:ok, destination_position} = Sol.game_position_km(destination_id)
-        updated = %{voyage |
-          origin_id: voyage.location_id,
-          destination_id: destination_id,
-          voyage_number: voyage.voyage_number + 1,
-          origin_position_km: voyage.position_km,
-          destination_position_km: destination_position,
-          propulsion_mode: :interplanetary_cruise,
-          cruise_speed_km_s: Sol.cruise_speed_km_s(),
-          travel_distance_km: distance_km,
-          distance_travelled_km: 0.0,
-          status: :traveling,
-          pending_encounter: nil,
-          tactical_encounter: nil,
-          elapsed_ms: 0,
-          duration_ms: duration_ms
-        }
-        state = put_voyage(state, player_id, updated)
-        state = maybe_launch_cruise_contact(state, updated)
-        broadcast(state, player_id, updated)
-        {:reply, {:ok, public(updated, state, player_id)}, state}
+        true ->
+          duration_ms = max(1, ceil(distance_km / Sol.cruise_speed_km_s())) * 1_000
+          updated = %{voyage |
+            origin_id: voyage.location_id,
+            destination_id: destination_id,
+            voyage_number: voyage.voyage_number + 1,
+            origin_position_km: voyage.position_km,
+            destination_position_km: destination_position,
+            propulsion_mode: :interplanetary_cruise,
+            cruise_speed_km_s: Sol.cruise_speed_km_s(),
+            travel_distance_km: distance_km,
+            distance_travelled_km: 0.0,
+            status: :traveling,
+            pending_encounter: nil,
+            tactical_encounter: nil,
+            elapsed_ms: 0,
+            duration_ms: duration_ms
+          }
+          state = put_voyage(state, player_id, updated)
+          state = maybe_launch_cruise_contact(state, updated)
+          broadcast(state, player_id, updated)
+          {:reply, {:ok, public(updated, state, player_id)}, state}
+      end
+    else
+      {:error, reason} -> {:reply, {:error, reason}, state}
     end
+  end
+
+  defp resolve_destination(id) when is_binary(id) do
+    if Sol.destination?(id) do
+      {:ok, position} = Sol.game_position_km(id)
+      {:ok, id, position}
+    else
+      {:error, :invalid_solar_destination}
+    end
+  end
+
+  defp resolve_destination(%{} = point) do
+    case Sol.waypoint(point) do
+      {:ok, position} -> {:ok, nil, position}
+      error -> error
+    end
+  end
+
+  defp resolve_destination(_), do: {:error, :invalid_solar_destination}
+
+  defp position_distance(a, b) do
+    :math.sqrt(:math.pow(a.x - b.x, 2) + :math.pow(a.y - b.y, 2) +
+      :math.pow(a.z - b.z, 2))
   end
 
   def handle_call({:cancel_course, player_id}, _from, state) do
@@ -231,12 +255,16 @@ defmodule Core.Universe.Navigation do
         {:reply, {:error, :free_flight_active}, state}
 
       true ->
-        # An aborted course stays at its departure region. Preserve the last
-        # completed arrival provenance: canceling a NEW route must not invent
-        # a different approach direction if the pilot reconnects afterward.
-        updated = %{idle(voyage.location_id) |
-          arrival_origin_id: voyage.arrival_origin_id,
-          voyage_number: voyage.voyage_number}
+        # Aborting a voyage must not teleport the ship back to its origin.
+        updated =
+          if voyage.position_km == voyage.origin_position_km and
+               is_binary(voyage.location_id) do
+            %{idle(voyage.location_id) |
+              arrival_origin_id: voyage.arrival_origin_id,
+              voyage_number: voyage.voyage_number}
+          else
+            idle_at(voyage.position_km, voyage)
+          end
         state = put_voyage(state, player_id, updated)
         broadcast(state, player_id, updated)
         {:reply, {:ok, public(updated, state, player_id)}, state}
@@ -462,6 +490,14 @@ defmodule Core.Universe.Navigation do
       elapsed_ms: 0, duration_ms: 0}
   end
 
+  # An unmarked destination is a genuine SOL position, not a planet.
+  defp idle_at(position, voyage) do
+    %{idle("earth") |
+      location_id: nil, origin_id: nil, arrival_origin_id: nil,
+      origin_position_km: position, position_km: position,
+      voyage_number: voyage.voyage_number}
+  end
+
   defp put_voyage(state, player_id, voyage),
     do: %{state | voyages: Map.put(state.voyages, player_id, voyage)}
 
@@ -484,9 +520,13 @@ defmodule Core.Universe.Navigation do
               voyage.cruise_speed_km_s * elapsed / 1_000.0)
 
             if distance_covered >= voyage.travel_distance_km do
-              %{idle(voyage.destination_id) |
-                arrival_origin_id: voyage.origin_id,
-                voyage_number: voyage.voyage_number}
+              if is_binary(voyage.destination_id) do
+                %{idle(voyage.destination_id) |
+                  arrival_origin_id: voyage.origin_id,
+                  voyage_number: voyage.voyage_number}
+              else
+                idle_at(voyage.destination_position_km, voyage)
+              end
             else
               fraction = distance_covered / voyage.travel_distance_km
               %{voyage | elapsed_ms: elapsed,
