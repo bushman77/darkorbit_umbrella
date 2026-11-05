@@ -1,0 +1,50 @@
+name: Build Space Nova Windows installer
+
+on:
+  push:
+    branches: [sbs]
+    paths:
+      - "clients/tauri/**"
+      - ".github/workflows/space-nova-windows.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-nsis:
+    runs-on: windows-latest
+    steps:
+      - name: Check out SBS source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Set up Windows Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Tauri CLI
+        working-directory: clients/tauri
+        run: npm install
+
+      - name: Test launcher
+        working-directory: clients/tauri
+        run: npm test
+
+      - name: Generate Windows ICO from existing Space Nova PNG
+        working-directory: clients/tauri
+        run: npm exec -- tauri icon src-tauri/icons/128x128.png
+
+      - name: Build Windows NSIS installer
+        working-directory: clients/tauri
+        run: npm run build
+
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: space-nova-windows-x86_64
+          if-no-files-found: error
+          path: clients/tauri/src-tauri/target/release/bundle/nsis/*.exe

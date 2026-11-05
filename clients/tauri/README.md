@@ -103,3 +103,66 @@ The Tauri application identifier remains `game.sbs.space` for compatibility
 with previously installed test builds. The visible product, launcher and
 package name are now **Space Nova**, version `0.2.0`. Existing installed
 launcher builds do not update automatically.
+
+## Build the Windows x64 installer (without owning a Windows machine)
+
+The dedicated GitHub Actions workflow at
+`.github/workflows/space-nova-windows.yml` builds an NSIS
+`Space Nova_*_x64-setup.exe` on a hosted Windows runner.
+The Linux workflow and its `.deb` / `.AppImage` outputs remain unchanged.
+
+1. Push changes to the existing `sbs` branch, or manually run the
+   **Build Space Nova Windows installer** workflow from the GitHub Actions tab.
+2. Wait for **Test launcher** and **Build Windows NSIS installer** to pass.
+3. Download the `space-nova-windows-x86_64` artifact from the workflow run.
+4. Extract the artifact zip and share the resulting setup EXE with your Windows
+   tester. The EXE installs the webview launcher; it does not install the game
+   server or PostgreSQL.
+
+Windows uses Microsoft Edge WebView2. The NSIS installer defaults to per-user
+installation. It can install WebView2 if absent, subject to connectivity.
+Keep the Tauri `identifier` stable so later releases can update the same app.
+
+**First-install trust:** The test NSIS installer is currently unsigned with a
+Windows Authenticode certificate, so SmartScreen may warn or an organization
+policy may block installation. Do not ask users to disable security protections.
+For public distribution, obtain an appropriate Windows code-signing
+certificate. This is **separate** from Tauri updater artifact signatures.
+
+### Signed updater roadmap (not yet active)
+
+The current `0.2.0` desktop client has no built-in update mechanism.
+The native shell must receive a new **manually installed** version before it
+can begin using automatic updates. Phoenix-rendered homepage and gameplay
+changes already deploy instantly on the server.
+
+Use Tauri 2's official updater plugin for native updates, published as signed
+release assets in GitHub Releases rather than served from the budget EC2
+instance:
+
+1. Generate a private/public updater signing key pair on a trusted machine,
+   using `npx tauri signer generate -w ~/.tauri/space-nova.key`. Securely back up
+   the private key; **never commit or share it in messages**. Only the public
+   key belongs in `tauri.conf.json`.
+2. Install `tauri-plugin-updater` into Rust and decide whether to check on
+   native launcher startup or through a native-only action. Avoid exposing
+   update commands or Tauri IPC access to server-hosted pages.
+3. Set `bundle.createUpdaterArtifacts: true` and configure the
+   `plugins.updater.pubkey` and
+   `plugins.updater.endpoints` entries to check an HTTPS-hosted
+   `latest.json` from GitHub Releases.
+4. Supply `TAURI_SIGNING_PRIVATE_KEY` and, if encrypted,
+   `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` as **GitHub Actions secrets** on a
+   dedicated, access-restricted publish workflow. Never expose private
+   signing credentials to pull request builds.
+5. Build Windows NSIS `.exe` + `.exe.sig` and Linux AppImage + `.sig`;
+   publish a single atomically assembled `latest.json` whose
+   `windows-x86_64` and `linux-x86_64` entries each contain a
+   matching URL and the **literal signature file contents**.
+6. Test upgrading an installed old version to a newer one before releasing
+   to other pilots. On Windows Tauri exits the old app when it launches the
+   updater installer.
+
+Tauri's updater signature key protects integrity and release authenticity;
+Windows Authenticode addresses OS publisher trust / SmartScreen reputation.
+Neither replaces HTTPS certificate validity for the live game server.
