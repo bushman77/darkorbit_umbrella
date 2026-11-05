@@ -3,20 +3,26 @@ defmodule Core.Universe.Encounters do
   Non-hostile SOL flyby encounters from the existing shared traffic simulation.
 
   No proximity-based NPC spawning, no random player-specific ships and no
-  position spoofing. Timing is emergent: a pilot's departure time, route and
+  position spoofing. Real trader approach range increases gradually near
+  planetary shipping lanes, regardless of selected destination. Timing is emergent: a pilot's departure time, route and
   traffic's independently advancing timetable determine whether they cross.
   One encounter per traffic vessel voyage is announced to each pilot.
   Tactical interception and combat are separate future handoff milestones.
   """
 
-  alias Core.Universe.Traffic
+  alias Core.Universe.{Traffic, TradeLanes}
 
   @encounter_radius_km 650_000.0
+  @approach_radius_bonus_km 850_000.0
   @departure_guard 0.05
-  @arrival_guard 0.95
 
   @spec encounter_radius_km() :: float()
   def encounter_radius_km, do: @encounter_radius_km
+
+  @doc "Interception range grows smoothly near shipping lanes and planets."
+  @spec encounter_radius_km(map()) :: float()
+  def encounter_radius_km(position) when is_map(position),
+    do: @encounter_radius_km + @approach_radius_bonus_km * TradeLanes.pressure(position)
 
   @spec nearest(map(), map()) :: map() | nil
   def nearest(ships, %{status: :traveling} = voyage) do
@@ -25,14 +31,14 @@ defmodule Core.Universe.Encounters do
         do: voyage.distance_travelled_km / voyage.travel_distance_km,
         else: 0.0
 
-    if progress <= @departure_guard or progress >= @arrival_guard do
+    if progress <= @departure_guard do
       nil
     else
       ships
       |> Traffic.contacts(voyage.position_km)
       |> Enum.filter(fn contact ->
         contact.state == :in_transit and
-          contact.distance_km <= @encounter_radius_km
+          contact.distance_km <= encounter_radius_km(voyage.position_km)
       end)
       |> Enum.sort_by(&{&1.distance_km, &1.id})
       |> List.first()
