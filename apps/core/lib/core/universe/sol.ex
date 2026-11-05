@@ -98,7 +98,10 @@ defmodule Core.Universe.Sol do
   """
   @spec waypoint(term()) :: {:ok, point()} | {:error, :invalid_solar_waypoint}
   def waypoint(%{x: x, y: y, z: z}) do
-    if Enum.all?([x, y, z], &finite_coordinate?/1) do
+    if Enum.all?([x, y, z], &finite_coordinate?/1) and
+         abs(x) <= @maximum_waypoint_radius_km and
+         abs(y) <= @maximum_waypoint_radius_km and
+         abs(z) <= @maximum_waypoint_altitude_km do
       point = %{x: x * 1.0, y: y * 1.0, z: z * 1.0}
       distance = :math.sqrt(point.x * point.x + point.y * point.y)
       clear_of_planets =
