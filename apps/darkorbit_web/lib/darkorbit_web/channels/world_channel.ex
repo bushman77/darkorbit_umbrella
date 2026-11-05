@@ -73,6 +73,13 @@ defmodule DarkorbitWeb.WorldChannel do
     end
   end
 
+  def handle_in("solar_set_course", %{"point" => point}, socket) when is_map(point) do
+    case World.solar_set_course(socket.assigns.world_session_id, point) do
+      {:ok, navigation} -> {:reply, {:ok, %{navigation: navigation}}, socket}
+      {:error, reason} -> {:reply, {:error, %{reason: error_reason(reason)}}, socket}
+    end
+  end
+
   def handle_in("solar_set_course", _payload, socket),
     do: {:reply, {:error, %{reason: "invalid_solar_destination"}}, socket}
 
