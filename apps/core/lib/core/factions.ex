@@ -1,9 +1,12 @@
 defmodule Core.Factions do
   @moduledoc """
-  Pure policy for the independent planetary SOL factions.
+  Transitional policy and identity catalogue for SOL planetary factions
+  and named commercial organizations. Initial trader names are provisional.
 
-  Each planet (including Pluto) has a faction ID identical to its SOL body ID.
-  Standing is a server-owned integer from -100 to 100, with 0 meaning neutral.
+  Planetary factions retain their legacy body IDs until territorial claims are
+  independently owned. Commercial organizations have stable organization IDs
+  that can be reused across multiple star systems. Standing is a server-owned
+  integer from -100 to 100, with 0 meaning neutral.
   A wanted warrant is independent from standing: an allied pilot may still be
   wanted for an offence. These policies describe possible patrol responses;
   they do NOT initiate combat, interceptions or random encounters.
