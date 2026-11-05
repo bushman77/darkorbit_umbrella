@@ -971,3 +971,275 @@ body:has(#helmet-client) {
 
 /* An accepted merchant surrender is an explicit server-verified decision. */
 .solar-tactical-panel [hidden] { display: none !important; }
+
+
+/* -----------------------------------------------------------------------
+   SPACE NOVA HUD / visual system V1
+   Design tokens shared by the web game and desktop-hosted Phoenix screens.
+   All decorative layers are pointer-transparent. No canvas/JS controls are
+   simulated here: existing server-owned navigation remains authoritative.
+------------------------------------------------------------------------ */
+:root {
+  --nova-void: #020914;
+  --nova-deep: #061829;
+  --nova-panel: #081e30;
+  --nova-panel-edge: #174962;
+  --nova-cyan: #67e8f9;
+  --nova-cyan-muted: #8bc2d0;
+  --nova-ink: #e2f6ff;
+  --nova-line: rgb(60 195 226 / .39);
+  --nova-glow: 0 0 28px rgb(6 209 240 / .10);
+}
+
+.hud-kicker {
+  font: 750 .63rem/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--nova-cyan);
+}
+.hud-pulse {
+  width: .55rem; height: .55rem; flex: 0 0 .55rem;
+  border-radius: 50%; background: #54ffb7;
+  box-shadow: 0 0 11px rgb(84 255 183 / .65);
+}
+.hud-nav-rail {
+  display: flex; align-items: center; gap: clamp(.6rem, 2.1vw, 2rem);
+  min-height: 3.6rem; margin: -.35rem -.4rem 1.2rem;
+  padding: .35rem clamp(.8rem, 1.7vw, 1.6rem);
+  border: 1px solid var(--nova-line); border-radius: .6rem;
+  background: linear-gradient(180deg, #081d2c 3%, #020d17 96%);
+  box-shadow: inset 0 -2px 0 rgb(15 192 226 / .10), 0 12px 35px #0008;
+}
+.hud-brand {
+  display: inline-flex; align-items: center; gap: .72rem;
+  color: #a5f5ff; white-space: nowrap;
+  font: 850 clamp(.75rem, 1.3vw, 1rem)/1.3 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: .31em;
+  text-shadow: 0 0 15px rgb(62 223 245 / .22);
+}
+.hud-nav-current, .hud-nav-link {
+  display: inline-flex; align-items: center; gap: .45rem;
+  padding: .62rem .95rem; border: 1px solid transparent;
+  font: 750 .7rem/1.1 ui-monospace, monospace;
+  letter-spacing: .08em; white-space: nowrap;
+  color: #a1c0cd; text-decoration: none;
+}
+.hud-nav-current {
+  margin-left: clamp(.3rem, 2vw, 2rem);
+  border-color: #5cd7e7; color: #e5fcff;
+  background: linear-gradient(125deg, #135870, #0a293e);
+  box-shadow: inset 0 0 12px #28e1f12c, 0 0 15px #00e1ff28;
+  clip-path: polygon(9px 0,100% 0,calc(100% - 9px) 100%,0 100%);
+}
+.hud-nav-link:hover, .hud-nav-link:focus-visible {
+  border-color: var(--nova-line); color: #fff;
+  background: rgb(23 88 110 / .38);
+}
+.hud-nav-location {
+  margin-left: auto;
+  font: 750 .61rem/1.2 ui-monospace, monospace;
+  letter-spacing: .15em; white-space: nowrap;
+  color: #86b6c8;
+}
+
+/* Atlas is an edge-to-edge game screen, not a centered website card. */
+.navigation-computer {
+  display: block;
+  padding: 0;
+  background:
+    radial-gradient(ellipse at 55% 25%,rgb(10 96 128 / .18),transparent 56%),
+    repeating-linear-gradient(90deg,transparent 0 79px,rgb(41 130 164 / .024) 80px),
+    #010a14;
+}
+.navigation-computer::before {
+  position: fixed; inset: 0; content: ""; z-index: 0; pointer-events: none;
+  background-image:
+    radial-gradient(#b7ecff8a .65px, transparent .8px),
+    linear-gradient(rgb(70 173 210 / .035) 1px,transparent 1px);
+  background-size: 87px 109px, 100% 4px;
+  opacity: .3;
+}
+.navigation-computer .nav-shell {
+  position: relative; z-index: 1;
+  display: flex; flex-direction: column;
+  width: 100%; max-width: none; min-height: 100vh;
+  padding: clamp(.7rem, 1.35vw, 1.4rem);
+  border: 0; border-radius: 0;
+  background: transparent; box-shadow: none;
+}
+.navigation-computer .nav-heading {
+  align-items: center; gap: .7rem; margin: .1rem .25rem 1rem;
+}
+.navigation-computer .nav-heading h2 {
+  font: 850 clamp(1.6rem, 2.6vw, 2.6rem)/1.12 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: -.025em; color: #e8f7ff;
+  text-shadow: 0 0 24px rgb(67 193 246 / .10);
+}
+.navigation-computer .nav-subtitle { color: #a6c5d5; line-height: 1.6; }
+.navigation-computer .nav-heading .nav-button { white-space: nowrap; }
+.navigation-computer .atlas-view-tabs {
+  margin: 0 .3rem 1rem; padding-bottom: .7rem;
+  border-bottom-color: #29708a;
+}
+.navigation-computer .atlas-view-tab {
+  border-radius: .25rem; border-color: #2a6277;
+  background: linear-gradient(180deg,#0b2639,#051321);
+  transition: background .15s, border-color .15s, box-shadow .15s;
+}
+.navigation-computer .atlas-view-tab.is-active {
+  border-color: #6de6ed;
+  background: linear-gradient(135deg,#155a70,#0c3147);
+  box-shadow: inset 0 -2px 0 #9bfcff70,0 0 16px #19dbff2b;
+}
+.navigation-computer .solar-atlas-layout {
+  grid-template-columns: minmax(205px, 255px) minmax(0,1fr) minmax(265px,340px);
+  grid-template-areas: "operations map details";
+  align-items: start; gap: clamp(.5rem, .9vw, 1rem);
+}
+.solar-operations-panel {
+  grid-area: operations; min-width: 0; display: flex;
+  flex-direction: column; gap: .82rem;
+  border: 1px solid #286983; border-radius: .38rem;
+  padding: .75rem; color: var(--nova-ink);
+  background: linear-gradient(158deg,rgb(6 29 45 / .96),rgb(1 10 19 / .95));
+  box-shadow: inset 0 1px 0 #7bddff25, var(--nova-glow);
+}
+.hud-panel-heading {
+  display:flex; align-items:center; justify-content:space-between; gap:.6rem;
+  padding:.2rem .1rem .75rem; border-bottom:1px solid #25607c;
+}
+.hud-ops-card, .hud-traffic-panel {
+  padding:.85rem; border:1px solid #21536b; border-radius:.35rem;
+  background: linear-gradient(155deg,#0c263b,#051422);
+  box-shadow: inset 2px 0 0 rgb(37 198 231 / .13);
+}
+.hud-ops-card h3 {
+  margin:.32rem 0 .35rem; color:#e8f8ff;
+  font-size:.86rem; font-weight:750;
+}
+.hud-ops-card p:last-child, .hud-traffic-panel p {
+  color:#abc8d8; font-size:.72rem; line-height:1.6;
+}
+.hud-traffic-panel { border-color:#24798c; }
+.hud-traffic-panel #nav-traffic-contacts { max-height: 13rem; overflow-y:auto; }
+.hud-traffic-panel #nav-traffic-comms { color:#aaf5de; }
+.solar-operations-panel .solar-system-note {
+  margin: 0; padding: .8rem; border:1px dashed #236077;
+  color:#84b7c9; background:#061725; font-size:.67rem;
+}
+.navigation-computer .solar-atlas-frame {
+  grid-area: map; min-width:0; border-radius:.45rem;
+  border-color:#2f9bb4;
+  background: linear-gradient(180deg,#062037,#010c1b);
+  box-shadow: inset 0 0 32px #0bd4fe0a,0 0 24px #00cfff12;
+}
+.navigation-computer .solar-atlas-frame .nav-map-caption {
+  padding: .82rem 1.1rem; color:#b2eefa; letter-spacing:.12em;
+  background:linear-gradient(90deg,#0c3045,#061a2a);
+  border-bottom:1px solid #28788c;
+}
+.navigation-computer #nav-solar-chart {
+  background:
+    radial-gradient(circle at 50% 50%,rgb(14 74 99 / .42),transparent 52%),
+    radial-gradient(#b9f2ff70 .7px,transparent .9px),
+    radial-gradient(ellipse at 50% 60%,#0b2440,#010a18 75%);
+  background-size: auto, 64px 74px, auto;
+}
+.navigation-computer .solar-chart-controls {
+  border-top-color:#246c85;
+  background:linear-gradient(180deg,#082437,#061521);
+}
+.navigation-computer .solar-atlas-panel {
+  grid-area: details; gap:.72rem; border-radius:.38rem;
+  border-color:#296d84; padding:.9rem;
+  background:linear-gradient(160deg,#092538,#041321);
+  box-shadow: inset 0 1px 0 #90f7ff17, var(--nova-glow);
+}
+.navigation-computer .solar-body-button {
+  min-height: 2.2rem; border-radius: .24rem;
+  border-color:#255269; color:#c5e1ed;
+  background:linear-gradient(180deg,#0a293c,#041522);
+}
+.navigation-computer .solar-body-button:hover {
+  border-color:#70dce8; background:#0d3c51;
+}
+.navigation-computer .solar-body-button[aria-pressed="true"] {
+  border-color:#7bf8ff; color:#fff;
+  background:linear-gradient(125deg,#15536c,#0a3144);
+  box-shadow:0 0 13px rgb(4 236 255 / .2);
+}
+.navigation-computer .solar-selected-body { border-top-color:#348299; }
+.navigation-computer .solar-body-metrics>div {
+  border-color:#25556a; border-radius:.26rem; background:#082236;
+}
+.navigation-computer .solar-navigation-console {
+  border-top-color:#33768b; gap:.5rem;
+}
+.navigation-computer .nav-button {
+  border-radius: .3rem;
+  background:linear-gradient(145deg,#103e53,#0a253a);
+}
+.navigation-computer .nav-button:hover:not(:disabled) {
+  border-color:#7cf5ff; background:#164d61;
+}
+.navigation-computer .nav-primary {
+  color:#02131b; border-color:#72f8ff;
+  background:linear-gradient(115deg,#52dcf5,#b1fbff);
+  box-shadow:0 0 16px #30d8ef25; text-shadow:none;
+}
+.navigation-computer .nav-primary:hover:not(:disabled) {
+  color:#031824; background:#b6f9ff;
+}
+.navigation-computer .nav-danger {
+  color:#ffdacd; border-color:#87504a;
+  background:linear-gradient(120deg,#452723,#24151b);
+}
+.navigation-computer .hud-preferences {
+  margin:.85rem .25rem .5rem; padding:.65rem .95rem;
+  border-radius:.3rem; border-color:#22556a;
+  background:rgb(4 17 31 / .88);
+}
+.navigation-computer .hud-preferences>p { display:none; }
+.hud-keybar {
+  display:flex; align-items:center; flex-wrap:wrap; gap:1rem;
+  min-height:3rem; margin-top:auto; padding:.5rem .75rem;
+  border:1px solid #2a7992; border-radius:.35rem;
+  background:linear-gradient(180deg,#092b3d,#03131d);
+  font:750 .66rem/1.4 ui-monospace,monospace;
+  color:#a5d1df; letter-spacing:.04em;
+}
+.hud-keybar span { display:inline-flex; align-items:center; gap:.38rem; }
+.hud-keybar-title {
+  color:#80efff; letter-spacing:.18em;
+  padding-right:1rem; border-right:1px solid #31738a;
+}
+.hud-keybar kbd {
+  border:1px solid #37839c; border-radius:.22rem;
+  padding:.14rem .32rem; background:#051824; color:#a8fcff;
+  font:800 .67rem ui-monospace,monospace;
+}
+.hud-keybar-end { margin-left:auto; opacity:.65; }
+@media(max-width:1240px) {
+  .navigation-computer .solar-atlas-layout {
+    grid-template-columns:minmax(0,1fr) minmax(265px,340px);
+    grid-template-areas:"map details" "operations operations";
+  }
+  .solar-operations-panel { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .solar-operations-panel .hud-panel-heading { grid-column:1/-1; }
+}
+@media(max-width:850px) {
+  .navigation-computer .solar-atlas-layout {
+    grid-template-columns: minmax(0,1fr);
+    grid-template-areas:"map" "details" "operations";
+  }
+  .solar-operations-panel { display:flex; }
+  .hud-nav-rail { flex-wrap:wrap; }
+  .hud-nav-location { display:none; }
+  .navigation-computer .nav-heading { align-items:flex-start; }
+}
+@media(max-width:540px) {
+  .hud-brand { letter-spacing:.17em; }
+  .hud-nav-current { margin-left:0; }
+  .navigation-computer .nav-heading .nav-button { white-space:normal; }
+  .hud-keybar-end { display:none !important; }
+}

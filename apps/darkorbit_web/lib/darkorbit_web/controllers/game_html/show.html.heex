@@ -162,6 +162,21 @@
 
   <section id="navigation-computer" class="navigation-computer" role="dialog" aria-modal="true" aria-labelledby="nav-title">
     <div class="nav-shell">
+      <nav class="hud-nav-rail" aria-label="Flight deck navigation">
+        <span class="hud-brand">
+          <.icon name="hero-rocket-launch" class="size-5" />
+          SPACE NOVA
+        </span>
+        <span class="hud-nav-current" aria-current="page">
+          <.icon name="hero-map" class="size-4" />
+          NAVIGATION
+        </span>
+        <a class="hud-nav-link" href={~p"/equipment"}>
+          <.icon name="hero-wrench-screwdriver" class="size-4" />
+          SHIP LOADOUT
+        </a>
+        <span class="hud-nav-location">SOL / NAVIGATION DECK</span>
+      </nav>
       <div class="nav-heading">
         <div>
           <p class="nav-eyebrow">FLIGHT SYSTEMS // NAVIGATION DECK</p>
@@ -171,7 +186,7 @@
         <button id="nav-helmet-open" class="nav-button" type="button" aria-controls="helmet-panel">
           PILOT HMD · <span id="nav-helmet-status">NOT PAIRED</span>
         </button>
-        <button id="nav-close" class="nav-button nav-close" type="button" aria-label="Close navigation computer">Return to cockpit <span class="text-cyan-300">[M / Esc]</span></button>
+        <button id="nav-close" class="nav-button nav-close" type="button" aria-label="Close navigation computer">Enter cockpit <span class="text-cyan-300">[M / Esc]</span></button>
       </div>
       <section id="helmet-panel" hidden aria-label="Pilot HMD management"
                class="mx-4 mb-4 rounded-xl border border-cyan-400/30 bg-slate-950 p-4 text-slate-100">
@@ -202,29 +217,6 @@
           <button id="helmet-forget" class="nav-button nav-danger" type="button">Forget headset</button>
         </div>
       </section>
-      <%!-- Pilot control preferences are client-side; never part of combat authority. --%>
-      <section aria-label="Cockpit control preferences"
-               class="mx-4 mb-4 rounded-xl border border-cyan-400/25 bg-slate-950/80 p-3 text-slate-200">
-        <div class="flex flex-wrap items-center gap-4">
-          <label class="flex cursor-pointer items-center gap-2 text-sm font-semibold text-cyan-100">
-            <input id="nav-mouse-steering" type="checkbox"
-                   class="size-4 accent-cyan-400" />
-            Enable mouse-look steering
-          </label>
-          <label for="nav-mouse-sensitivity" class="flex items-center gap-2 text-xs text-slate-300">
-            Sensitivity
-            <input id="nav-mouse-sensitivity" type="range" min="40" max="600"
-                   step="10" value="100" class="w-32 accent-cyan-400" />
-            <output id="nav-mouse-sensitivity-value" for="nav-mouse-sensitivity">1.0×</output>
-          </label>
-        </div>
-        <p class="mt-2 text-xs text-slate-400">
-          When enabled, return to the cockpit and click its background once to capture the mouse.
-          Move the mouse to pitch and yaw. Esc releases the cursor; M opens Atlas.
-          Keyboard steering, wheel throttle, Ctrl+wheel roll and right-click lasers remain available.
-        </p>
-      </section>
-
       <div class="atlas-view-tabs" role="tablist" aria-label="Atlas navigation level">
         <button id="nav-view-system" class="atlas-view-tab is-active" type="button"
           role="tab" aria-selected="true" aria-controls="nav-solar-view">
@@ -239,6 +231,39 @@
 
       <section id="nav-solar-view" class="solar-atlas-layout" role="tabpanel"
         aria-labelledby="nav-view-system">
+        <aside class="solar-operations-panel" aria-label="Flight operations and live contacts">
+          <div class="hud-panel-heading">
+            <p class="nav-eyebrow">COMMS // FLIGHT OPERATIONS</p>
+            <span class="hud-pulse" aria-hidden="true"></span>
+          </div>
+          <section class="hud-ops-card">
+            <p class="hud-kicker">01 / STRATEGIC NAVIGATION</p>
+            <h3>Chart a course</h3>
+            <p>Select a world on the orbital chart, then engage interplanetary travel.</p>
+          </section>
+          <section class="hud-ops-card">
+            <p class="hud-kicker">02 / CONVENTIONAL FLIGHT</p>
+            <h3>Take the helm</h3>
+            <p>Press M to fly in 3D. Open the Atlas again to return to automated cruise.</p>
+          </section>
+          <section class="hud-traffic-panel"
+                   aria-label="Strategic traffic contacts">
+            <p class="nav-eyebrow">SENSOR TRAFFIC / LIVE CONTACTS</p>
+            <p class="my-2 text-xs text-slate-300">
+              Vessels follow their own routes. Contacts appear only within sensor range.
+            </p>
+            <div id="nav-traffic-contacts" class="space-y-2 text-xs text-cyan-100"
+                 aria-live="polite">No contacts in range.</div>
+            <p id="nav-traffic-comms" class="mt-3 whitespace-pre-line text-xs text-emerald-200"
+               role="status">Select Hail when a vessel is in range.</p>
+          </section>
+          <p class="solar-system-note">Interplanetary cruise uses a dedicated sublight
+            drive and the same real-time clock as combat. Distance is compressed
+                         into game kilometers, not physical Solar System kilometers. The AI
+             drive avoids hazards in Atlas cruise. Return to cockpit to suspend
+             the voyage for conventional deep-space flight. Physical debris
+             collision damage will be added in a separate mechanic.</p>
+        </aside>
         <div class="solar-atlas-frame">
           <div class="nav-map-caption">
             <span>SOLAR SYSTEM // ORBITAL OVERVIEW</span>
@@ -296,23 +321,8 @@
               Abort transit
             </button>
           </div>
-          <section class="mt-4 rounded-lg border border-cyan-500/25 bg-slate-950/70 p-3"
-                   aria-label="Strategic traffic contacts">
-            <p class="nav-eyebrow">SENSOR TRAFFIC / LIVE CONTACTS</p>
-            <p class="my-2 text-xs text-slate-300">
-              Vessels follow their own routes. Contacts appear only within sensor range.
-            </p>
-            <div id="nav-traffic-contacts" class="space-y-2 text-xs text-cyan-100"
-                 aria-live="polite">No contacts in range.</div>
-            <p id="nav-traffic-comms" class="mt-3 whitespace-pre-line text-xs text-emerald-200"
-               role="status">Select Hail when a vessel is in range.</p>
-          </section>
-          <p class="solar-system-note">Interplanetary cruise uses a dedicated sublight
-            drive and the same real-time clock as combat. Distance is compressed
-                         into game kilometers, not physical Solar System kilometers. The AI
-             drive avoids hazards in Atlas cruise. Return to cockpit to suspend
-             the voyage for conventional deep-space flight. Physical debris
-             collision damage will be added in a separate mechanic.</p>
+
+
         </aside>
       </section>
 
@@ -360,6 +370,36 @@
         </aside>
       </div>
       </section>
+      <%!-- Pilot control preferences are client-side; never part of combat authority. --%>
+      <section aria-label="Cockpit control preferences"
+               class="hud-preferences mx-4 mb-4 rounded-xl border border-cyan-400/25 bg-slate-950/80 p-3 text-slate-200">
+        <div class="flex flex-wrap items-center gap-4">
+          <label class="flex cursor-pointer items-center gap-2 text-sm font-semibold text-cyan-100">
+            <input id="nav-mouse-steering" type="checkbox"
+                   class="size-4 accent-cyan-400" />
+            Enable mouse-look steering
+          </label>
+          <label for="nav-mouse-sensitivity" class="flex items-center gap-2 text-xs text-slate-300">
+            Sensitivity
+            <input id="nav-mouse-sensitivity" type="range" min="40" max="600"
+                   step="10" value="100" class="w-32 accent-cyan-400" />
+            <output id="nav-mouse-sensitivity-value" for="nav-mouse-sensitivity">1.0×</output>
+          </label>
+        </div>
+        <p class="mt-2 text-xs text-slate-400">
+          When enabled, return to the cockpit and click its background once to capture the mouse.
+          Move the mouse to pitch and yaw. Esc releases the cursor; M opens Atlas.
+          Keyboard steering, wheel throttle, Ctrl+wheel roll and right-click lasers remain available.
+        </p>
+      </section>
+
+      <div class="hud-keybar" aria-label="Navigation keyboard commands">
+        <span class="hud-keybar-title">NAVIGATION DECK</span>
+        <span><kbd>M</kbd> COCKPIT</span>
+        <span><kbd>ESC</kbd> RETURN</span>
+        <span><kbd>CLICK</kbd> SELECT BODY</span>
+        <span class="hud-keybar-end">SOL / FLIGHT SYSTEMS</span>
+      </div>
     </div>
   </section>
 
