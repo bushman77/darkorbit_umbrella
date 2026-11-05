@@ -66,3 +66,60 @@ export function solarBodySummary(body) {
       : body.years.toFixed(body.years < 10 ? 2 : 1)+" Earth years",
   }
 }
+
+ 
+// The Atlas uses a reversible display projection. World coordinates are the
+// server's compressed SOL game-kilometres, never the local cockpit map units.
+// Keep these coefficients synchronized with Core.Universe.Sol and test markers.
+const GAME_KM_PER_LOG_AU = 16_000_000
+const OUTER_GAME_KM_PER_AU = 800_000
+const OUTER_THRESHOLD_AU = 10
+const OUTSIDE_ORBIT_KM_PER_PIXEL = 250_000
+
+export function solarGameRadius(au) {
+  if (!Number.isFinite(au) || au < 0) return null
+  return GAME_KM_PER_LOG_AU * Math.log1p(au) +
+    OUTER_GAME_KM_PER_AU * Math.max(0, au - OUTER_THRESHOLD_AU)
+}
+
+function gameRadiusToAU(radius) {
+  if (radius <= solarGameRadius(OUTER_THRESHOLD_AU)) {
+    return Math.expm1(radius / GAME_KM_PER_LOG_AU)
+  }
+  let low = OUTER_THRESHOLD_AU, high = 5000
+  for (let i = 0; i < 55; i++) {
+    const mid = (low + high) / 2
+    if (solarGameRadius(mid) < radius) low = mid
+    else high = mid
+  }
+  return (low + high) / 2
+}
+
+export function solarPositionToChart(position, focus = "system") {
+  if (!position || ![position.x,position.y,position.z].every(Number.isFinite)) return null
+  const distance = Math.hypot(position.x, position.y)
+  const edgeAU = focus === "inner" ? 1.524 : 39.482
+  const edgeKM = solarGameRadius(edgeAU)
+  const edgePX = orbitRadius(edgeAU, focus)
+  const pixels = distance > edgeKM
+    ? edgePX + (distance - edgeKM) / OUTSIDE_ORBIT_KM_PER_PIXEL
+    : orbitRadius(gameRadiusToAU(distance), focus)
+  const angle = Math.atan2(position.y, position.x)
+  return {x: 500 + pixels * Math.cos(angle), y: 300 + pixels * Math.sin(angle)}
+}
+
+export function solarChartToPosition(x, y, focus = "system", z = 0) {
+  if (![x,y,z].every(Number.isFinite) || !SOLAR_FOCUSES.includes(focus)) return null
+  const radius = Math.hypot(x - 500, y - 300)
+  const edgeAU = focus === "inner" ? 1.524 : 39.482
+  const edgePX = orbitRadius(edgeAU, focus)
+  const edgeKM = solarGameRadius(edgeAU)
+  const au = focus === "inner"
+    ? 1.524 * Math.pow(Math.max(0,radius - 16) / 262, 2)
+    : Math.expm1(Math.max(0,radius - 17) / 262 * Math.log1p(39.482))
+  const distance = radius > edgePX
+    ? edgeKM + (radius - edgePX) * OUTSIDE_ORBIT_KM_PER_PIXEL
+    : solarGameRadius(au)
+  const angle = Math.atan2(y - 300, x - 500)
+  return {x: distance * Math.cos(angle), y: distance * Math.sin(angle), z}
+}
