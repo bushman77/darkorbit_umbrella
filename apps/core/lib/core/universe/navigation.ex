@@ -218,29 +218,6 @@ defmodule Core.Universe.Navigation do
     end
   end
 
-  defp resolve_destination(id) when is_binary(id) do
-    if Sol.destination?(id) do
-      {:ok, position} = Sol.game_position_km(id)
-      {:ok, id, position}
-    else
-      {:error, :invalid_solar_destination}
-    end
-  end
-
-  defp resolve_destination(%{} = point) do
-    case Sol.waypoint(point) do
-      {:ok, position} -> {:ok, nil, position}
-      error -> error
-    end
-  end
-
-  defp resolve_destination(_), do: {:error, :invalid_solar_destination}
-
-  defp position_distance(a, b) do
-    :math.sqrt(:math.pow(a.x - b.x, 2) + :math.pow(a.y - b.y, 2) +
-      :math.pow(a.z - b.z, 2))
-  end
-
   def handle_call({:cancel_course, player_id}, _from, state) do
     {voyage, state} = ensure_player(state, player_id)
 
@@ -463,6 +440,29 @@ defmodule Core.Universe.Navigation do
   @impl true
   def handle_info(:tick, state) do
     {:noreply, state |> advance() |> schedule()}
+  end
+
+  defp resolve_destination(id) when is_binary(id) do
+    if Sol.destination?(id) do
+      {:ok, position} = Sol.game_position_km(id)
+      {:ok, id, position}
+    else
+      {:error, :invalid_solar_destination}
+    end
+  end
+
+  defp resolve_destination(%{} = point) do
+    case Sol.waypoint(point) do
+      {:ok, position} -> {:ok, nil, position}
+      error -> error
+    end
+  end
+
+  defp resolve_destination(_), do: {:error, :invalid_solar_destination}
+
+  defp position_distance(a, b) do
+    :math.sqrt(:math.pow(a.x - b.x, 2) + :math.pow(a.y - b.y, 2) +
+      :math.pow(a.z - b.z, 2))
   end
 
   defp ensure_player(state, player_id) do
