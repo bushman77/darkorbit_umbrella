@@ -430,7 +430,7 @@ export class NavigationComputer {
       title.textContent = `${flyby ? "CLOSE PASS · " : ""}${contact.call_sign} · ${contact.faction_name || "Unregistered Organization"}`
       const detail = document.createElement("p")
       detail.className = "mt-1 text-slate-300"
-      detail.textContent = `${contact.origin_id} → ${contact.destination_id} · ${contact.state.replaceAll("_", " ")} · ${Math.round(contact.distance_km).toLocaleString("en-US")} game km`
+      detail.textContent = `${contact.origin_id} → ${contact.destination_id} · ${contact.disposition.toUpperCase()} · ${contact.state.replaceAll("_", " ")} · ${Math.round(contact.distance_km).toLocaleString("en-US")} game km`
       const button = document.createElement("button")
       button.type = "button"
       button.className = "nav-button mt-2"
