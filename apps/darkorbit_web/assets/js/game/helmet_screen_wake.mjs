@@ -25,8 +25,16 @@ export class HelmetScreenWake {
     if (this.sentinel && !this.sentinel.released) return true
     if (this.pending) return this.pending
 
-    this.pending = Promise.resolve()
-      .then(() => this.api.request("screen"))
+    // Invoke request synchronously while still in the user's tap handler.
+    // Deferring the request can lose transient user activation on Android.
+    let request
+    try {
+      request = this.api.request("screen")
+    } catch (_error) {
+      return false
+    }
+
+    this.pending = Promise.resolve(request)
       .then(sentinel => {
         if (!this.active || !this.visible()) {
           Promise.resolve(sentinel.release?.()).catch(() => {})
