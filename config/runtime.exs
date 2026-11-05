@@ -104,5 +104,24 @@ if config_env() == :prod do
   #
   # See https://hexdocs.pm/swoosh/Swoosh.html#module-installation for details.
 
+  # Public pilot registration requires a real outbound email provider.
+  # An unverified account may not log in. Never use Swoosh.Local in production
+  # for public registrations: its messages would never reach users.
+  registration_api_key = System.get_env("RESEND_API_KEY")
+  registration_from = System.get_env("REGISTRATION_FROM_EMAIL")
+  registration_enabled? =
+    is_binary(registration_api_key) and byte_size(registration_api_key) > 0 and
+      is_binary(registration_from) and byte_size(registration_from) > 0
+
+  config :darkorbit_web,
+    registration_email_enabled: registration_enabled?,
+    registration_from: registration_from || "noreply@localhost"
+
+  if registration_enabled? do
+    config :darkorbit, Darkorbit.Mailer,
+      adapter: Swoosh.Adapters.Resend,
+      api_key: registration_api_key
+  end
+
   config :darkorbit, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")
 end
