@@ -23,6 +23,10 @@ config :darkorbit_web, DarkorbitWeb.Endpoint,
 # Print only warnings and errors during test
 config :logger, level: :warning
 
+# Test signup can verify through Swoosh.Adapters.Test without external email.
+config :darkorbit_web, registration_email_enabled: true,
+  registration_from: "noreply@localhost"
+
 # In test we don't send emails
 config :darkorbit, Darkorbit.Mailer, adapter: Swoosh.Adapters.Test
 
