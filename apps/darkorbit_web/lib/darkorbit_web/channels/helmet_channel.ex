@@ -6,7 +6,7 @@ defmodule DarkorbitWeb.HelmetChannel do
   use DarkorbitWeb, :channel
 
   alias Darkorbit.{Helmets, World}
-  alias DarkorbitWeb.{HelmetManager, HelmetNetwork}
+  alias DarkorbitWeb.{HelmetManager, HelmetNetwork, HelmetSurrender}
   alias Core.Universe.Navigation, as: SolarNavigation
   alias Core.World.SessionManager
 
@@ -139,13 +139,17 @@ defmodule DarkorbitWeb.HelmetChannel do
         push(socket, "helmet_navigation",
           visual_navigation_for_player(socket.assigns.helmet_player_id))
 
-        case World.snapshot(map_id) do
-          {:ok, map} ->
-            push(socket, "helmet_snapshot",
-              %{map: map, player_id: socket.assigns.helmet_player_id})
-          {:error, _} ->
-            push(socket, "helmet_error", %{reason: "world_unavailable"})
-        end
+        socket =
+          case World.snapshot(map_id) do
+            {:ok, map} ->
+              push(socket, "helmet_snapshot",
+                %{map: map, player_id: socket.assigns.helmet_player_id})
+              push_surrender_if_changed(socket, map, true)
+
+            {:error, _} ->
+              push(socket, "helmet_error", %{reason: "world_unavailable"})
+              socket
+          end
 
         {:noreply, socket |> assign(:helmet_active, true)
                           |> assign(:helmet_map_id, map_id)}
@@ -165,12 +169,13 @@ defmodule DarkorbitWeb.HelmetChannel do
       Phoenix.PubSub.unsubscribe(Darkorbit.PubSub, Darkorbit.World.PubSub.topic("sol"))
     end
     push(socket, "helmet_mode", %{mode: "standby"})
-    {:noreply, assign(socket, :helmet_active, false)}
+    {:noreply, socket |> assign(:helmet_active, false)
+                      |> assign(:helmet_last_surrender, nil)}
   end
 
   def handle_info({:world_state, map}, %{assigns: %{helmet_active: true}} = socket) do
     push(socket, "world_state", map)
-    {:noreply, socket}
+    {:noreply, push_surrender_if_changed(socket, map)}
   end
 
   # Only the paired pilot's encounter reaches the read-only viewer.
@@ -244,18 +249,33 @@ defmodule DarkorbitWeb.HelmetChannel do
             Darkorbit.World.PubSub.topic(previous))
         end
 
-        case World.snapshot(map_id) do
-          {:ok, map} ->
-            push(socket, "helmet_snapshot", %{map: map, player_id: player_id})
-          {:error, _} ->
-            :ok
-        end
+        socket =
+          case World.snapshot(map_id) do
+            {:ok, map} ->
+              push(socket, "helmet_snapshot", %{map: map, player_id: player_id})
+              push_surrender_if_changed(socket, map, true)
+
+            {:error, _} ->
+              socket
+          end
 
         assign(socket, :helmet_map_id, map_id)
 
       _ ->
         socket
     end
+  end
+
+  # Send one tiny notification only when surrender changes, plus once on
+  # initial sync. Normal world snapshots remain authoritative for rendering.
+  defp push_surrender_if_changed(socket, map, force \\ false) do
+    payload = HelmetSurrender.from_world(map, socket.assigns.helmet_player_id)
+
+    if force or socket.assigns[:helmet_last_surrender] != payload do
+      push(socket, "helmet_surrender", payload)
+    end
+
+    assign(socket, :helmet_last_surrender, payload)
   end
 
   # Only the pilot's own authenticated viewer can receive this snapshot.
