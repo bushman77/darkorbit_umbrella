@@ -20,6 +20,10 @@ export function renderHelmetEncounter(root, payload) {
   for (const title of root.querySelectorAll("[data-helmet-encounter-title]")) {
     title.textContent = name
   }
+  for (const label of root.querySelectorAll("[data-helmet-encounter-faction]")) {
+    label.textContent = "FACTION / " +
+      String(encounter.faction_name || "Unregistered Organization")
+  }
   for (const status of root.querySelectorAll("[data-helmet-encounter-kind]")) {
     status.textContent = kind + " · CRUISE PAUSED"
   }
