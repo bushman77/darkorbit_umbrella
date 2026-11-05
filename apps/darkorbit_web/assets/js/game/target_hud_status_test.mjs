@@ -66,3 +66,14 @@ test("a directly selected surrendered target works without tactical metadata", (
   assert.equal(surrenderedHudLabel(client({entities: [selected], selected: "npc-one"})),
     "SURRENDERED · Hauler-2")
 })
+
+test("future solar tactical ship classes can surrender without a lock", () => {
+  const own = {id: "npc-dart", kind: "npc", npcTypeId: "solar-dart-3",
+    state: "surrendered", displayName: "Sentinel-3"}
+  assert.equal(surrenderedHudLabel(client({entities: [own], tactical: true})),
+    "SURRENDERED · Sentinel-3")
+  assert.equal(surrenderedHudLabel(client({entities: [own], tactical: true, helmet: true})),
+    "SURRENDERED · Sentinel-3")
+  assert.equal(surrenderedHudLabel(client({entities: [
+    {...own, npcTypeId: "ambient-dart-3"}], tactical: true})), null)
+})
