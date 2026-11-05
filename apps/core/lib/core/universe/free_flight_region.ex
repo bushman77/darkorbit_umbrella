@@ -26,10 +26,10 @@ defmodule Core.Universe.FreeFlightRegion do
     }
   end
 
-  @doc "Face the actual SOL route when entering conventional flight."
+  @doc "Face the SOL route when entering a deep-space cockpit region."
   @spec entry(pos_integer(), map()) :: {:ok, map()} | {:error, atom()}
   def entry(player_id,
-        %{status: :traveling, free_flight: true, origin_position_km: from,
+        %{status: :traveling, origin_position_km: from,
           destination_position_km: to})
       when is_integer(player_id) and player_id > 0 and is_map(from) and is_map(to) do
     dx = to.x - from.x
@@ -43,6 +43,12 @@ defmodule Core.Universe.FreeFlightRegion do
         attitude: %{yaw: :math.atan2(-dx, dy), pitch: 0.0, roll: 0.0}
       }}
     end
+  end
+
+  def entry(player_id, %{status: :idle, location_id: nil, position_km: position})
+      when is_integer(player_id) and player_id > 0 and is_map(position) do
+    {:ok, %{map_id: map_id(player_id), position: definition(player_id).spawn,
+      attitude: %{yaw: 0.0, pitch: 0.0, roll: 0.0}}}
   end
 
   def entry(_player_id, _navigation), do: {:error, :free_flight_unavailable}
