@@ -8,12 +8,15 @@ defmodule DarkorbitWeb.HelmetSurrender do
 
   @none %{surrendered: false}
 
-  def from_world(%{entities: entities}, player_id) when is_list(entities) and not is_nil(player_id) do
+  def from_world(%{entities: entities}, player_id)
+      when is_list(entities) and not is_nil(player_id) do
     suffix = "-" <> to_string(player_id)
 
     Enum.find_value(entities, @none, fn
-      %{kind: :npc, state: :surrendered, npc_type_id: "solar-" <> _ = type_id} = npc ->
-        if String.ends_with?(type_id, suffix) do
+      %{kind: :npc, state: :surrendered, npc_type_id: type_id} = npc
+      when is_binary(type_id) ->
+        if String.starts_with?(type_id, "solar-") and
+             String.ends_with?(type_id, suffix) do
           %{surrendered: true, call_sign: Map.get(npc, :display_name) || "CONTACT"}
         end
 
