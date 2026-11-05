@@ -160,82 +160,13 @@
     </.form>
   </header>
 
-  <section id="navigation-computer" class="navigation-computer" role="dialog" aria-modal="true" aria-labelledby="nav-title">
-    <div class="nav-shell">
-      <nav class="hud-nav-rail" aria-label="Flight deck navigation">
-        <span class="hud-brand">
-          <.icon name="hero-rocket-launch" class="size-5" />
-          SPACE NOVA
-        </span>
-        <span class="hud-nav-current" aria-current="page">
-          <.icon name="hero-map" class="size-4" />
-          NAVIGATION
-        </span>
-        <a class="hud-nav-link" href={~p"/equipment"}>
-          <.icon name="hero-wrench-screwdriver" class="size-4" />
-          SHIP LOADOUT
-        </a>
-        <span class="hud-nav-location">SOL / NAVIGATION DECK</span>
-      </nav>
-      <div class="nav-heading">
-        <div>
-          <p class="nav-eyebrow">FLIGHT SYSTEMS // NAVIGATION DECK</p>
-          <h2 id="nav-title">Solar System Atlas</h2>
-          <p id="nav-subtitle" class="nav-subtitle">One star system · Sun, eight planets and Pluto · select a world to inspect.</p>
-        </div>
-        <button id="nav-helmet-open" class="nav-button" type="button" aria-controls="helmet-panel">
-          PILOT HMD · <span id="nav-helmet-status">NOT PAIRED</span>
-        </button>
-        <button id="nav-close" class="nav-button nav-close" type="button" aria-label="Close navigation computer">Enter cockpit <span class="text-cyan-300">[M / Esc]</span></button>
-      </div>
-      <section id="helmet-panel" hidden aria-label="Pilot HMD management"
-               class="mx-4 mb-4 rounded-xl border border-cyan-400/30 bg-slate-950 p-4 text-slate-100">
-        <div class="flex flex-wrap items-center justify-between gap-3">
-          <h3 class="font-bold tracking-wider text-cyan-200">PILOT HMD / HEADSET LINK</h3>
-          <button id="nav-helmet-close" type="button" class="nav-button">Close panel</button>
-        </div>
-        <p id="helmet-device-status" class="my-3 text-sm text-slate-300">No helmet paired</p>
-        <div id="helmet-unpaired">
-          <div class="flex flex-wrap items-start gap-4">
-            <canvas id="helmet-qr" width="220" height="220" class="rounded-lg bg-white"></canvas>
-            <div class="max-w-md space-y-2 text-sm text-slate-300">
-              <p>Scan once with your phone. The ship automatically authorizes it as a read-only SBS helmet.</p>
-              <label for="helmet-host" class="block font-semibold text-cyan-100">Reachable laptop address</label>
-              <input id="helmet-host" type="text" list="helmet-host-candidates"
-                     class="w-full rounded border border-slate-600 bg-slate-900 p-2 text-white"
-                     placeholder="http://192.168.1.100:4000" />
-              <datalist id="helmet-host-candidates"></datalist>
-              <p>The laptop's LAN IP is detected automatically. If you have multiple network interfaces,
-                choose another suggested address or enter one manually. The phone must be able to reach this address.</p>
-              <p id="helmet-pairing-message" role="status">Open this panel to generate a pairing invitation.</p>
-            </div>
-          </div>
-        </div>
-        <div id="helmet-paired" hidden class="space-y-3">
-          <p class="text-sm text-cyan-100">This helmet is remembered across disconnects and server restarts.
-            The phone displays black in the Atlas and renders SBS only in the combat cockpit.</p>
-          <button id="helmet-forget" class="nav-button nav-danger" type="button">Forget headset</button>
-        </div>
-      </section>
-      <div class="atlas-view-tabs" role="tablist" aria-label="Atlas navigation level">
-        <button id="nav-view-system" class="atlas-view-tab is-active" type="button"
-          role="tab" aria-selected="true" aria-controls="nav-solar-view">
-          <.icon name="hero-globe-alt" class="inline size-4" /> Solar System
-        </button>
-        <button id="nav-view-sector" class="atlas-view-tab" type="button"
-          role="tab" aria-selected="false" aria-controls="nav-sector-view">
-          <.icon name="hero-map" class="inline size-4" /> Sector 1-1
-        </button>
-        <span class="atlas-level-hint">SOL / ONE STAR SYSTEM</span>
-      </div>
 
+  <section id="navigation-computer" class="navigation-computer" role="dialog" aria-modal="true" aria-labelledby="nav-title">
+    <div class="nav-shell atlas-hud-shell">
+      <%!-- The map is the viewport. All instruments overlay it rather than taking grid space. --%>
       <section id="nav-solar-view" class="solar-atlas-layout" role="tabpanel"
         aria-labelledby="nav-view-system">
         <div class="solar-atlas-frame">
-          <div class="nav-map-caption">
-            <span>SOLAR SYSTEM // ORBITAL OVERVIEW</span>
-            <span>RIGHT-CLICK MAP FOR TARGET ACTIONS</span>
-          </div>
           <svg id="nav-solar-chart" viewBox="0 0 1000 600"
             aria-label="Schematic solar system orbital chart. Select the Sun, a planet, or Pluto."
             role="group">
@@ -245,6 +176,10 @@
             <p id="nav-solar-context-target" class="solar-context-target">TARGET / EARTH</p>
             <button type="button" data-solar-action="analyze">Analyze target</button>
             <button type="button" data-solar-action="navigate">Navigate to target</button>
+          </div>
+          <div class="nav-map-caption">
+            <span>SOL // ORBITAL OVERVIEW</span>
+            <span>SCHEMATIC / NOT LIVE POSITIONS</span>
           </div>
           <div class="solar-chart-controls">
             <div class="solar-zoom-group" aria-label="Solar map view">
@@ -256,26 +191,11 @@
             <p>SCHEMATIC / NOT LIVE POSITIONS</p>
           </div>
         </div>
-
-        <aside class="solar-atlas-panel" aria-label="Solar system body details">
-          <p class="nav-eyebrow">SOL / CELESTIAL CATALOG</p>
-          <div class="solar-system-count">1 STAR · 8 PLANETS · PLUTO</div>
-          <div id="nav-system-bodies" class="solar-body-list"
-            aria-label="Select a celestial body"></div>
-          <div class="solar-selected-body">
-            <p class="nav-eyebrow">SELECTED BODY</p>
-            <div class="solar-selected-inline">
-              <h3 id="nav-solar-name">Earth</h3>
-              <p id="nav-solar-type">Planet</p>
+        <aside class="atlas-hud-right" aria-label="Navigation instrument overlays">
+          <section id="nav-flight-panel" class="hud-flight-widget" aria-label="Ship and cruise status">
+            <div class="hud-widget-heading">
+              <span>FLIGHT COMPUTER // SOL-01</span>
             </div>
-            <details id="nav-solar-analysis" class="solar-aux-details">
-              <summary>Analyze orbital data</summary>
-              <dl class="solar-body-metrics">
-                <div><dt>MEAN SOLAR DISTANCE</dt><dd id="nav-solar-distance">1 AU</dd></div>
-                <div><dt>ORBITAL PERIOD</dt><dd id="nav-solar-period">1 Earth year</dd></div>
-              </dl>
-            </details>
-          </div>
           <div class="solar-navigation-console">
             <p class="nav-eyebrow">INTERPLANETARY NAVIGATION / SOL-01</p>
             <div id="nav-solar-state" class="nav-state">CONNECTING</div>
@@ -303,6 +223,35 @@
               Abort transit
             </button>
           </div>
+          </section>
+          <section id="nav-target-panel" class="solar-atlas-panel hud-target-widget"
+            aria-label="Selected celestial target" hidden>
+            <div class="hud-widget-heading">
+              <span>TARGET / ANALYSIS</span>
+              <button id="nav-target-dismiss" type="button" class="hud-widget-dismiss"
+                aria-label="Close target analysis">×</button>
+            </div>
+          <div class="solar-selected-body">
+            <p class="nav-eyebrow">SELECTED BODY</p>
+            <div class="solar-selected-inline">
+              <h3 id="nav-solar-name">Earth</h3>
+              <p id="nav-solar-type">Planet</p>
+            </div>
+            <details id="nav-solar-analysis" class="solar-aux-details">
+              <summary>Analyze orbital data</summary>
+              <dl class="solar-body-metrics">
+                <div><dt>MEAN SOLAR DISTANCE</dt><dd id="nav-solar-distance">1 AU</dd></div>
+                <div><dt>ORBITAL PERIOD</dt><dd id="nav-solar-period">1 Earth year</dd></div>
+              </dl>
+            </details>
+          </div>
+
+            <details class="solar-aux-details hud-catalog-drawer">
+              <summary>Celestial catalog · 1 star / 8 planets / Pluto</summary>
+              <div id="nav-system-bodies" class="solar-body-list"
+                aria-label="Select a celestial body"></div>
+            </details>
+          </section>
           <details class="solar-aux-details solar-contacts-drawer">
             <summary>Sensor contacts</summary>
             <section class="hud-traffic-panel solar-contacts-content"
@@ -319,7 +268,6 @@
           </details>
         </aside>
       </section>
-
       <section id="nav-sector-view" role="tabpanel" aria-labelledby="nav-view-sector" hidden>
       <div class="nav-layout">
         <div class="nav-map-frame">
@@ -364,7 +312,62 @@
         </aside>
       </div>
       </section>
-      <%!-- Pilot control preferences are client-side; never part of combat authority. --%>
+
+      <header class="atlas-hud-top" aria-label="Space Nova navigation controls">
+        <span class="hud-brand"><.icon name="hero-rocket-launch" class="size-5" /> SPACE NOVA</span>
+        <h2 id="nav-title">Solar System Atlas</h2>
+        <p id="nav-subtitle" class="sr-only">One star system · Sun, eight planets and Pluto · select a world to inspect.</p>
+        <div class="atlas-view-tabs" role="tablist" aria-label="Atlas navigation level">
+          <button id="nav-view-system" class="atlas-view-tab is-active" type="button"
+            role="tab" aria-selected="true" aria-controls="nav-solar-view">
+            <.icon name="hero-globe-alt" class="inline size-4" /> Solar System
+          </button>
+          <button id="nav-view-sector" class="atlas-view-tab" type="button"
+            role="tab" aria-selected="false" aria-controls="nav-sector-view">
+            <.icon name="hero-map" class="inline size-4" /> Sector 1-1
+          </button>
+        </div>
+        <a class="hud-nav-link atlas-loadout-link" href={~p"/equipment"}>
+          <.icon name="hero-wrench-screwdriver" class="size-4" /> Loadout
+        </a>
+        <button id="nav-helmet-open" class="nav-button hud-mini-button" type="button"
+          aria-controls="helmet-panel">HMD: <span id="nav-helmet-status">NOT PAIRED</span></button>
+        <button id="nav-close" class="nav-button nav-close hud-mini-button" type="button"
+          aria-label="Enter cockpit">Cockpit <span class="text-cyan-300">[M]</span></button>
+      </header>
+      <section id="helmet-panel" hidden aria-label="Pilot HMD management"
+               class="mx-4 mb-4 rounded-xl border border-cyan-400/30 bg-slate-950 p-4 text-slate-100">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <h3 class="font-bold tracking-wider text-cyan-200">PILOT HMD / HEADSET LINK</h3>
+          <button id="nav-helmet-close" type="button" class="nav-button">Close panel</button>
+        </div>
+        <p id="helmet-device-status" class="my-3 text-sm text-slate-300">No helmet paired</p>
+        <div id="helmet-unpaired">
+          <div class="flex flex-wrap items-start gap-4">
+            <canvas id="helmet-qr" width="220" height="220" class="rounded-lg bg-white"></canvas>
+            <div class="max-w-md space-y-2 text-sm text-slate-300">
+              <p>Scan once with your phone. The ship automatically authorizes it as a read-only SBS helmet.</p>
+              <label for="helmet-host" class="block font-semibold text-cyan-100">Reachable laptop address</label>
+              <input id="helmet-host" type="text" list="helmet-host-candidates"
+                     class="w-full rounded border border-slate-600 bg-slate-900 p-2 text-white"
+                     placeholder="http://192.168.1.100:4000" />
+              <datalist id="helmet-host-candidates"></datalist>
+              <p>The laptop's LAN IP is detected automatically. If you have multiple network interfaces,
+                choose another suggested address or enter one manually. The phone must be able to reach this address.</p>
+              <p id="helmet-pairing-message" role="status">Open this panel to generate a pairing invitation.</p>
+            </div>
+          </div>
+        </div>
+        <div id="helmet-paired" hidden class="space-y-3">
+          <p class="text-sm text-cyan-100">This helmet is remembered across disconnects and server restarts.
+            The phone displays black in the Atlas and renders SBS only in the combat cockpit.</p>
+          <button id="helmet-forget" class="nav-button nav-danger" type="button">Forget headset</button>
+        </div>
+      </section>
+
+      <%!-- Control preferences are available on demand instead of reserving a footer. --%>
+      <details id="nav-control-drawer" class="hud-control-drawer">
+        <summary>Flight controls <span aria-hidden="true">⚙</span></summary>
       <section aria-label="Cockpit control preferences"
                class="hud-preferences mx-4 mb-4 rounded-xl border border-cyan-400/25 bg-slate-950/80 p-3 text-slate-200">
         <div class="flex flex-wrap items-center gap-4">
@@ -387,13 +390,13 @@
         </p>
       </section>
 
+      </details>
       <div class="hud-keybar" aria-label="Navigation keyboard commands">
-        <span class="hud-keybar-title">NAVIGATION DECK</span>
+        <span class="hud-keybar-title">SOL / NAV</span>
         <span><kbd>M</kbd> COCKPIT</span>
-        <span><kbd>ESC</kbd> RETURN</span>
-        <span><kbd>CLICK</kbd> SELECT BODY</span>
-        <span><kbd>RMB</kbd> TARGET ACTIONS</span>
-        <span class="hud-keybar-end">SOL / FLIGHT SYSTEMS</span>
+        <span><kbd>CLICK</kbd> SELECT</span>
+        <span><kbd>RMB</kbd> ANALYZE / NAVIGATE</span>
+        <span class="hud-keybar-end">AI NAVIGATION ONLINE · SOL</span>
       </div>
     </div>
   </section>
