@@ -61,4 +61,6 @@ jobs:
             apps/darkorbit_web/assets/js/game/solar_atlas_view_test.mjs \
             apps/darkorbit_web/assets/js/game/solar_context_menu_test.mjs \
             apps/darkorbit_web/assets/js/game/atlas_hud_layout_test.mjs \
-            apps/darkorbit_web/assets/js/game/atlas_hud_markup_test.mjs
+            apps/darkorbit_web/assets/js/game/atlas_hud_markup_test.mjs \
+            apps/darkorbit_web/assets/js/game/helmet_alignment_keys_test.mjs \
+            apps/darkorbit_web/assets/js/game/helmet_keyboard_only_test.mjs
