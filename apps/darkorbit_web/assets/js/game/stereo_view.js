@@ -397,11 +397,13 @@ export class StereoSpaceView {
     // non-stereoscopic banner that would be uncomfortable in a headset.
     ctx.fillStyle = planetWarning
       ? planetWarning.level === "critical" ? "#ff8f90" : "#ffcf7a"
+      : surrenderLabel ? "#81ffaf"
       : flyby ? "#7eead6"
       : range?.inRange === false ? "#ff9b96" : "#9fc7df"
     ctx.font = "bold 22px monospace"
     ctx.fillText(planetWarning
       ? planetWarning.level.toUpperCase() + " · " + planetWarning.detail
+      : surrenderLabel ? "SURRENDER OFFER · ACCEPT OR RETREAT ON LAPTOP"
       : flyby ? "CLOSE PASS · " + String(flyby.call_sign).slice(0, 24) +
         " · HAIL VIA ATLAS"
       : range ? range.label :
