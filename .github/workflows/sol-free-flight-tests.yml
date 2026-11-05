@@ -27,6 +27,10 @@ on:
       - "apps/darkorbit_web/lib/darkorbit_web/controllers/helmet_html/show.html.heex"
       - "apps/darkorbit_web/test/darkorbit_web/channels/helmet_channel_test.exs"
       - "apps/darkorbit_web/assets/js/game/helmet_client.mjs"
+      - "apps/darkorbit_web/assets/js/game/helmet_control.mjs"
+      - "apps/darkorbit_web/assets/js/game/helmet_alignment_keys.mjs"
+      - "apps/darkorbit_web/assets/js/game/helmet_alignment_keys_test.mjs"
+      - "apps/darkorbit_web/assets/js/game/helmet_keyboard_only_test.mjs"
       - "apps/darkorbit_web/assets/js/game/helmet_planetary_navigation*.mjs"
       - "apps/darkorbit_web/assets/js/game/helmet_screen_wake*.mjs"
       - "apps/darkorbit_web/assets/js/game/helmet_encounter_view.mjs"
@@ -91,6 +95,9 @@ jobs:
         run: |
           node --test apps/darkorbit_web/assets/js/game/solar_atlas_view_test.mjs
           node --test apps/darkorbit_web/assets/js/game/orbital_regions_test.mjs
+          node --test apps/darkorbit_web/assets/js/game/helmet_alignment_keys_test.mjs
+          node --test apps/darkorbit_web/assets/js/game/helmet_alignment_test.mjs
+          node --test apps/darkorbit_web/assets/js/game/helmet_keyboard_only_test.mjs
           node --test apps/darkorbit_web/assets/js/game/helmet_screen_wake_test.mjs
           node --test apps/darkorbit_web/assets/js/game/helmet_planetary_navigation_test.mjs
           node --test apps/darkorbit_web/assets/js/game/helmet_encounter_view_test.mjs
