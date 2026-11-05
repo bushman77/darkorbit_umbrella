@@ -21,7 +21,7 @@ config :darkorbit_web, DarkorbitWeb.Endpoint,
   # Bind all interfaces by default for LAN headset access. Run on a trusted
   # network; set DARKORBIT_LOOPBACK_ONLY=1 to restrict access to this laptop.
   http: [ip: if(System.get_env("DARKORBIT_LOOPBACK_ONLY") == "1",
-    do: {127, 0, 0, 1}, else: {0, 0, 0, 0})],
+    do: {127, 0, 0, 1}, else: {0, 0, 0, 0}), port: 4000],
   check_origin: false,
   code_reloader: true,
   debug_errors: true,
@@ -31,17 +31,18 @@ config :darkorbit_web, DarkorbitWeb.Endpoint,
     tailwind: {Tailwind, :install_and_run, [:darkorbit_web, ~w(--watch)]}
   ]
 
-# The native Linux client can use a trusted local HTTPS endpoint.
-# Generate the developer certificate with mkcert (see clients/tauri/README.md)
-# and opt in with DARKORBIT_DEV_HTTPS=1. HTTP on port 4000 remains available
-# for ordinary browser testing and HMD development.
+# Trusted local HTTPS replaces local HTTP on the SAME port 4000. Generate
+# certificates with mkcert (see clients/tauri/README.md) and opt in with
+# DARKORBIT_DEV_HTTPS=1. HTTP remains the default in development.
 if System.get_env("DARKORBIT_DEV_HTTPS") == "1" do
   cert_dir = Path.expand("../apps/darkorbit_web/priv/cert", __DIR__)
 
   config :darkorbit_web, DarkorbitWeb.Endpoint,
+    http: false,
+    url: [host: "localhost", scheme: "https", port: 4000],
     https: [
       ip: {127, 0, 0, 1},
-      port: 4001,
+      port: 4000,
       cipher_suite: :strong,
       certfile: Path.join(cert_dir, "localhost.pem"),
       keyfile: Path.join(cert_dir, "localhost-key.pem")

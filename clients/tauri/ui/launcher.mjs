@@ -1,5 +1,6 @@
 import {
-  DEFAULT_SERVER_URL, LOCAL_SERVER_URL, gameUrl, registrationUrl, homeUrl, serverOrigin
+  DEFAULT_SERVER_URL, LOCAL_SERVER_URL, gameUrl, registrationUrl, homeUrl, serverOrigin,
+  initialServerOrigin
 } from "./server_url.mjs"
 
 const input = document.querySelector("#server-url")
@@ -11,7 +12,7 @@ const homepage = document.querySelector("#visit-home")
 const storageKey = "sbs-space-server-origin"
 
 try {
-  input.value = localStorage.getItem(storageKey) || DEFAULT_SERVER_URL
+  input.value = initialServerOrigin(localStorage.getItem(storageKey))
 } catch {
   input.value = DEFAULT_SERVER_URL
 }

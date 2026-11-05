@@ -17,8 +17,11 @@ client for sector 1-1.
 - A local `postgres` role with password `postgres` for the checked-in
   development and test configuration, or equivalent local config overrides
 
-Production reads `DATABASE_URL`, `SECRET_KEY_BASE`, `POOL_SIZE`, `PORT`, and
-optionally `ECTO_IPV6` from the environment. Never commit production secrets.
+Production serves HTTPS directly on TCP port 4000 (no reverse proxy required).
+It reads `DATABASE_URL`, `SECRET_KEY_BASE`, `SPACE_NOVA_TLS_CERTFILE`,
+`SPACE_NOVA_TLS_KEYFILE`, optional `PHX_HOST` / `POOL_SIZE` / `ECTO_IPV6`.
+See [the port-4000 deployment guide](docs/space-nova-port-4000.md).
+Never commit production secrets or certificate private keys.
 
 ## Development
 

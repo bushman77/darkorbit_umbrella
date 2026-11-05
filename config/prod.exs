@@ -6,20 +6,14 @@ import Config
 # which you should run after static files are built and
 # before starting your production server.
 config :darkorbit_web, DarkorbitWeb.Endpoint,
-  url: [host: "example.com", port: 80],
+  url: [host: "spacenova.ddns.net", scheme: "https", port: 4000],
   cache_static_manifest: "priv/static/cache_manifest.json"
 
-# Force using SSL in production. This also sets the "strict-security-transport" header,
-# known as HSTS. If you have a health check endpoint, you may want to exclude it below.
-# Note `:force_ssl` is required to be set at compile-time.
+# TLS terminates in Bandit rather than a proxy. Do not trust X-Forwarded-Proto
+# headers from unauthenticated clients. HSTS applies to production HTTPS.
+# Note `:force_ssl` is a compile-time endpoint setting.
 config :darkorbit_web, DarkorbitWeb.Endpoint,
-  force_ssl: [
-    rewrite_on: [:x_forwarded_proto],
-    exclude: [
-      # paths: ["/health"],
-      hosts: ["localhost", "127.0.0.1"]
-    ]
-  ]
+  force_ssl: [hsts: true]
 
 # Configure Swoosh API Client
 config :swoosh, :api_client, Swoosh.ApiClient.Req

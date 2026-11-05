@@ -7,8 +7,8 @@ import Config
 # any compile-time configuration in here, as it won't be applied.
 # The block below contains prod specific runtime configuration.
 
-config :darkorbit_web, DarkorbitWeb.Endpoint,
-  http: [port: String.to_integer(System.get_env("PORT", "4000"))]
+# All game listeners use TCP port 4000. Development serves HTTP or HTTPS;
+# production serves HTTPS directly without requiring a reverse proxy.
 
 if config_env() == :prod do
   database_url =
@@ -40,16 +40,28 @@ if config_env() == :prod do
       You can generate one by calling: mix phx.gen.secret
       """
 
-  # TLS terminates at a reverse proxy; Phoenix listens only on loopback.
+  # Direct TLS on port 4000. PEM paths point to separately managed credentials.
+  tls_certfile =
+    System.get_env("SPACE_NOVA_TLS_CERTFILE") ||
+      raise "SPACE_NOVA_TLS_CERTFILE must point to the production TLS certificate PEM"
+
+  tls_keyfile =
+    System.get_env("SPACE_NOVA_TLS_KEYFILE") ||
+      raise "SPACE_NOVA_TLS_KEYFILE must point to the production TLS private key PEM"
+
   config :darkorbit_web, DarkorbitWeb.Endpoint,
     url: [
-      host: System.get_env("PHX_HOST", "localhost"),
+      host: System.get_env("PHX_HOST", "spacenova.ddns.net"),
       scheme: "https",
-      port: 443
+      port: 4000
     ],
-    http: [
-      ip: {127, 0, 0, 1},
-      port: String.to_integer(System.get_env("PORT", "4000"))
+    http: false,
+    https: [
+      ip: {0, 0, 0, 0},
+      port: 4000,
+      cipher_suite: :strong,
+      certfile: tls_certfile,
+      keyfile: tls_keyfile
     ],
     server: true,
     secret_key_base: secret_key_base

@@ -1,8 +1,16 @@
-export const DEFAULT_SERVER_URL = "https://spacenova.ddns.net"
+export const DEFAULT_SERVER_URL = "https://spacenova.ddns.net:4000"
 export const LOCAL_SERVER_URL = "http://127.0.0.1:4000"
 
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"])
 const LAUNCH_ROUTES = new Set(["/", "/play", "/register"])
+
+// Older launcher builds persisted origins without the explicit game port.
+export function initialServerOrigin(saved) {
+  if (saved === "https://spacenova.ddns.net") return DEFAULT_SERVER_URL
+  if (saved === "http://127.0.0.1") return LOCAL_SERVER_URL
+  if (saved === "http://localhost") return "http://localhost:4000"
+  return saved || DEFAULT_SERVER_URL
+}
 
 // Only accept a server origin. Never carry arbitrary paths, credentials or
 // query strings into an authenticated Phoenix browser session.
@@ -26,6 +34,9 @@ export function serverOrigin(raw) {
   }
   if (url.pathname !== "/" || url.search || url.hash) {
     throw new Error("Enter only the server address, without a path, query or fragment.")
+  }
+  if (url.port !== "4000") {
+    throw new Error("Space Nova servers use port 4000. Include :4000 in the address.")
   }
   if (url.protocol === "http:" && !LOOPBACK_HOSTS.has(url.hostname)) {
     throw new Error("Remote multiplayer servers must use HTTPS.")
