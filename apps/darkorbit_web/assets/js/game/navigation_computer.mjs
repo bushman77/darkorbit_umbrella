@@ -469,6 +469,11 @@ export class NavigationComputer {
     if(drive)drive.textContent=nav?.free_flight ? "MANUAL FLIGHT · CRUISE PAUSED" :
       nav?.pending_encounter ? "ENCOUNTER HOLD · CRUISE PAUSED" :
       traveling ? "SUBLIGHT INTERPLANETARY CRUISE" : "CONVENTIONAL"
+    const traffic=this.root.querySelector("#nav-solar-traffic-density")
+    if(traffic) {
+      const pressure=Math.round(Math.max(0,Math.min(1,Number(nav?.traffic_pressure)||0))*100)
+      traffic.textContent=`${String(nav?.traffic_band||"quiet").toUpperCase()} · ${pressure}%`
+    }
     const speed=this.root.querySelector("#nav-solar-speed")
     if(speed)speed.textContent=nav?.free_flight ? "0 game km/s · manual flight" :
       nav?.pending_encounter ? "0 game km/s · held at encounter" :
