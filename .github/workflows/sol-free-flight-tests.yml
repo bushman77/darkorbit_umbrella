@@ -23,6 +23,14 @@ on:
       - "apps/core/test/core/world/world_test.exs"
       - "apps/darkorbit/lib/darkorbit/world.ex"
       - "apps/darkorbit_web/lib/darkorbit_web/channels/world_channel.ex"
+      - "apps/darkorbit_web/lib/darkorbit_web/channels/helmet_channel.ex"
+      - "apps/darkorbit_web/lib/darkorbit_web/controllers/helmet_html/show.html.heex"
+      - "apps/darkorbit_web/test/darkorbit_web/channels/helmet_channel_test.exs"
+      - "apps/darkorbit_web/assets/js/game/helmet_client.mjs"
+      - "apps/darkorbit_web/assets/js/game/helmet_planetary_navigation*.mjs"
+      - "apps/darkorbit_web/assets/js/game/helmet_screen_wake*.mjs"
+      - "apps/darkorbit_web/assets/js/game/helmet_encounter_view.mjs"
+      - "apps/darkorbit_web/assets/js/game/planetary_body.js"
       - "apps/darkorbit_web/test/darkorbit_web/channels/world_channel_test.exs"
       - "apps/darkorbit_web/assets/js/game/navigation_computer.mjs"
       - "apps/darkorbit_web/assets/js/game/client.js"
@@ -76,8 +84,14 @@ jobs:
           mix test apps/core/test/core/universe/free_flight_region_test.exs
           mix test apps/core/test/core/world/world_test.exs
       - name: Test authenticated Phoenix handoffs
-        run: mix test apps/darkorbit_web/test/darkorbit_web/channels/world_channel_test.exs
+        run: |
+          mix test apps/darkorbit_web/test/darkorbit_web/channels/world_channel_test.exs
+          mix test apps/darkorbit_web/test/darkorbit_web/channels/helmet_channel_test.exs
       - name: Test navigation controls and map ID validation
         run: |
           node --test apps/darkorbit_web/assets/js/game/solar_atlas_view_test.mjs
           node --test apps/darkorbit_web/assets/js/game/orbital_regions_test.mjs
+          node --test apps/darkorbit_web/assets/js/game/helmet_screen_wake_test.mjs
+          node --test apps/darkorbit_web/assets/js/game/helmet_planetary_navigation_test.mjs
+          node --test apps/darkorbit_web/assets/js/game/helmet_encounter_view_test.mjs
+          node --test apps/darkorbit_web/assets/js/game/planetary_body_test.mjs
