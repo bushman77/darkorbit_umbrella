@@ -514,7 +514,11 @@ export class NavigationComputer {
     }
     // Tab and Shift+Tab remain inside the modal navigation computer.
     if (this.isOpen && event.code === "Tab" && !event.altKey && !event.ctrlKey && !event.metaKey) {
-      const focusable = [...this.root.querySelectorAll("button:not(:disabled), input:not(:disabled)")].filter(node => !node.hidden)
+      const focusable = [...this.root.querySelectorAll(
+        'button:not(:disabled), input:not(:disabled), a[href], summary, [role="button"][tabindex]'
+      )].filter(node => !node.hidden &&
+        !node.closest?.("[hidden]") &&
+        (typeof node.getClientRects !== "function" || node.getClientRects().length > 0))
       const first = focusable[0]
       const last = focusable.at(-1)
       if ((event.shiftKey && document.activeElement === first) ||
