@@ -7,6 +7,8 @@ defmodule DarkorbitWeb.HelmetChannel do
 
   alias Darkorbit.{Helmets, World}
   alias DarkorbitWeb.{HelmetManager, HelmetNetwork}
+  alias Core.Universe.Navigation, as: SolarNavigation
+  alias Core.World.SessionManager
 
   @impl true
   def join("helmet:control:" <> id, _params,
@@ -131,6 +133,12 @@ defmodule DarkorbitWeb.HelmetChannel do
 
         push(socket, "helmet_mode", %{mode: "combat"})
 
+        # A planet is rendered from authenticated SOL navigation metadata.
+        # The phone must receive the same visual-only planetary_view as the
+        # laptop. Never forward whole navigation, cargo or reputation state.
+        push(socket, "helmet_navigation",
+          visual_navigation_for_player(socket.assigns.helmet_player_id))
+
         case World.snapshot(map_id) do
           {:ok, map} ->
             push(socket, "helmet_snapshot",
@@ -173,6 +181,7 @@ defmodule DarkorbitWeb.HelmetChannel do
                                helmet_player_id: helmet_player_id}} = socket)
       when player_id == helmet_player_id do
     push(socket, "helmet_encounter", helmet_encounter(navigation))
+    push(socket, "helmet_navigation", visual_navigation(navigation))
     {:noreply, socket}
   end
 
@@ -216,6 +225,22 @@ defmodule DarkorbitWeb.HelmetChannel do
 
   # Unrelated process messages must never tear down a registered HMD.
   def handle_info(_message, socket), do: {:noreply, socket}
+
+  # Only the pilot's own authenticated viewer can receive this snapshot.
+  # Rendering details are untrusted presentation hints, not physical state.
+  defp visual_navigation_for_player(player_id) do
+    server = Module.concat(SessionManager, SolarNavigation)
+
+    case SolarNavigation.snapshot(server, player_id) do
+      {:ok, navigation} -> visual_navigation(navigation)
+      _ -> %{planetary_view: nil}
+    end
+  end
+
+  defp visual_navigation(navigation) when is_map(navigation),
+    do: %{planetary_view: Map.get(navigation, :planetary_view)}
+
+  defp visual_navigation(_), do: %{planetary_view: nil}
 
   defp helmet_encounter(%{tactical_encounter: tactical}) when is_map(tactical),
     do: %{paused: false, encounter: nil}
