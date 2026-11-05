@@ -4,9 +4,9 @@ export const surrenderedTargetLabel = entity =>
     ? "SURRENDERED · " + String(entity.displayName || "CONTACT").slice(0, 19)
     : null
 
-// A tactical Scow belongs to the pilot whose ID is embedded in its
-// authoritative NPC type ID. A target lock is NOT required for surrender
-// telemetry, and another pilot's surrendered Scow must not be shown.
+// An active solar tactical opponent belongs to the pilot whose ID is
+// embedded in its authoritative NPC type ID (solar-<class>-<pilot_id>).
+// No target lock is required, and other pilots' NPCs are excluded.
 export function surrenderedHudLabel(client) {
   const selected = client?.entities?.get(client.selectedTargetId)
   const selectedLabel = surrenderedTargetLabel(selected)
@@ -17,9 +17,14 @@ export function surrenderedHudLabel(client) {
     return null
   if (client?.selfId == null) return null
 
-  const ownedScowId = "solar-scow-" + client.selfId
+  const pilotSuffix = "-" + client.selfId
   for (const entity of client.entities?.values() || []) {
-    if (entity.npcTypeId === ownedScowId) return surrenderedTargetLabel(entity)
+    if (typeof entity.npcTypeId === "string" &&
+        entity.npcTypeId.startsWith("solar-") &&
+        entity.npcTypeId.endsWith(pilotSuffix)) {
+      const label = surrenderedTargetLabel(entity)
+      if (label) return label
+    }
   }
   return null
 }
