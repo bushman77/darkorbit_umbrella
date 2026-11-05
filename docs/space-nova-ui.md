@@ -46,3 +46,18 @@ not proof that corresponding backend systems exist.
    state and telemetry readouts using the same shared tokens.
 4. User-test keyboard focus, accessibility, text overflow, zoom and VR/SBS
    comfort, then refine spacing against the reference concept.
+
+## Fullscreen Atlas HUD (subsequent pass)
+
+The SOL map and sector chart are now edge-to-edge surfaces with a compact
+floating top bar, right-side instrument stack, contextual target analysis,
+collapsible contact/flight telemetry, and compact bottom control hints.
+Right-click Analyze/Navigate continues to invoke the existing server-owned
+navigation logic. Selecting a celestial body opens the target card; dismiss
+it to clear the view without clearing the selected body.
+
+The right-side instrument stack has a drag grip in its heading. Drag it, or
+focus the grip and use arrow keys (Shift for larger increments). The position
+is stored locally in the browser, bounded to the current viewport, and can
+be restored with the top-bar Reset HUD control. The rail and the map itself
+stay stationary. Independent widget docking remains future work.

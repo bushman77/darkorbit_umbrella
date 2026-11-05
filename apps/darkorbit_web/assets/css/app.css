@@ -1832,3 +1832,17 @@ body:has(#helmet-client) {
   .navigation-computer .hud-keybar {gap:.35rem;font-size:.52rem;}
   .navigation-computer .hud-keybar kbd {font-size:.52rem;}
 }
+
+/* Movable instrument stack, controlled by a deliberate grip only.
+   The map and flight buttons retain their normal pointer behavior. */
+.navigation-computer .hud-widget-grip {
+  cursor:grab; user-select:none; touch-action:none;
+}
+.navigation-computer .hud-widget-grip.is-dragging {cursor:grabbing;}
+.navigation-computer .hud-widget-grip:focus-visible {
+  outline:2px solid #8cf6ff; outline-offset:3px;
+}
+.navigation-computer .hud-reset-button {
+  display:grid; place-items:center; width:29px; padding:.25rem;
+  font-size:1.1rem;
+}

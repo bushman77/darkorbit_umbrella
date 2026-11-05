@@ -193,8 +193,11 @@
         </div>
         <aside class="atlas-hud-right" aria-label="Navigation instrument overlays">
           <section id="nav-flight-panel" class="hud-flight-widget" aria-label="Ship and cruise status">
-            <div class="hud-widget-heading">
+            <div id="nav-hud-drag" class="hud-widget-heading hud-widget-grip"
+              role="button" tabindex="0"
+              aria-label="Move instrument stack: drag or use arrow keys">
               <span>FLIGHT COMPUTER // SOL-01</span>
+              <span aria-hidden="true">⠿</span>
             </div>
           <div class="solar-navigation-console">
             <p class="nav-eyebrow">INTERPLANETARY NAVIGATION / SOL-01</p>
@@ -330,6 +333,8 @@
         <a class="hud-nav-link atlas-loadout-link" href={~p"/equipment"}>
           <.icon name="hero-wrench-screwdriver" class="size-4" /> Loadout
         </a>
+        <button id="nav-hud-reset" class="nav-button hud-mini-button hud-reset-button"
+          type="button" aria-label="Reset instrument positions" title="Reset HUD positions">↺</button>
         <button id="nav-helmet-open" class="nav-button hud-mini-button" type="button"
           aria-controls="helmet-panel">HMD: <span id="nav-helmet-status">NOT PAIRED</span></button>
         <button id="nav-close" class="nav-button nav-close hud-mini-button" type="button"

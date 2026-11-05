@@ -5,6 +5,7 @@ import {
 import {findSolarBody, SOLAR_FOCUSES} from "./solar_system.mjs"
 import {drawSolarAtlas, renderSolarDetails} from "./solar_atlas.mjs"
 import {solarMenuTarget,canNavigateSolar} from "./solar_context_menu.mjs"
+import {setupAtlasHudDrag} from "./atlas_hud_layout.mjs"
 
 const NS = "http://www.w3.org/2000/svg"
 const number = value => Math.round(value).toLocaleString("en-US")
@@ -68,6 +69,12 @@ export class NavigationComputer {
 
   start() {
     this.solarSvg = this.root.querySelector("#nav-solar-chart")
+    setupAtlasHudDrag({
+      root:this.root,
+      panel:this.root.querySelector(".atlas-hud-right"),
+      grip:this.root.querySelector("#nav-hud-drag"),
+      reset:this.root.querySelector("#nav-hud-reset"),
+    })
     this.solarMenu = this.root.querySelector("#nav-solar-context-menu")
     this.solarContextBodyId = null
     this.solarSvg?.addEventListener("contextmenu", event => {
