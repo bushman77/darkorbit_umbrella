@@ -33,4 +33,6 @@ test("malformed map IDs and duplicate transitions are rejected", () => {
   assert.equal(shouldEnterOrbitalRegion("sol:venus", "sol:earth"), true)
   assert.equal(shouldEnterOrbitalRegion("sol:venus", "1-1"), true)
   assert.equal(shouldEnterOrbitalRegion("sol:earth", "sol:venus", true), false)
+  assert.equal(validOrbitalMapId("sol:free_123"), true)
+  assert.equal(shouldEnterOrbitalRegion("sol:earth", "sol:free_123"), true)
 })

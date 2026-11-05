@@ -10,6 +10,7 @@ defmodule Darkorbit.World do
   alias Core.World, as: Simulation
   alias Core.Universe.Navigation, as: SolarNavigation
   alias Core.Universe.OrbitalEntry
+  alias Core.Universe.FreeFlightRegion
   alias Core.World.SessionManager
   alias Core.World.MapDefinition
   alias Darkorbit.Accounts
@@ -31,18 +32,24 @@ defmodule Darkorbit.World do
       # Only the test environment runs the isolated legacy Sector 1-1
       # channel fixtures. In production EVERY planet (including Earth)
       # receives the same physical orbital region and collision mechanics.
-      if @legacy_test_earth_sector and navigation.location_id == "earth" and
-           navigation.arrival_origin_id == nil do
+      if navigation.status == :traveling and navigation.free_flight do
+        with :ok <- FreeFlightRegion.ensure_started(user_id) do
+          FreeFlightRegion.entry(user_id, navigation)
+        end
+      else
+        if @legacy_test_earth_sector and navigation.location_id == "earth" and
+             navigation.arrival_origin_id == nil do
         {:ok, %{
           map_id: "1-1",
           position: MapDefinition.starting_map().spawn,
           attitude: %{yaw: 0.0, pitch: 0.0, roll: 0.0}
         }}
       else
-        OrbitalEntry.entry(
-          navigation.arrival_origin_id, navigation.location_id,
-          user_id, navigation.voyage_number
-        )
+          OrbitalEntry.entry(
+            navigation.arrival_origin_id, navigation.location_id,
+            user_id, navigation.voyage_number
+          )
+        end
       end
     end
   end
@@ -155,6 +162,8 @@ defmodule Darkorbit.World do
   defdelegate solar_snapshot(session_id), to: Simulation
   defdelegate solar_set_course(session_id, destination_id), to: Simulation
   defdelegate solar_cancel_course(session_id), to: Simulation
+  defdelegate solar_enter_free_flight(session_id), to: Simulation
+  defdelegate solar_resume_cruise(session_id), to: Simulation
   defdelegate solar_hail(session_id, contact_id), to: Simulation
   defdelegate solar_resolve_encounter(session_id, encounter_id, choice), to: Simulation
   defdelegate solar_enter_tactical(session_id, encounter_id), to: Simulation

@@ -33,6 +33,8 @@ export class NavigationComputer {
     solarSetCourse = (_id, done) => done(false, null, "unavailable"),
     solarCancelCourse = done => done(false, null, "unavailable"),
     solarHail = (_id, done) => done(false, null, "unavailable"),
+    solarEnterFreeFlight = done => done(false, null, "unavailable"),
+    solarResumeCruise = done => done(false, null, "unavailable"),
     onOpen, onClose}) {
     this.root = root
     this.getEntities = getEntities
@@ -44,6 +46,8 @@ export class NavigationComputer {
     this.solarSetCourse = solarSetCourse
     this.solarCancelCourse = solarCancelCourse
     this.solarHail = solarHail
+    this.solarEnterFreeFlight = solarEnterFreeFlight
+    this.solarResumeCruise = solarResumeCruise
     this.onOpen = onOpen
     this.onClose = onClose
     this.draft = []
@@ -211,8 +215,9 @@ export class NavigationComputer {
     this.solarNavigation=navigation
     this.solarStatusMessage=navigation.pending_encounter ?
       "ENCOUNTER HOLD · DECISION REQUIRED" :
+      navigation.free_flight ? "MANUAL FLIGHT · CRUISE PAUSED" :
       navigation.status==="traveling" ?
-        "SUBLIGHT INTERPLANETARY CRUISE" : "CONVENTIONAL FLIGHT READY"
+        "SUBLIGHT INTERPLANETARY CRUISE · AI OBSTACLE AVOIDANCE" : "CONVENTIONAL FLIGHT READY"
     if(this.isOpen&&this.view==="system")this.renderSolarView()
   }
 
@@ -357,6 +362,26 @@ export class NavigationComputer {
   }
 
   open() {
+    if (this.isOpen || this.solarPending) return
+    if (this.solarNavigation?.status === "traveling" &&
+        this.solarNavigation?.free_flight &&
+        !this.solarNavigation?.tactical_encounter) {
+      this.solarPending = true
+      this.solarResumeCruise((ok, navigation, reason) => {
+        this.solarPending = false
+        if (!ok) {
+          this.solarStatusMessage = "AI drive unavailable: " + (reason || "relay error")
+          return
+        }
+        if (navigation) this.solarNavigation = navigation
+        this.openNow()
+      })
+      return
+    }
+    this.openNow()
+  }
+
+  openNow() {
     if (this.isOpen) return
     this.isOpen = true
     this.root.hidden = false
@@ -375,6 +400,30 @@ export class NavigationComputer {
   }
 
   close() {
+    if (!this.isOpen || this.solarPending) return
+    if (this.solarNavigation?.status === "traveling" &&
+        !this.solarNavigation?.free_flight &&
+        !this.solarNavigation?.tactical_encounter) {
+      if (this.solarNavigation?.pending_encounter) {
+        this.solarStatusMessage = "Resolve the current encounter before free flight."
+        return
+      }
+      this.solarPending = true
+      this.solarEnterFreeFlight((ok, navigation, reason) => {
+        this.solarPending = false
+        if (!ok) {
+          this.solarStatusMessage = "Manual flight unavailable: " + (reason || "relay error")
+          return
+        }
+        if (navigation) this.solarNavigation = navigation
+        this.closeNow()
+      })
+      return
+    }
+    this.closeNow()
+  }
+
+  closeNow() {
     if (!this.isOpen) return
     this.isOpen = false
     this.root.hidden = true

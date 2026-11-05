@@ -3,6 +3,7 @@ defmodule DarkorbitWeb.WorldChannel do
 
   alias Darkorbit.World
   alias Core.Universe.OrbitalEntry
+  alias Core.Universe.FreeFlightRegion
   alias DarkorbitWeb.{WorldStreamDelta, WorldStreamPolicy}
 
   @impl true
@@ -75,6 +76,20 @@ defmodule DarkorbitWeb.WorldChannel do
 
   def handle_in("solar_set_course", _payload, socket),
     do: {:reply, {:error, %{reason: "invalid_solar_destination"}}, socket}
+
+  def handle_in("solar_enter_free_flight", _payload, socket) do
+    case World.solar_enter_free_flight(socket.assigns.world_session_id) do
+      {:ok, navigation} -> {:reply, {:ok, %{navigation: navigation}}, socket}
+      {:error, reason} -> {:reply, {:error, %{reason: error_reason(reason)}}, socket}
+    end
+  end
+
+  def handle_in("solar_resume_cruise", _payload, socket) do
+    case World.solar_resume_cruise(socket.assigns.world_session_id) do
+      {:ok, navigation} -> {:reply, {:ok, %{navigation: navigation}}, socket}
+      {:error, reason} -> {:reply, {:error, %{reason: error_reason(reason)}}, socket}
+    end
+  end
 
   def handle_in("solar_cancel_course", _payload, socket) do
     case World.solar_cancel_course(socket.assigns.world_session_id) do
@@ -311,11 +326,15 @@ defmodule DarkorbitWeb.WorldChannel do
     # World transition is a server-owned consequence of completing an actual
     # SOL voyage. Client never selects map identity or spawn coordinates.
     navigation = payload.navigation
-    if navigation.status == :idle do
-      region_map = OrbitalEntry.map_id(navigation.location_id)
-      if region_map && region_map != socket.assigns.map_id do
-        :ok = push(socket, "world_region_changed", %{map_id: region_map})
+    region_map =
+      if navigation.status == :traveling and navigation.free_flight do
+        FreeFlightRegion.map_id(player_id)
+      else
+        OrbitalEntry.map_id(navigation.location_id)
       end
+
+    if region_map && region_map != socket.assigns.map_id do
+      :ok = push(socket, "world_region_changed", %{map_id: region_map})
     end
 
     {:noreply, socket}

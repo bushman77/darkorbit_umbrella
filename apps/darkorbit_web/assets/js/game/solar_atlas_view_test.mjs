@@ -174,3 +174,47 @@ test("Sun cannot be a travel destination and missing relay disables SOL commands
   nav.engageSolarCourse()
   assert.deepEqual(requests,[])
 })
+
+
+test("free-flight requires a server approval, while idle Atlas can be closed freely",()=>{
+  const {nodes,root}=fakeRoot()
+  const calls=[]
+  nodes.set("#nav-close",{focus(){}})
+  nodes.set("#nav-z",{min:"",max:"",value:""})
+  const nav=new NavigationComputer({
+    root,getEntities:()=>new Map(),getSelfId:()=>42,
+    getBoundaries:()=>({width:20000,height:12000,altitude_min:-3000,altitude_max:3000}),
+    isConnected:()=>true,engage:()=>{},halt:()=>{},
+    solarEnterFreeFlight:done=>{calls.push("enter");done(true,{system_id:"sol",status:"traveling",free_flight:true})},
+    solarResumeCruise:done=>{calls.push("resume");done(true,{system_id:"sol",status:"traveling",free_flight:false})},
+  })
+  nav.renderSolarView=()=>{}
+  nav.open()
+  assert.equal(nav.isOpen,true)
+  assert.deepEqual(calls,[])
+  nav.solarNavigation={system_id:"sol",status:"traveling",free_flight:false}
+  nav.close()
+  assert.deepEqual(calls,["enter"])
+  assert.equal(nav.isOpen,false)
+  assert.equal(nav.solarNavigation.free_flight,true)
+  nav.open()
+  assert.deepEqual(calls,["enter","resume"])
+  assert.equal(nav.isOpen,true)
+  assert.equal(nav.solarNavigation.free_flight,false)
+})
+
+test("failed free-flight authorization keeps the Atlas visible",()=>{
+  const {root}=fakeRoot()
+  const nav=new NavigationComputer({
+    root,getEntities:()=>new Map(),getSelfId:()=>42,
+    getBoundaries:()=>({width:20000,height:12000}),
+    isConnected:()=>true,engage:()=>{},halt:()=>{},
+    solarEnterFreeFlight:done=>done(false,null,"relay offline"),
+  })
+  nav.isOpen=true
+  nav.solarNavigation={system_id:"sol",status:"traveling",free_flight:false}
+  nav.close()
+  assert.equal(nav.isOpen,true)
+  assert.equal(nav.solarNavigation.free_flight,false)
+  assert.match(nav.solarStatusMessage,/relay offline/)
+})

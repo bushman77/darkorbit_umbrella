@@ -95,7 +95,8 @@ class SpaceClient {
 
   inSystemCruise() {
     const navigation = this.navComputer?.solarNavigation
-    return navigation?.status === "traveling" && !navigation?.tactical_encounter
+    return navigation?.status === "traveling" && !navigation?.tactical_encounter &&
+      !navigation?.free_flight
   }
 
   start() {
@@ -254,6 +255,8 @@ class SpaceClient {
       halt: done => this.stopNavigation(done),
       solarSetCourse: (bodyId, done) => this.solarSetCourse(bodyId, done),
       solarCancelCourse: done => this.solarCancelCourse(done),
+      solarEnterFreeFlight: done => this.solarEnterFreeFlight(done),
+      solarResumeCruise: done => this.solarResumeCruise(done),
       solarHail: (contactId, done) => this.solarHail(contactId, done),
       onOpen: () => {
         this.exitMouseSteering({silent: true})
@@ -451,7 +454,8 @@ class SpaceClient {
   switchOrbitalRegion(mapId) {
     if (!shouldEnterOrbitalRegion(this.mapId, mapId, this.switchingRegion)) return
     this.switchingRegion = true
-    this.setConnection("Entering " + mapId + " orbital region", "online")
+    this.setConnection("Entering " + (mapId.startsWith("sol:free_") ?
+      "deep-space flight" : mapId + " orbital region"), "online")
     this.exitMouseSteering({silent: true})
     this.flightControls?.release({silent: true})
     this.spaceLaser?.release()
@@ -706,7 +710,8 @@ class SpaceClient {
     const active=this.inSystemCruise()
     this.root.dataset.propulsionMode=active?"interplanetary_cruise":"conventional"
     const label=this.root.querySelector("#propulsion-status")
-    if(label)label.textContent=navigation?.cruise_paused?"ENCOUNTER HOLD / CRUISE PAUSED":
+    if(label)label.textContent=navigation?.free_flight?"DEEP SPACE / MANUAL FLIGHT":
+      navigation?.pending_encounter?"ENCOUNTER HOLD / CRUISE PAUSED":
       active?"SUBLIGHT CRUISE / FLIGHT LOCKED":"CONVENTIONAL FLIGHT"
     if(active){
       this.exitMouseSteering({silent: true})
@@ -847,6 +852,22 @@ class SpaceClient {
   solarSetCourse(bodyId, done) {
     if(this.channel?.state!=="joined")return done(false,null,"relay offline")
     this.channel.push("solar_set_course",{body_id:bodyId},5000)
+      .receive("ok",response=>done(true,response.navigation))
+      .receive("error",response=>done(false,null,response.reason))
+      .receive("timeout",()=>done(false,null,"timeout"))
+  }
+
+  solarEnterFreeFlight(done) {
+    if(this.channel?.state!=="joined")return done(false,null,"relay offline")
+    this.channel.push("solar_enter_free_flight",{},5000)
+      .receive("ok",response=>done(true,response.navigation))
+      .receive("error",response=>done(false,null,response.reason))
+      .receive("timeout",()=>done(false,null,"timeout"))
+  }
+
+  solarResumeCruise(done) {
+    if(this.channel?.state!=="joined")return done(false,null,"relay offline")
+    this.channel.push("solar_resume_cruise",{},5000)
       .receive("ok",response=>done(true,response.navigation))
       .receive("error",response=>done(false,null,response.reason))
       .receive("timeout",()=>done(false,null,"timeout"))
