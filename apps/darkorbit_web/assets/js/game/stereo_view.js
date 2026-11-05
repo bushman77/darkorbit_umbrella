@@ -1,6 +1,6 @@
 import * as THREE from "three"
 import {pointerNdc, toScene, toWorld} from "./stereo_math.mjs"
-import {stereoViewports, inwardStereoProjectionOffset} from "./stereo_viewport.mjs"
+import {stereoViewports, applyTransientStereoOffset} from "./stereo_viewport.mjs"
 import {cockpitHudFit, HUD_GEOMETRY} from "./stereo_layout.mjs"
 import {flightBasis, degrees} from "./flight_basis.mjs"
 import {orientationTelemetry} from "./orientation_interpolation.mjs"
@@ -431,23 +431,29 @@ export class StereoSpaceView {
     if (this.mode === "sbs") {
       const {left, right} = stereoViewports(width, height, this.eyeGapPx)
 
-      // When the physical center strip reaches zero, ArrowLeft still brings
-      // the apparent two images together by changing their optical projection
-      // centers. Scissoring keeps each eye in its own half of the display.
-      const shift = inwardStereoProjectionOffset(this.eyeGapPx, left.width)
-      this.stereo.cameraL.projectionMatrix.elements[8] -= shift
-      this.stereo.cameraR.projectionMatrix.elements[8] += shift
-      // Clear the center strip instead of leaving stale pixels from a prior frame.
-      this.renderer.setScissorTest(false)
-      this.renderer.clear(true, true, true)
-      this.renderer.setScissorTest(true)
-      this.renderer.setViewport(left.x, left.y, left.width, left.height)
-      this.renderer.setScissor(left.x, left.y, left.width, left.height)
-      this.renderer.render(this.scene, this.stereo.cameraL)
-      this.renderer.setViewport(right.x, right.y, right.width, right.height)
-      this.renderer.setScissor(right.x, right.y, right.width, right.height)
-      this.renderer.render(this.scene, this.stereo.cameraR)
-      this.renderer.setScissorTest(false)
+      // StereoCamera.update() caches its eye projections. Never permanently
+      // modify elements[8] or each frame compounds the previous shift and
+      // the headset image scrolls continuously without any input.
+      const restore = applyTransientStereoOffset(
+        this.stereo.cameraL.projectionMatrix,
+        this.stereo.cameraR.projectionMatrix,
+        this.eyeGapPx, left.width,
+      )
+      try {
+        // Clear the center strip instead of leaving stale pixels from a prior frame.
+        this.renderer.setScissorTest(false)
+        this.renderer.clear(true, true, true)
+        this.renderer.setScissorTest(true)
+        this.renderer.setViewport(left.x, left.y, left.width, left.height)
+        this.renderer.setScissor(left.x, left.y, left.width, left.height)
+        this.renderer.render(this.scene, this.stereo.cameraL)
+        this.renderer.setViewport(right.x, right.y, right.width, right.height)
+        this.renderer.setScissor(right.x, right.y, right.width, right.height)
+        this.renderer.render(this.scene, this.stereo.cameraR)
+      } finally {
+        restore()
+        this.renderer.setScissorTest(false)
+      }
     } else {
       this.renderer.setViewport(0, 0, width, height)
       this.renderer.render(this.scene, this.camera)
