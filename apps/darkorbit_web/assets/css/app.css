@@ -942,6 +942,50 @@ body:has(#helmet-client) {
 .helmet-encounter-instruction { font-size: clamp(.6rem, .9vw, .78rem); color: #b3eaf2; }
 #helmet-encounter[hidden] { display: none !important; }
 
+/* Paired-phone SBS surrender telemetry, independently drawn in both eyes.
+   Keep it above the cockpit without covering the reticle or flight controls. */
+.helmet-surrender-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 25;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  pointer-events: none;
+}
+.helmet-surrender-eye {
+  display: flex;
+  min-width: 0;
+  justify-content: center;
+  padding: clamp(.25rem, 1.2vw, .75rem);
+}
+.helmet-surrender-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: .12rem;
+  width: min(100%, 22rem);
+  margin-top: clamp(.5rem, 2.5vh, 1.5rem);
+  border: 1px solid #4ade80;
+  border-radius: .5rem;
+  padding: clamp(.3rem, .8vw, .55rem);
+  background: rgb(3 27 20 / .9);
+  color: #bbf7d0;
+  text-align: center;
+  font: 700 clamp(.55rem, 1.15vw, .78rem) ui-monospace, monospace;
+  letter-spacing: .04em;
+  overflow-wrap: anywhere;
+}
+.helmet-surrender-card strong {
+  font-size: clamp(.75rem, 1.7vw, 1.05rem);
+  color: #dcfce7;
+}
+.helmet-surrender-card small {
+  font-size: clamp(.47rem, .95vw, .67rem);
+  color: #a7f3d0;
+}
+#helmet-surrender[hidden] { display: none !important; }
+
 /* Interplanetary encounter decision options: hail, enter combat, ignore. */
 .solar-encounter-modal [data-encounter-action][hidden] { display: none !important; }
 @media (min-width: 650px) {
