@@ -108,32 +108,8 @@
       </select>
     </div>
 
-    <%!-- Phone-only lens calibration; visible in cockpit when a headset
-         reports actual rendered frames. Small buttons are a fallback when
-         the keyboard cannot intercept the arrows. --%>
-    <div id="cockpit-helmet-calibration" hidden
-         class="pointer-events-auto absolute right-4 top-24 z-40 max-w-[min(24rem,92vw)] rounded-xl border border-cyan-400/40 bg-slate-950/95 px-3 py-3 text-xs text-cyan-100 shadow-xl">
-      <p class="mb-2 font-bold tracking-wider text-cyan-200">HMD LENS CALIBRATION</p>
-      <p id="cockpit-helmet-alignment" aria-live="polite" class="mb-2 font-mono text-cyan-200">
-        HMD CALIBRATION
-      </p>
-      <div class="grid grid-cols-2 gap-2">
-        <button type="button" data-helmet-axis="gap" data-helmet-direction="-1"
-                class="rounded border border-slate-600 bg-slate-800 px-2 py-2 hover:border-cyan-300"
-                title="Bring the left/right eye images closer (Left Arrow)">Closer [←]</button>
-        <button type="button" data-helmet-axis="gap" data-helmet-direction="1"
-                class="rounded border border-slate-600 bg-slate-800 px-2 py-2 hover:border-cyan-300"
-                title="Move the left/right eye images farther apart (Right Arrow)">Farther [→]</button>
-        <button type="button" data-helmet-axis="eye_sep" data-helmet-direction="-1"
-                class="rounded border border-slate-600 bg-slate-800 px-2 py-2 hover:border-cyan-300"
-                title="Decrease simulated eye separation (F6)">IPD − [F6]</button>
-        <button type="button" data-helmet-axis="eye_sep" data-helmet-direction="1"
-                class="rounded border border-slate-600 bg-slate-800 px-2 py-2 hover:border-cyan-300"
-                title="Increase eye separation (Ctrl+F6)">IPD + [Ctrl+F6]</button>
-      </div>
-      <p id="cockpit-helmet-feedback" role="status" class="mt-2 text-amber-200"></p>
-    </div>
-
+    <%!-- HMD lens tuning is laptop-keyboard only. Keep the cockpit
+         unobstructed; the existing HMD connection indicator above remains. --%>
     <a id="equipment-open" href={~p"/equipment"}
        class="pointer-events-auto rounded-xl border border-amber-400/40 bg-slate-950/85 px-3 py-3 text-xs font-bold tracking-widest text-amber-200 hover:border-amber-300"
        title="Inventory and ship loadout (reconnects the cockpit)">
