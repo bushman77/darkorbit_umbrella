@@ -55,8 +55,28 @@ defmodule DarkorbitWeb.RegistrationControllerTest do
     html = html_response(conn, 422)
 
     assert html =~ ~s(id="pilot-registration-form")
+    assert html =~ ~s(value="bad user")
+    assert html =~ ~s(name="registration[password]" id="registration_password" value="")
     refute html =~ "private-DO-NOT-ECHO"
     assert Accounts.get_by_username("bad user") == nil
+  end
+
+  test "duplicate registration never reflects a submitted password", %{conn: conn} do
+    attrs = unique_account_attributes()
+    player_account_fixture(attrs)
+
+    attempted_password = "duplicate-SECRET-DO-NOT-ECHO"
+
+    conn =
+      post(conn, ~p"/register", %{
+        "registration" => Map.put(attrs, :password, attempted_password)
+      })
+
+    html = html_response(conn, 422)
+    assert html =~ ~s(id="pilot-registration-form")
+    assert html =~ "has already been taken"
+    assert html =~ ~s(name="registration[password]" id="registration_password" value="")
+    refute html =~ attempted_password
   end
 
   test "public signup ignores client-controlled ship and progression fields", %{conn: conn} do
