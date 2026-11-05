@@ -1,8 +1,8 @@
-<div id="landing-page" class="relative min-h-screen overflow-hidden bg-[#030914] text-slate-100">
+<div id="landing-page" class="hud-screen hud-landing relative min-h-screen overflow-hidden bg-[#030914] text-slate-100">
   <div aria-hidden="true" class="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_75%_5%,rgba(34,211,238,0.10),transparent_38%),radial-gradient(ellipse_at_12%_30%,rgba(59,130,246,0.07),transparent_30%)]"></div>
   <div aria-hidden="true" class="pointer-events-none absolute inset-0 opacity-25 [background-image:radial-gradient(rgba(203,242,255,0.54)_0.6px,transparent_0.9px)] [background-size:49px_57px] [mask-image:linear-gradient(to_bottom,black,transparent_75%)]"></div>
 
-  <header class="relative z-20 mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-5 border-b border-white/10 px-6 py-5 lg:px-10">
+  <header class="hud-landing-topbar relative z-20 mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-5 border-b border-white/10 px-6 py-5 lg:px-10">
     <.link href={~p"/"} class="flex items-center gap-3" aria-label="Space Nova home">
       <div class="grid size-11 place-items-center rounded-xl border border-cyan-300/30 bg-cyan-300/10 shadow-[0_0_25px_rgba(34,211,238,0.10)]">
         <.icon name="hero-rocket-launch" class="size-6 text-cyan-200" />
@@ -28,7 +28,7 @@
   </header>
 
   <main>
-    <section class="relative mx-auto grid max-w-7xl items-center gap-10 px-6 pb-20 pt-16 lg:grid-cols-[0.95fr_1.05fr] lg:gap-10 lg:px-10 lg:pb-28 lg:pt-24">
+    <section class="hud-landing-hero relative mx-auto grid max-w-7xl items-center gap-10 px-6 pb-20 pt-16 lg:grid-cols-[0.95fr_1.05fr] lg:gap-10 lg:px-10 lg:pb-28 lg:pt-24">
       <div class="relative z-10">
         <p class="mb-7 inline-flex items-center gap-3 rounded-full border border-cyan-300/20 bg-cyan-300/5 px-4 py-2 text-[0.65rem] font-bold uppercase tracking-[0.24em] text-cyan-200">
           <span class="size-1.5 rounded-full bg-cyan-300 shadow-[0_0_10px_rgba(103,232,249,0.8)]"></span>
@@ -61,7 +61,7 @@
           </.link>
         </div>
         <p class="mt-5 max-w-lg text-xs leading-6 text-slate-400">
-          Playable in your browser today. The dedicated desktop client is in development.
+          Playable in your browser or the experimental Linux desktop launcher.
         </p>
         <div class="mt-10 flex flex-wrap gap-x-7 gap-y-3 border-t border-white/10 pt-6 text-xs font-medium text-slate-300">
           <span class="flex items-center gap-2"><.icon name="hero-check-circle" class="size-4 text-cyan-300" /> Solar Atlas navigation</span>
@@ -198,7 +198,7 @@
   <footer class="border-t border-white/10 px-6 py-8 lg:px-10">
     <div class="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 text-xs text-slate-500">
       <p>SPACE NOVA · An original multiplayer space-game project</p>
-      <p>Solar System playtest · Desktop client in development</p>
+      <p>Solar System playtest · Linux desktop launcher in testing</p>
     </div>
   </footer>
 </div>

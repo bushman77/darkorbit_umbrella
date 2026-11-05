@@ -9,7 +9,7 @@ defmodule DarkorbitWeb.PageControllerTest do
     assert html =~ "SPACE NOVA"
     assert html =~ "An entire system."
     assert html =~ "Solar Atlas navigation"
-    assert html =~ "Desktop client in development"
+    assert html =~ "Linux desktop launcher in testing"
 
     assert Enum.count(LazyHTML.query(document, "#landing-page")) == 1
     assert Enum.count(LazyHTML.query(document, "#launch-client-link[href='/login']")) == 1
