@@ -22,6 +22,7 @@ defmodule Core.Universe.Navigation do
   alias Core.Universe.PlanetaryView
   alias Core.Universe.EncounterDirector
   alias Core.Universe.Traffic
+  alias Core.Universe.TradeLanes
   alias Core.Universe.Territory
   alias Core.World.EventSink
 
@@ -131,6 +132,11 @@ defmodule Core.Universe.Navigation do
       # Isolated Navigation tests opt in; the actual world supervisor enables
       # procedural shared contacts so real departures are encounter-capable.
       procedural_contact_chance: Keyword.get(opts, :procedural_contact_chance, 0.0),
+      # Global trade departures occur even with no connected player, on the
+      # SOL clock. The destination selected by a pilot never schedules one.
+      scheduled_trader_interval_ms: Keyword.get(opts, :scheduled_trader_interval_ms, 0),
+      traffic_time_ms: 0,
+      scheduled_trader_route_index: 0,
       next_contact_serial: 1,
       tick_ms: tick_ms,
       auto_tick?: Keyword.get(opts, :auto_tick, true),
@@ -506,6 +512,7 @@ defmodule Core.Universe.Navigation do
     # Strategic traffic advances even if no pilot has ever joined.
     held = state.tactical_claims |> Map.keys() |> MapSet.new()
     state = %{state | traffic: Traffic.advance(state.traffic, state.tick_ms, held)}
+    state = advance_scheduled_traders(state)
 
     Enum.reduce(state.voyages, state, fn
       {player_id, %{status: :traveling} = voyage}, current ->
@@ -574,6 +581,8 @@ defmodule Core.Universe.Navigation do
       progress: progress,
       remaining_ms: remaining_ms,
       contacts: Traffic.contacts(traffic, voyage.position_km),
+      traffic_pressure: TradeLanes.pressure(voyage.position_km),
+      traffic_band: TradeLanes.band(voyage.position_km),
       encounter: EncounterDirector.evaluate(traffic, voyage, reputations_for(state, player_id)),
       cruise_paused: voyage.pending_encounter != nil or voyage.free_flight,
       # Tactical combat currently takes place in the pilot's existing
@@ -587,6 +596,38 @@ defmodule Core.Universe.Navigation do
         faction_ids: Enum.map(jurisdiction.claims, & &1.faction_id)
       }
     })
+  end
+
+  # World-owned shipping timetable. A trader is a single independently
+  # moving vessel for every pilot, not a per-encounter spawn. Only server
+  # config can enable the schedule; no route is chosen by a client click.
+  defp advance_scheduled_traders(state) do
+    interval = state.scheduled_trader_interval_ms
+    elapsed = state.traffic_time_ms + state.tick_ms
+    state = %{state | traffic_time_ms: elapsed}
+
+    if is_integer(interval) and interval > 0 and
+         div(elapsed, interval) > div(elapsed - state.tick_ms, interval) do
+      routes = TradeLanes.departures()
+      index = rem(state.scheduled_trader_route_index, length(routes))
+      {from_id, to_id} = Enum.at(routes, index)
+      serial = state.next_contact_serial
+
+      result = Traffic.launch_scheduled_trader(
+        state.traffic, from_id, to_id, serial)
+
+      # Advance the timetable even when fleet capacity is full. Skipped
+      # departures are not recreated when a particular player arrives.
+      state = %{state | next_contact_serial: serial + 1,
+        scheduled_trader_route_index: state.scheduled_trader_route_index + 1}
+
+      case result do
+        {:ok, updated} -> %{state | traffic: updated}
+        {:error, _} -> state
+      end
+    else
+      state
+    end
   end
 
   # Procedural contacts are genuinely positioned vessels in the shared
