@@ -231,49 +231,21 @@
 
       <section id="nav-solar-view" class="solar-atlas-layout" role="tabpanel"
         aria-labelledby="nav-view-system">
-        <aside class="solar-operations-panel" aria-label="Flight operations and live contacts">
-          <div class="hud-panel-heading">
-            <p class="nav-eyebrow">COMMS // FLIGHT OPERATIONS</p>
-            <span class="hud-pulse" aria-hidden="true"></span>
-          </div>
-          <section class="hud-ops-card">
-            <p class="hud-kicker">01 / STRATEGIC NAVIGATION</p>
-            <h3>Chart a course</h3>
-            <p>Select a world on the orbital chart, then engage interplanetary travel.</p>
-          </section>
-          <section class="hud-ops-card">
-            <p class="hud-kicker">02 / CONVENTIONAL FLIGHT</p>
-            <h3>Take the helm</h3>
-            <p>Press M to fly in 3D. Open the Atlas again to return to automated cruise.</p>
-          </section>
-          <section class="hud-traffic-panel"
-                   aria-label="Strategic traffic contacts">
-            <p class="nav-eyebrow">SENSOR TRAFFIC / LIVE CONTACTS</p>
-            <p class="my-2 text-xs text-slate-300">
-              Vessels follow their own routes. Contacts appear only within sensor range.
-            </p>
-            <div id="nav-traffic-contacts" class="space-y-2 text-xs text-cyan-100"
-                 aria-live="polite">No contacts in range.</div>
-            <p id="nav-traffic-comms" class="mt-3 whitespace-pre-line text-xs text-emerald-200"
-               role="status">Select Hail when a vessel is in range.</p>
-          </section>
-          <p class="solar-system-note">Interplanetary cruise uses a dedicated sublight
-            drive and the same real-time clock as combat. Distance is compressed
-                         into game kilometers, not physical Solar System kilometers. The AI
-             drive avoids hazards in Atlas cruise. Return to cockpit to suspend
-             the voyage for conventional deep-space flight. Physical debris
-             collision damage will be added in a separate mechanic.</p>
-        </aside>
         <div class="solar-atlas-frame">
           <div class="nav-map-caption">
             <span>SOLAR SYSTEM // ORBITAL OVERVIEW</span>
-            <span>SCHEMATIC · NOT TO SCALE</span>
+            <span>RIGHT-CLICK MAP FOR TARGET ACTIONS</span>
           </div>
           <svg id="nav-solar-chart" viewBox="0 0 1000 600"
             aria-label="Schematic solar system orbital chart. Select the Sun, a planet, or Pluto."
             role="group">
             <g id="nav-solar-content"></g>
           </svg>
+          <div id="nav-solar-context-menu" class="solar-context-menu" hidden aria-label="Solar map context actions">
+            <p id="nav-solar-context-target" class="solar-context-target">TARGET / EARTH</p>
+            <button type="button" data-solar-action="analyze">Analyze target</button>
+            <button type="button" data-solar-action="navigate">Navigate to target</button>
+          </div>
           <div class="solar-chart-controls">
             <div class="solar-zoom-group" aria-label="Solar map view">
               <button class="solar-zoom-button is-active" data-solar-focus="system"
@@ -281,7 +253,7 @@
               <button class="solar-zoom-button" data-solar-focus="inner"
                 aria-pressed="false" type="button">Inner planets</button>
             </div>
-            <p>Orbital distances are compressed for readability. Positions are illustrative, not live.</p>
+            <p>SCHEMATIC / NOT LIVE POSITIONS</p>
           </div>
         </div>
 
@@ -292,24 +264,34 @@
             aria-label="Select a celestial body"></div>
           <div class="solar-selected-body">
             <p class="nav-eyebrow">SELECTED BODY</p>
-            <h3 id="nav-solar-name">Earth</h3>
-            <p id="nav-solar-type">Planet</p>
-            <dl class="solar-body-metrics">
-              <div><dt>MEAN SOLAR DISTANCE</dt><dd id="nav-solar-distance">1 AU</dd></div>
-              <div><dt>ORBITAL PERIOD</dt><dd id="nav-solar-period">1 Earth year</dd></div>
-            </dl>
+            <div class="solar-selected-inline">
+              <h3 id="nav-solar-name">Earth</h3>
+              <p id="nav-solar-type">Planet</p>
+            </div>
+            <details id="nav-solar-analysis" class="solar-aux-details">
+              <summary>Analyze orbital data</summary>
+              <dl class="solar-body-metrics">
+                <div><dt>MEAN SOLAR DISTANCE</dt><dd id="nav-solar-distance">1 AU</dd></div>
+                <div><dt>ORBITAL PERIOD</dt><dd id="nav-solar-period">1 Earth year</dd></div>
+              </dl>
+            </details>
           </div>
           <div class="solar-navigation-console">
             <p class="nav-eyebrow">INTERPLANETARY NAVIGATION / SOL-01</p>
             <div id="nav-solar-state" class="nav-state">CONNECTING</div>
-            <dl class="solar-body-metrics">
+            <dl class="solar-body-metrics solar-primary-metrics">
               <div><dt>CURRENT REGION</dt><dd id="nav-solar-location">—</dd></div>
               <div><dt>FLIGHT PLAN</dt><dd id="nav-solar-route">NO ACTIVE TRANSIT</dd></div>
-              <div><dt>PROPULSION</dt><dd id="nav-solar-drive">CONVENTIONAL</dd></div>
-              <div><dt>DRIVE SPEED</dt><dd id="nav-solar-speed">Conventional thrusters</dd></div>
-              <div><dt>TRAVEL DISTANCE</dt><dd id="nav-solar-distance-travelled">No interplanetary course</dd></div>
-              <div><dt>ARRIVAL ETA</dt><dd id="nav-solar-eta">—</dd></div>
             </dl>
+            <details class="solar-aux-details solar-transit-details">
+              <summary>Flight telemetry</summary>
+              <dl class="solar-body-metrics">
+                <div><dt>PROPULSION</dt><dd id="nav-solar-drive">CONVENTIONAL</dd></div>
+                <div><dt>DRIVE SPEED</dt><dd id="nav-solar-speed">Conventional thrusters</dd></div>
+                <div><dt>TRAVEL DISTANCE</dt><dd id="nav-solar-distance-travelled">No interplanetary course</dd></div>
+                <div><dt>ARRIVAL ETA</dt><dd id="nav-solar-eta">—</dd></div>
+              </dl>
+            </details>
             <label for="nav-solar-progress" id="nav-solar-progress-label" class="solar-progress-label">
               Ready to plot course
             </label>
@@ -321,8 +303,20 @@
               Abort transit
             </button>
           </div>
-
-
+          <details class="solar-aux-details solar-contacts-drawer">
+            <summary>Sensor contacts</summary>
+            <section class="hud-traffic-panel solar-contacts-content"
+                   aria-label="Strategic traffic contacts">
+            <p class="nav-eyebrow">SENSOR TRAFFIC / LIVE CONTACTS</p>
+            <p class="my-2 text-xs text-slate-300">
+              Vessels follow their own routes. Contacts appear only within sensor range.
+            </p>
+            <div id="nav-traffic-contacts" class="space-y-2 text-xs text-cyan-100"
+                 aria-live="polite">No contacts in range.</div>
+            <p id="nav-traffic-comms" class="mt-3 whitespace-pre-line text-xs text-emerald-200"
+               role="status">Select Hail when a vessel is in range.</p>
+          </section>
+          </details>
         </aside>
       </section>
 
@@ -398,6 +392,7 @@
         <span><kbd>M</kbd> COCKPIT</span>
         <span><kbd>ESC</kbd> RETURN</span>
         <span><kbd>CLICK</kbd> SELECT BODY</span>
+        <span><kbd>RMB</kbd> TARGET ACTIONS</span>
         <span class="hud-keybar-end">SOL / FLIGHT SYSTEMS</span>
       </div>
     </div>
