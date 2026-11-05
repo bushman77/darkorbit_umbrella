@@ -3,6 +3,7 @@ import test from "node:test"
 import {
   SOLAR_BODIES, SOLAR_FOCUSES, SOLAR_SYSTEM_ID, findSolarBody,
   solarLayout, orbitRadius, solarBodySummary, bodiesForFocus,
+  solarGameRadius, solarPositionToChart, solarChartToPosition,
 } from "./solar_system.mjs"
 
 test("Sun, all eight planets and Pluto appear in heliocentric order", () => {
@@ -57,4 +58,27 @@ test("diagram uses only explicitly schematic phases, not current astronomy",()=>
   assert.ok(SOLAR_BODIES.every(body=>Number.isFinite(body.phase)))
   assert.ok(SOLAR_BODIES.every(body=>typeof body.color==="string"))
   assert.equal(solarBodySummary(null),null)
+})
+
+test("SOL world game-km coordinates round-trip through both Atlas projections",()=>{
+  for (const focus of SOLAR_FOCUSES) {
+    for (const body of bodiesForFocus(focus).filter(b=>b.au>0)) {
+      const angle=body.phase*Math.PI/180
+      const radius=solarGameRadius(body.au)
+      const position={x:radius*Math.cos(angle),y:radius*Math.sin(angle),z:0}
+      const plotted=solarPositionToChart(position,focus)
+      const marker=solarLayout(focus).find(b=>b.id===body.id)
+      assert.ok(Math.abs(plotted.x-marker.x)<.00001,body.name)
+      assert.ok(Math.abs(plotted.y-marker.y)<.00001,body.name)
+      const back=solarChartToPosition(plotted.x,plotted.y,focus,position.z)
+      assert.ok(Math.hypot(back.x-position.x,back.y-position.y)<.01,body.name)
+    }
+    const remote={x:-68_000_000,y:65_000_000,z:120}
+    const plotted=solarPositionToChart(remote,focus)
+    const back=solarChartToPosition(plotted.x,plotted.y,focus,120)
+    assert.ok(Math.hypot(back.x-remote.x,back.y-remote.y)<.1)
+    assert.equal(back.z,120)
+  }
+  assert.equal(solarChartToPosition(NaN,20),null)
+  assert.equal(solarPositionToChart({x:NaN,y:5,z:0}),null)
 })
