@@ -44,8 +44,13 @@ defmodule DarkorbitWeb.RegistrationController do
           end
 
         {:error, %Ecto.Changeset{} = changeset} ->
-          # Never return a submitted password in HTML (including rejected forms).
-          safe_changeset = %{changeset | changes: Map.delete(changeset.changes, :password)}
+          # Phoenix form fields may read values from changeset.params as well as
+          # changeset.changes. Remove both copies before rendering an error.
+          safe_changeset = %{
+            changeset
+            | changes: Map.delete(changeset.changes, :password),
+              params: Map.delete(changeset.params || %{}, "password")
+          }
 
           conn
           |> put_status(:unprocessable_entity)
