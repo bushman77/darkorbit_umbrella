@@ -16,7 +16,8 @@ defmodule DarkorbitWeb.HelmetSurrender do
       %{kind: :npc, state: :surrendered, npc_type_id: type_id} = npc
       when is_binary(type_id) ->
         if String.starts_with?(type_id, "solar-") and
-             String.ends_with?(type_id, suffix) do
+             String.ends_with?(type_id, suffix) and
+             Map.get(npc, :status) != :destroyed do
           %{surrendered: true, call_sign: Map.get(npc, :display_name) || "CONTACT"}
         end
 
