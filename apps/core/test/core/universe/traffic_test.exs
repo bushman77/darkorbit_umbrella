@@ -21,6 +21,8 @@ defmodule Core.Universe.TrafficTest do
     assert vessel.kind == :commercial_freighter
     assert vessel.ship_class == "scow"
     assert vessel.disposition == :neutral
+    assert vessel.faction_id == "sol_merchant_league"
+    assert Core.Factions.name(vessel.faction_id) == "Solar Merchant League"
     assert vessel.purpose == :scheduled_delivery
     assert vessel.origin_id == "earth"
     assert vessel.destination_id == "mars"
