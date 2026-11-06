@@ -389,6 +389,8 @@ defmodule Core.Universe.Navigation do
         tactical = %{id: encounter_id, contact_id: contact.id,
           voyage_number: contact.voyage_number,
           call_sign: contact.call_sign,
+          faction_id: contact.faction_id,
+          faction_name: Core.Factions.name(contact.faction_id) || contact.faction_id,
           ship_class: contact.ship_class,
           # MapServer receives this authoritative initial combat condition.
           # It must never create a fresh, fully repaired clone.
