@@ -790,3 +790,11 @@
 - Added pure Traffic, Navigation and world integration regression cases.
   Database durability and shared-instance multiplayer combat remain TODO.
 - Changes have not been executed with Mix in this editing environment.
+
+## 2026-11-06 — Unified GitHub releases (implementation; deployment unverified)
+
+- Aligned the umbrella release version to 0.3.1, the existing Tauri client version. Subsequent release bumps edit only root `mix.exs`.
+- Added a version-generation helper for Windows/Linux build-time Tauri, Cargo and npm metadata, with offline regression tests.
+- Extended the Linux `scripts/space-nova` menu with a unified server and signed desktop release command.
+- Expanded the signed GitHub Actions release to validate Elixir and JavaScript suites, build an Ubuntu OTP server archive, package stable-name Windows/Linux installers, generate checksums and publish a complete release after signing.
+- Added an OTP database-migration entry point, release validation CI and the release runbook. Publication, EC2 deployment and device smoke tests have not been performed.

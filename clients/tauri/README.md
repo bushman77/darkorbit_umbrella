@@ -247,3 +247,7 @@ an isolated centered web card. The Phoenix game, registration, login, and
 Solar Atlas use the same dark/cyan UI language. All real input state, session
 handling and server authority remain unchanged. This is a visual milestone,
 not local asset bundling or an offline mode. See `docs/space-nova-ui.md`.
+
+## Unified server and client releases
+
+The public release version now comes exclusively from the umbrella root `mix.exs`. For future versions, use `./scripts/space-nova version X.Y.Z` rather than editing Tauri, npm or Cargo version fields manually. The unified release workflow derives those mandatory internal version fields in its build workspaces, publishes version-free public asset names, and includes the Linux dedicated server alongside the signed desktop installers. See `docs/space-nova-release.md`. The original `./scripts/space-nova publish` command remains as an alias for `release`.

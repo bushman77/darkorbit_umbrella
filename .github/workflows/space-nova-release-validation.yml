@@ -1,0 +1,29 @@
+name: Verify Space Nova release manager
+on:
+  push:
+    branches: [sbs]
+    paths:
+      - "scripts/space-nova"
+      - "scripts/space-nova-version.py"
+      - "scripts/test_space_nova_version.py"
+      - "mix.exs"
+      - ".github/workflows/space-nova-release.yml"
+      - ".github/workflows/space-nova-release-validation.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release-manager:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate release manager Bash syntax
+        run: bash -n scripts/space-nova
+      - name: Validate Elixir version authority and generated metadata
+        run: |
+          python3 -m unittest discover -s scripts -p 'test_space_nova_version.py' -v
+          python3 scripts/space-nova-version.py check "$(python3 scripts/space-nova-version.py get)"
+      - name: Confirm no whitespace errors
+        run: git diff --check

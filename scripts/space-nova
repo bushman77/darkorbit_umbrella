@@ -10,29 +10,64 @@ require() { command -v "$1" >/dev/null 2>&1 || die "Install $1 first."; }
 gh_ready() { require gh; gh auth status >/dev/null 2>&1 || die "Run 'gh auth login' first."; }
 on_branch() { [[ "$(git -C "$ROOT" branch --show-current)" == "$BRANCH" ]] || die "Switch to the sbs branch first."; }
 clean_tree() { [[ -z "$(git -C "$ROOT" status --porcelain --untracked-files=no)" ]] || die "Commit or stash existing changes first."; }
-version_now() { python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "$CLIENT/src-tauri/tauri.conf.json"; }
+version_now() { python3 "$ROOT/scripts/space-nova-version.py" get; }
 usage() {
 cat <<'EOF'
 Space Nova build and release menu:
   ./scripts/space-nova             Interactive menu
   ./scripts/space-nova test        Run launcher tests
-  ./scripts/space-nova linux       Build Linux .deb + AppImage
+  ./scripts/space-nova linux       Build stable-name Linux .deb + AppImage
+  ./scripts/space-nova server      Build diagnostic Linux server archive
   ./scripts/space-nova windows     Request Windows .exe build on GitHub
   ./scripts/space-nova download    Download .exe for the current commit
   ./scripts/space-nova status      Show recent GitHub Actions runs
-  ./scripts/space-nova version X.Y.Z  Update desktop version
-  ./scripts/space-nova publish X.Y.Z  Publish signed release (confirmation)
+  ./scripts/space-nova version X.Y.Z  Update umbrella mix.exs version only
+  ./scripts/space-nova release X.Y.Z  Build server, Linux and Windows; publish after CI passes
+  ./scripts/space-nova publish X.Y.Z  Alias for release
 GitHub commands require 'gh auth login' first. No private keys are read here.
 EOF
 }
 test_client() {
   require npm
-  (cd "$CLIENT" && npm install && npm test)
+  (cd "$ROOT/apps/darkorbit_web/assets" && npm ci && npm test)
+  (cd "$CLIENT" && npm ci && npm test)
 }
-linux_build() {
-  require npm
-  (cd "$CLIENT" && npm install && npm test && npm run build)
-  echo "Bundles: $CLIENT/src-tauri/target/release/bundle"
+linux_build() (
+  require git; require npm; require python3; on_branch; clean_tree
+  local backup file
+  backup="$(mktemp -d)"
+  local files=(
+    clients/tauri/package.json clients/tauri/package-lock.json
+    clients/tauri/src-tauri/tauri.conf.json clients/tauri/src-tauri/Cargo.toml
+    clients/tauri/src-tauri/Cargo.lock
+  )
+  for file in "${files[@]}"; do
+    mkdir -p "$backup/$(dirname "$file")"
+    cp "$ROOT/$file" "$backup/$file"
+  done
+  trap 'for file in "${files[@]}"; do cp "$backup/$file" "$ROOT/$file"; done; rm -rf "$backup"' EXIT
+  python3 "$ROOT/scripts/space-nova-version.py" sync
+  (cd "$CLIENT" && npm ci && npm test && npm run build)
+  mapfile -t images < <(find "$CLIENT/src-tauri/target/release/bundle/appimage" -maxdepth 1 -name '*.AppImage' -type f)
+  mapfile -t debs < <(find "$CLIENT/src-tauri/target/release/bundle/deb" -maxdepth 1 -name '*.deb' -type f)
+  [[ ${#images[@]} == 1 && ${#debs[@]} == 1 ]] || die "Expected one AppImage and one Debian package"
+  mkdir -p "$ROOT/dist/releases"
+  cp "${images[0]}" "$ROOT/dist/releases/space-nova-linux-x64.AppImage"
+  cp "${debs[0]}" "$ROOT/dist/releases/space-nova-linux-x64.deb"
+  echo "Linux diagnostic installers: $ROOT/dist/releases"
+)
+server_build() {
+  require git; require mix; require tar; on_branch; clean_tree
+  if find "$ROOT/apps/darkorbit_web/priv/cert" -type f -name '*key*' -print -quit 2>/dev/null | grep -q .; then
+    die "Local TLS key detected. Build the official clean server artifact in GitHub Actions."
+  fi
+  (cd "$ROOT" && MIX_ENV=prod mix deps.get --only prod &&
+    MIX_ENV=prod mix compile --warnings-as-errors &&
+    MIX_ENV=prod mix assets.deploy &&
+    MIX_ENV=prod mix release space_mmo --overwrite)
+  mkdir -p "$ROOT/dist/releases"
+  tar -C "$ROOT/_build/prod/rel" -czf "$ROOT/dist/releases/space-nova-server-linux-x64.tar.gz" space_mmo
+  echo "Local diagnostic archive in dist/releases (official build runs on Ubuntu CI)."
 }
 windows_build() {
   require git; on_branch; gh_ready
@@ -48,63 +83,35 @@ download_windows() {
     --limit 40 --json databaseId,headSha,conclusion \
     --jq ".[] | select(.headSha == \"$sha\" and .conclusion == \"success\") | .databaseId" | head -n1)"
   [[ -n "$run_id" ]] || die "No successful Windows build for this exact commit. Run 'windows', check 'status', then retry."
-  folder="$CLIENT/dist/windows-$(version_now)"
+  folder="$CLIENT/dist/windows"
   mkdir -p "$folder"
   gh run download "$run_id" --repo "$REPO" --name space-nova-windows-x86_64 --dir "$folder"
   echo "Installer extracted to: $folder"
 }
 prepare_version() {
   local v="${1:-}"
-  [[ "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "Use: ./scripts/space-nova version 0.3.1"
   require git; require python3; on_branch; clean_tree
-  python3 - "$CLIENT" "$v" <<'PY'
-import json, pathlib, re, sys
-root, new = pathlib.Path(sys.argv[1]), sys.argv[2]
-config_path = root / "src-tauri/tauri.conf.json"
-package_path = root / "package.json"
-cargo_path = root / "src-tauri/Cargo.toml"
-config = json.loads(config_path.read_text())
-package = json.loads(package_path.read_text())
-cargo = cargo_path.read_text()
-match = re.search(r'(?m)^version = "([0-9]+\.[0-9]+\.[0-9]+)"$', cargo)
-if not match:
-    raise SystemExit("Cannot find Cargo.toml [package] version")
-old = config["version"]
-if old != package["version"] or old != match.group(1):
-    raise SystemExit("Current Tauri, npm and Cargo versions do not match")
-if tuple(map(int, new.split("."))) <= tuple(map(int, old.split("."))):
-    raise SystemExit(f"{new} must be newer than {old}")
-config["version"] = new
-package["version"] = new
-config_path.write_text(json.dumps(config, indent=2) + "\n")
-package_path.write_text(json.dumps(package, indent=2) + "\n")
-cargo_path.write_text(cargo[:match.start(1)] + new + cargo[match.end(1):])
-print(f"Prepared Space Nova {new} (was {old})")
-PY
-  echo "Next: ./scripts/space-nova test"
-  echo "Review changes, then run:"
-  echo "  git add clients/tauri/src-tauri/tauri.conf.json clients/tauri/src-tauri/Cargo.toml clients/tauri/package.json"
-  echo "  git commit -m 'Release Space Nova $v'"
-  echo "  git push origin sbs"
-  echo "  ./scripts/space-nova publish $v"
+  python3 "$ROOT/scripts/space-nova-version.py" set "$v"
+  echo "Only umbrella mix.exs changed. Commit and push to sbs before releasing."
 }
 publish_release() {
-  local v="${1:-}" confirmed
-  [[ "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "Use: ./scripts/space-nova publish 0.3.0"
+  local v="${1:-}" confirmed sha
   require git; require python3; on_branch; clean_tree; gh_ready
-  [[ "$(version_now)" == "$v" ]] || die "Version mismatch: run 'version $v' before publishing."
+  python3 "$ROOT/scripts/space-nova-version.py" check "$v"
   git -C "$ROOT" fetch --quiet origin "$BRANCH"
-  [[ "$(git -C "$ROOT" rev-parse HEAD)" == "$(git -C "$ROOT" rev-parse "origin/$BRANCH")" ]] ||
-    die "Push your release commit to origin/sbs before publishing."
-  if gh release view "v$v" --repo "$REPO" >/dev/null 2>&1; then
-    die "v$v is already published; bump the version."
-  fi
-  echo "Publish a signed Windows and Linux release v$v?"
-  read -r -p "Type PUBLISH to confirm: " confirmed
+  sha="$(git -C "$ROOT" rev-parse HEAD)"
+  [[ "$sha" == "$(git -C "$ROOT" rev-parse "origin/$BRANCH")" ]] ||
+    die "Push your version commit to origin/sbs before publishing."
+  if gh release view "v$v" --repo "$REPO" >/dev/null 2>&1; then die "Release v$v already exists."; fi
+  if gh api "repos/$REPO/git/ref/tags/v$v" >/dev/null 2>&1; then die "Tag v$v already exists."; fi
+  echo "Publish v$v from commit $sha after server, Linux and Windows builds pass?"
+  echo "This does NOT deploy to EC2."
+  read -r -p 'Type PUBLISH to confirm: ' confirmed
   [[ "$confirmed" == PUBLISH ]] || die "Cancelled."
-  gh workflow run space-nova-release.yml --repo "$REPO" --ref "$BRANCH" --field "version=$v"
-  echo "Release queued: https://github.com/$REPO/actions/workflows/space-nova-release.yml"
-  echo "GitHub Actions must have TAURI_SIGNING_PRIVATE_KEY and TAURI_SIGNING_PRIVATE_KEY_PASSWORD secrets."
+  gh workflow run space-nova-release.yml --repo "$REPO" --ref "$BRANCH" \
+    --raw-field "version=$v" --raw-field "expected_sha=$sha"
+  echo "Release pipeline submitted: https://github.com/$REPO/actions/workflows/space-nova-release.yml"
+  echo "Follow progress with './scripts/space-nova status'."
 }
 menu() {
   cat <<'EOF'
@@ -116,7 +123,8 @@ Space Nova desktop build manager
   4) Download Windows .exe
   5) Build status
   6) Prepare new version
-  7) Publish signed release
+  7) Publish server and client release
+  8) Compile local Linux server (diagnostic)
   0) Exit
 EOF
   local answer ver
@@ -126,6 +134,7 @@ EOF
     5) gh_ready; gh run list --repo "$REPO" --branch "$BRANCH" --limit 12;;
     6) read -r -p 'Version (X.Y.Z): ' ver; prepare_version "$ver";;
     7) read -r -p 'Version (X.Y.Z): ' ver; publish_release "$ver";;
+    8) server_build;;
     0) exit 0;; *) die "Invalid choice";;
   esac
 }
@@ -133,6 +142,7 @@ case "${1:-menu}" in
   menu) menu;; help|-h|--help) usage;; test) test_client;;
   linux) linux_build;; windows) windows_build;; download) download_windows;;
   status) gh_ready; gh run list --repo "$REPO" --branch "$BRANCH" --limit 12;;
-  version) prepare_version "${2:-}";; publish) publish_release "${2:-}";;
+  version) prepare_version "${2:-}";; release|publish) publish_release "${2:-}";;
+  server) server_build;;
   *) usage; exit 1;;
 esac

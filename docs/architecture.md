@@ -348,3 +348,11 @@ toggle behavior, target-preserving stop/resume, Space messaging, and canvas
 focus restoration while retaining map-process authority. Multiplayer
 expansion, broader two-browser validation, player recovery, and server-owned
 rewards or consumable ammunition remain deferred.
+
+## Unified release packaging (2026-11-06)
+
+The umbrella root `mix.exs` is the sole public release-version source. The Linux release manager at `scripts/space-nova` triggers an exact-`sbs`-commit GitHub Actions pipeline; platform-specific Tauri/Cargo/npm version fields are generated in ephemeral CI workspaces. All GitHub release filenames are stable and version-free, while tags and internal OS package metadata remain properly versioned.
+
+Release CI gates full Elixir, browser JavaScript and Tauri tests, builds the Ubuntu 24.04 x86_64 `space_mmo` OTP release after asset digestion, exercises a temporary database migration and HTTPS startup, and packages Linux/Windows Tauri installers. The publish job validates installer signatures, creates `SHA256SUMS` and `latest.json`, and publishes all assets together via a draft release. Signing credentials remain in GitHub Actions secrets. EC2 deployment is deliberately independent of release publication; Android SBS remains a server-served viewer. See `docs/space-nova-release.md`.
+
+Validation status: helper commands were reviewed; full CI signing, release publication and real-device verification are pending.

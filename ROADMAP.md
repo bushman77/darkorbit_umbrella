@@ -884,3 +884,16 @@ Source: [Symbrella `symbolic_generation`](https://github.com/bushman77/Symbrella
   fire, evasion and surrender presentation.
 - [ ] Replace private per-pilot tactical leases with a genuinely shared combat
   arena before introducing lawful collateral damage or cooperative defense.
+
+## Unified GitHub Release Distribution — 2026-11-06
+
+- [x] Release-manager source and workflows assembled on `sbs`; canonical version in root `mix.exs` (0.3.1), derived desktop build metadata and stable public filenames.
+- [x] Ubuntu x86_64 OTP release build definition, migration entry point and CI startup smoke-test instructions.
+- [x] Windows NSIS and Linux AppImage/`.deb` release staging, Tauri updater signatures, checksums and gated draft-first publication.
+- [x] Release-specific offline version tests and push-time validation workflow.
+- [ ] Inspect GitHub Actions validation results following merge/commit; resolve any CI build failures.
+- [ ] Perform first signed end-to-end release test; GitHub Releases currently has no published package.
+- [ ] Verify installer upgrades on real Windows/Linux systems and Android SBS phone pairing.
+- [ ] Add separate EC2 deployment automation with backups, migrations and rollback controls.
+
+See `docs/space-nova-release.md` for the distribution procedure.
