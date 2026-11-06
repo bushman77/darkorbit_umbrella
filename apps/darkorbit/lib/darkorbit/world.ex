@@ -195,12 +195,32 @@ defmodule Darkorbit.World do
         ShipCondition.save_verified(player_id, ship_id, combat)
       end,
       persist_tactical_effect: fn player_id, id, verified_outcome, _npc_report ->
-        if verified_outcome == :surrender and claim_cargo? do
-          with {:ok, source} <- SolarNavigation.tactical_contact(server, player_id, id),
-               {:ok, receipt} <- Piracy.seize_surrender(player_id, source),
-               :ok <- SolarNavigation.set_faction_standing(
-                 server, player_id, receipt.faction_id, receipt.standing) do
-            {:ok, receipt}
+        if verified_outcome == :surrender do
+          # A DB receipt can outlive the temporary SOL tactical lease if map
+          # cleanup failed. Replay its exact debit instead of trying to mint
+          # cargo again, including if the player chooses Release on retry.
+          receipt =
+            case Piracy.claim_receipt(player_id, id) do
+              {:ok, previous} -> {:ok, previous}
+
+              {:error, :claim_not_found} when claim_cargo? ->
+                with {:ok, source} <- SolarNavigation.tactical_contact(server, player_id, id) do
+                  Piracy.seize_surrender(player_id, source)
+                end
+
+              {:error, :claim_not_found} ->
+                {:ok, %{}}
+            end
+
+          with {:ok, effect} <- receipt do
+            if Map.has_key?(effect, :faction_id) do
+              with :ok <- SolarNavigation.set_faction_standing(
+                server, player_id, effect.faction_id, effect.standing) do
+                {:ok, effect}
+              end
+            else
+              {:ok, effect}
+            end
           end
         else
           {:ok, %{}}
