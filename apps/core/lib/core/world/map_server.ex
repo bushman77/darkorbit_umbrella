@@ -766,39 +766,6 @@ defmodule Core.World.MapServer do
     end
   end
 
-  # A tactical claim binds each pilot to exactly one NPC actor in the shared
-  # map. Wing lasers and target locks must not leak into unrelated encounters.
-  defp tactical_owner_npc_ids(state) do
-    state.solar_tactical
-    |> Map.values()
-    |> Enum.map(& &1.npc_id)
-    |> MapSet.new()
-  end
-
-  defp tactical_weapon_targets(state, %{player_id: player_id}) do
-    case Map.get(state.solar_tactical, player_id) do
-      %{npc_id: id} ->
-        case Map.get(state.npcs, id) do
-          nil -> []
-          npc -> [npc]
-        end
-
-      nil ->
-        reserved = tactical_owner_npc_ids(state)
-        Enum.reject(Map.values(state.npcs), &MapSet.member?(reserved, &1.id))
-    end
-  end
-
-  defp authorize_tactical_target(state, %{player_id: player_id}, target_id) do
-    case Map.get(state.solar_tactical, player_id) do
-      %{npc_id: ^target_id} -> :ok
-      %{npc_id: _} -> {:error, :target_outside_encounter}
-      nil ->
-        if MapSet.member?(tactical_owner_npc_ids(state), target_id),
-          do: {:error, :target_outside_encounter}, else: :ok
-    end
-  end
-
   def handle_call({:fire_ready_weapon, session_id, entity_id}, _from, state) do
     with {:ok, attacker} <- authorized_entity(state, session_id, entity_id),
          :ok <- living_attacker(attacker),
@@ -844,6 +811,39 @@ defmodule Core.World.MapServer do
   def handle_info(:simulation_tick, state) do
     new_state = state |> advance_tick() |> schedule_tick()
     {:noreply, new_state}
+  end
+
+  # A tactical claim binds each pilot to exactly one NPC actor in the shared
+  # map. Wing lasers and target locks must not leak into unrelated encounters.
+  defp tactical_owner_npc_ids(state) do
+    state.solar_tactical
+    |> Map.values()
+    |> Enum.map(& &1.npc_id)
+    |> MapSet.new()
+  end
+
+  defp tactical_weapon_targets(state, %{player_id: player_id}) do
+    case Map.get(state.solar_tactical, player_id) do
+      %{npc_id: id} ->
+        case Map.get(state.npcs, id) do
+          nil -> []
+          npc -> [npc]
+        end
+
+      nil ->
+        reserved = tactical_owner_npc_ids(state)
+        Enum.reject(Map.values(state.npcs), &MapSet.member?(reserved, &1.id))
+    end
+  end
+
+  defp authorize_tactical_target(state, %{player_id: player_id}, target_id) do
+    case Map.get(state.solar_tactical, player_id) do
+      %{npc_id: ^target_id} -> :ok
+      %{npc_id: _} -> {:error, :target_outside_encounter}
+      nil ->
+        if MapSet.member?(tactical_owner_npc_ids(state), target_id),
+          do: {:error, :target_outside_encounter}, else: :ok
+    end
   end
 
   # One synchronized weapon activation. When both beams strike the same
