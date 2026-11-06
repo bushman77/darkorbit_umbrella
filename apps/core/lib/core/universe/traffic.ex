@@ -292,12 +292,6 @@ defmodule Core.Universe.Traffic do
   end
 
   @doc """
-  Commit the only authoritative combat result against an existing strategic
-  vessel and voyage. These fields are produced by the map-owned simulation,
-  never by a player payload. A settlement is recorded at most once and can
-  only decrease the preexisting hull/shields. Cargo is never awarded here.
-  """
-  @doc """
   Advance shared traffic together with real refineries and occupied berths.
 
   Navigation uses this path; the legacy advance/3 remains available for
@@ -372,14 +366,12 @@ defmodule Core.Universe.Traffic do
     end
   end
 
-  defp advance_vessel_with_bases(%{state: :awaiting_berth} = vessel, elapsed, bases) do
-    {bases, docked} = SpaceBases.dock(bases, vessel)
-
-    if docked.state == :docked do
-      advance_vessel_with_bases(docked, elapsed, bases)
-    else
-      {docked, bases}
-    end
+  defp advance_vessel_with_bases(%{state: :awaiting_berth} = vessel, _elapsed, bases) do
+    # A queued ship can claim a berth that another vessel releases during
+    # this tick, but cannot retroactively count the time it spent waiting
+    # as dock service. Start its full service window on the next SOL tick.
+    SpaceBases.dock(bases, vessel)
+    |> then(fn {updated_bases, docked} -> {docked, updated_bases} end)
   end
 
   defp advance_vessel_with_bases(%{state: :docked} = vessel, elapsed, bases) do
@@ -404,6 +396,12 @@ defmodule Core.Universe.Traffic do
     end
   end
 
+  @doc """
+  Commit the only authoritative combat result against an existing strategic
+  vessel and voyage. These fields are produced by the map-owned simulation,
+  never by a player payload. A settlement is recorded at most once and can
+  only decrease the preexisting hull/shields. Cargo is never awarded here.
+  """
   @spec settle(map(), map(), map(), atom()) :: {:ok, map()} | {:error, atom()}
   def settle(ships, identity, report, outcome),
     do: settle(ships, identity, report, outcome, %{})
