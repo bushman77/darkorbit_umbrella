@@ -57,6 +57,96 @@ defmodule Core.Universe.NavigationTest do
     assert map_size(:sys.get_state(name).traffic) == 8
   end
 
+  test "one active fight pins contact identity and clears before another faction interception",
+       %{server: server} do
+    player_id = 55_101
+    assert {:ok, _} = Navigation.set_course(server, player_id, "venus")
+
+    # Place two different legitimate strategic identities on the same
+    # shipping lane, within encounter radius of the same pilot.
+    :sys.replace_state(server, fn state ->
+      voyage = state.voyages[player_id]
+      distance = voyage.travel_distance_km
+      middle = Core.Universe.Sol.interpolate_game_position(
+        voyage.origin_position_km, voyage.destination_position_km, 0.5)
+
+      fleet =
+        ["traffic:sol:meridian-01", "traffic:sol:vesper-02"]
+        |> Enum.with_index()
+        |> Map.new(fn {id, index} ->
+          source = state.traffic[id]
+          duration = ceil(distance / source.cruise_speed_km_s * 1_000)
+          contact = %{source |
+            origin_id: "earth", destination_id: "venus",
+            distance_km: distance, duration_ms: duration,
+            elapsed_ms: div(duration, 2),
+            position_km: %{middle | x: middle.x + index * 120_000.0}}
+          {id, contact}
+        end)
+
+      voyage = %{voyage |
+        position_km: middle, elapsed_ms: div(voyage.duration_ms, 2),
+        distance_travelled_km: distance / 2}
+      %{state | traffic: fleet, voyages: Map.put(state.voyages, player_id, voyage)}
+    end)
+
+    assert :ok = Navigation.tick(server)
+    {:ok, pending} = Navigation.snapshot(server, player_id)
+    assert %{contact_id: first_id, faction_id: first_faction} =
+      pending.pending_encounter
+    assert pending.encounter.id == pending.pending_encounter.id
+
+    assert {:ok, %{tactical_encounter: tactical}} =
+      Navigation.enter_tactical(server, player_id, pending.pending_encounter.id)
+    assert tactical.contact_id == first_id
+
+    # A second, different-faction trader comes closer while the pilot fights.
+    # The public encounter MUST remain bound to the actual leased enemy.
+    :sys.replace_state(server, fn state ->
+      voyage = state.voyages[player_id]
+      other_id =
+        if first_id == "traffic:sol:meridian-01",
+          do: "traffic:sol:vesper-02", else: "traffic:sol:meridian-01"
+      changed =
+        Map.update!(state.traffic, other_id, fn contact ->
+          %{contact | position_km: voyage.position_km}
+        end)
+      %{state | traffic: changed}
+    end)
+    {:ok, during} = Navigation.snapshot(server, player_id)
+    assert during.encounter.contact_id == first_id
+    assert during.encounter.faction_id == first_faction
+    assert during.tactical_encounter.id == tactical.id
+
+    combat = :sys.get_state(server).traffic[first_id].combat
+    report = %{contact_id: first_id, encounter_id: tactical.id,
+      voyage_number: tactical.voyage_number,
+      combat: %{combat | hull: combat.hull - 1}}
+    assert {:ok, %{tactical_encounter: nil, pending_encounter: nil}} =
+      Navigation.finish_tactical(server, player_id, tactical.id, :retreat, report)
+
+    # The other contact is still present and from a different faction.
+    # The settled contact is gone; a new event cannot arrive on this tick.
+    :sys.replace_state(server, fn state ->
+      %{state | traffic: Map.delete(state.traffic, first_id)}
+    end)
+    for _ <- 1..10 do
+      assert :ok = Navigation.tick(server)
+      {:ok, cruising} = Navigation.snapshot(server, player_id)
+      assert cruising.pending_encounter == nil
+      assert cruising.encounter == nil
+    end
+
+    # After the clearance interval, a new nearby vessel may announce a
+    # *different* encounter, with its own contact/faction identity.
+    for _ <- 1..6, do: assert(:ok = Navigation.tick(server))
+    {:ok, next_contact} = Navigation.snapshot(server, player_id)
+    assert %{contact_id: second_id, faction_id: second_faction} =
+      next_contact.pending_encounter
+    assert second_id != first_id
+    assert second_faction != first_faction
+  end
+
   test "free flight pauses SOL progress and the same AI voyage resumes", %{server: server} do
     assert {:error, :no_active_course} = Navigation.enter_free_flight(server, 11)
     assert {:error, :not_in_free_flight} = Navigation.resume_cruise(server, 11)
