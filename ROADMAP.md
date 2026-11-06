@@ -910,3 +910,11 @@ See `docs/space-nova-release.md` for the distribution procedure.
 - [ ] Rebuild and stage server release from updated source; configure `SPACE_NOVA_PROXY_MODE=true` only in private EC2 systemd environment.
 - [ ] Run production migration and controlled cutover after verifying database backup, then confirm public HTTPS and websocket operation.
 - [ ] Publish/install new signed client version so existing Tauri installations adopt port 443 by default.
+
+### Installed production client on HTTPS-inspected networks (2026-11-06)
+
+- [x] Add opt-in native Tauri/WebKitGTK SOCKS5 handling for installed clients;
+  public HTTPS certificate validation remains enforced.
+- [x] Add one-command SSH tunnel + installed client runner and regression tests.
+- [ ] Rebuild, reinstall and smoke-test the installed Linux production client
+  through SSH with the current Fortinet-filtered network.

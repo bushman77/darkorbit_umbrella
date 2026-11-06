@@ -39,3 +39,14 @@ test("native updater requires consent and never exposes installation commands to
   assert.match(rustSource, /APPIMAGE/)
   assert.doesNotMatch(rustSource, /invoke_handler/)
 })
+
+test("production window creates with optional native SOCKS5 proxy only on opt-in", () => {
+  assert.equal(config.app.windows.length, 1)
+  assert.equal(config.app.windows[0].create, false)
+  assert.match(rustSource, /WebviewWindowBuilder::from_config/)
+  assert.match(rustSource, /SPACE_NOVA_USE_SOCKS_TUNNEL/)
+  assert.match(rustSource, /socks5:\/\/127\.0\.0\.1:1080/)
+  assert.match(rustSource, /window\.proxy_url\(proxy\)/)
+  assert.match(rustSource, /window\.build\(\)\?/)
+  assert.doesNotMatch(rustSource, /danger_accept_invalid_certs|ignore_certificate_errors/)
+})

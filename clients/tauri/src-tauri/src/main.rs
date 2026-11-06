@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use tauri::Manager;
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 use tauri_plugin_updater::UpdaterExt;
 
@@ -10,6 +11,20 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
+            // Create the installed production webview using its bundled window
+            // configuration, with an optional native SOCKS5 tunnel override.
+            // Never expose this control to the remote page or enable it by default.
+            let window_config = &app.config().app.windows[0];
+            let mut window = tauri::WebviewWindowBuilder::from_config(app.handle(), window_config)?;
+
+            if std::env::var("SPACE_NOVA_USE_SOCKS_TUNNEL").as_deref() == Ok("1") {
+                let proxy = "socks5://127.0.0.1:1080".parse()?;
+                window = window.proxy_url(proxy);
+                eprintln!("Space Nova: native SOCKS5 webview proxy enabled (127.0.0.1:1080)");
+            }
+
+            window.build()?;
+
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 if let Err(error) = check_for_updates(handle).await {

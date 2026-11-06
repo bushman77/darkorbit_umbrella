@@ -251,3 +251,35 @@ not local asset bundling or an offline mode. See `docs/space-nova-ui.md`.
 ## Unified server and client releases
 
 The public release version now comes exclusively from the umbrella root `mix.exs`. For future versions, use `./scripts/space-nova version X.Y.Z` rather than editing Tauri, npm or Cargo version fields manually. The unified release workflow derives those mandatory internal version fields in its build workspaces, publishes version-free public asset names, and includes the Linux dedicated server alongside the signed desktop installers. See `docs/space-nova-release.md`. The original `./scripts/space-nova publish` command remains as an alias for `release`.
+
+## Installed production client through an SSH tunnel (Fortinet-filtered networks)
+
+The **installed** Linux client has an explicit native WebKitGTK SOCKS5 mode
+that is disabled by default. It is only activated when the process is launched
+with `SPACE_NOVA_USE_SOCKS_TUNNEL=1`; the native webview uses
+`socks5://127.0.0.1:1080`. This does not grant permissions to remote web
+pages, bypass TLS certificate verification or change the server URL.
+
+If the local network performs HTTPS interception and substitutes an untrusted
+Fortinet certificate, use the repository's integrated production test runner:
+
+```sh
+cd ~/darkorbit_umbrella
+./scripts/space-nova-tunnel
+```
+
+The script uses an existing validated local SOCKS5 tunnel or creates one
+with SSH to the configured EC2 host, validates the remote Let's Encrypt
+certificate with curl, runs the **installed** `space-nova-client` executable
+with the native SOCKS5 opt-in, and closes only the SSH process it created.
+It does not alter GNOME's desktop-wide proxy settings. A normal Applications
+menu launch still uses the default network and requires a trusted certificate.
+
+To use the native proxy with your own already-running tunnel, run:
+
+```sh
+SPACE_NOVA_USE_SOCKS_TUNNEL=1 space-nova-client
+```
+
+Do not pass `--insecure` or trust arbitrary TLS certificates. This feature
+requires reinstalling a client build that includes the native proxy option.
