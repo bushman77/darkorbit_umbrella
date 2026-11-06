@@ -206,23 +206,33 @@ class SpaceClient {
     const tacticalPanel = this.root.querySelector("#solar-tactical-panel")
     tacticalPanel?.addEventListener("click", event => {
       const accept = event.target?.closest?.("[data-solar-tactical-surrender]")
+      const seize = event.target?.closest?.("[data-solar-tactical-seize]")
       const retreat = event.target?.closest?.("[data-solar-tactical-retreat]")
-      if ((!accept && !retreat) || this.tacticalRetreating) return
+      if ((!accept && !seize && !retreat) || this.tacticalRetreating) return
       const tactical = this.navComputer?.solarNavigation?.tactical_encounter
       if (!tactical?.id) return
       this.tacticalRetreating = true
       const message = tacticalPanel.querySelector("[data-solar-tactical-message]")
-      if (message) message.textContent = accept
-        ? "Accepting the captain's surrender…" : "Withdrawing from interception…"
-      const handler = accept ? this.solarAcceptSurrender.bind(this)
-                             : this.solarRetreatEncounter.bind(this)
-      handler(tactical.id, (ok, navigation, reason) => {
+      if (message) message.textContent = seize
+        ? "Seizing permitted cargo under inventory lock…"
+        : accept ? "Releasing the surrendered captain…"
+        : "Withdrawing from interception…"
+      const handler = seize ? this.solarSeizeCargo.bind(this)
+        : accept ? this.solarAcceptSurrender.bind(this)
+        : this.solarRetreatEncounter.bind(this)
+      handler(tactical.id, (ok, navigation, reason, claim) => {
         this.tacticalRetreating = false
         if (ok && navigation) {
           this.applySolarNavigation(navigation)
           this.navComputer?.open()
-          this.setCombatMessage(accept
-            ? "Merchant surrendered. Passage granted; cargo transfer is not yet implemented."
+          const cargo = claim?.cargo || {}
+          const contents = Object.entries(cargo)
+            .map(([id, count]) => count + "t " + id.replaceAll("_", " "))
+            .join(", ")
+          this.setCombatMessage(seize
+            ? "Cargo seized: " + (contents || "none") +
+              " · " + claim.faction_id + " standing " + claim.standing
+            : accept ? "Merchant released. SOL voyage resumed."
             : "Interception ended. SOL voyage resumed.")
         } else if (message) {
           message.textContent = "Decision unavailable: " + (reason || "relay error")
@@ -405,6 +415,18 @@ class SpaceClient {
     channel.on("combat_engaged", engagement => this.combatEngaged(engagement))
     channel.on("combat_disengaged", engagement => this.combatDisengaged(engagement))
     channel.on("laser_fired", attack => this.laserFired(attack))
+    channel.on("solar_faction_hit", event => {
+      const label = this.root.querySelector("#solar-faction-impact")
+      const delta = Number(event.delta)
+      if (label) {
+        label.hidden = false
+        label.textContent = "FACTION HIT · " + event.faction_id +
+          " · " + (delta > 0 ? "+" : "") + delta +
+          " · STANDING " + event.standing
+      }
+      this.setCombatMessage("Faction reputation: " + event.faction_id +
+        " " + event.delta + " (now " + event.standing + ")")
+    })
     channel.on("entity_destroyed", destruction => this.entityDestroyed(destruction))
     channel.on("planetary_proximity_changed", event => this.planetaryProximityChanged(event))
     channel.onError(() => {
@@ -823,14 +845,17 @@ class SpaceClient {
       entity.state === "surrendered" &&
       entity.npcTypeId === "solar-scow-" + this.player?.pilot?.id)
     const accept = panel.querySelector("[data-solar-tactical-surrender]")
-    if (accept) {
-      accept.hidden = !surrendered
-      accept.disabled = this.tacticalRetreating
+    const seize = panel.querySelector("[data-solar-tactical-seize]")
+    for (const button of [accept, seize]) {
+      if (button) {
+        button.hidden = !surrendered
+        button.disabled = this.tacticalRetreating
+      }
     }
     const message = panel.querySelector("[data-solar-tactical-message]")
     if (message && !this.tacticalRetreating) {
       message.textContent = surrendered
-        ? "Scow captain offers surrender. Accept and resume or withdraw. Cargo transfers are not yet enabled."
+        ? "Captain offers surrender. Release them or seize cargo (4-tonne hold limits apply)."
         : "Defeat the opposing vessel, accept surrender if offered, or retreat."
     }
   }
@@ -847,6 +872,14 @@ class SpaceClient {
     if (this.channel?.state !== "joined") return done(false, null, "relay offline")
     this.channel.push("solar_accept_surrender", {encounter_id: encounterId}, 5000)
       .receive("ok", response => done(true, response.navigation))
+      .receive("error", response => done(false, null, response.reason))
+      .receive("timeout", () => done(false, null, "timeout"))
+  }
+
+  solarSeizeCargo(encounterId, done) {
+    if (this.channel?.state !== "joined") return done(false, null, "relay offline")
+    this.channel.push("solar_seize_cargo", {encounter_id: encounterId}, 5000)
+      .receive("ok", response => done(true, response.navigation, null, response.claim))
       .receive("error", response => done(false, null, response.reason))
       .receive("timeout", () => done(false, null, "timeout"))
   }
