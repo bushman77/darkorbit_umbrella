@@ -180,7 +180,7 @@
           <li class="rounded-lg border border-slate-700 bg-slate-950 p-3 text-sm">
             <p class="font-semibold"><%= claim.contact_id %> · voyage <%= claim.voyage_number %></p>
             <p class="mt-1 text-xs text-slate-400">
-              <%= claim.faction_id %> · <%= claim.at %>
+              <%= claim.faction_id %> · <%= Calendar.strftime(claim.at, "%Y-%m-%d %H:%M UTC") %>
             </p>
             <p class="mt-2 text-emerald-200">
               <%= for {id, amount} <- claim.cargo do %>
