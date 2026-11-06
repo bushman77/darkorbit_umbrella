@@ -814,3 +814,28 @@ Source: [Symbrella `symbolic_generation`](https://github.com/bushman77/Symbrella
   strategic voyages across OTP/server restarts. V1 station state is
   supervised RAM state; account cargo/standing already has its own
   PostgreSQL persistence boundary.
+
+
+### SOL encounter overlap / mixed-faction guard (2026-11-05)
+
+- [x] Keep one authentic pending/tactical encounter identity in every
+  navigation snapshot while that pilot is fighting. Changing nearby traffic
+  cannot replace the displayed combat vessel or faction mid-encounter.
+- [x] Add a 15-second post-resolution clearance period to distinguish a new
+  nearby ship's encounter from the just-finished fight. SOL traffic still moves
+  and refineries still produce during this period.
+- [x] Isolate tactical target locks and two-wing laser traces to the pilot's
+  exclusively leased NPC. Another player's Scow or unrelated map NPC can no
+  longer be struck by the same private encounter's weapon burst.
+- [x] Reconcile faction offenses against both the SOL claim and the map's
+  exact strategic contact/voyage identity. Seizure requires the verified
+  tactical report's identity to match before any ledger credit.
+- [x] Display the call sign and faction with each penalty and clear stale
+  faction-hit banners when the tactical encounter changes.
+- [x] Add regression tests for two overlapping Scows in one map and two
+  distinct-faction merchants approaching the same pilot during one voyage.
+- [ ] Run ExUnit/Node suites and live exercise on the developer workstation;
+  code review is not a substitute for a passing test run.
+- [ ] Longer term: separate physically shared multiplayer combat arenas from
+  the current exclusive private tactical lease model, with explicit lawful
+  collateral damage and faction-incident attribution.
