@@ -228,10 +228,7 @@ defmodule Darkorbit.World do
          %{id: encounter_id} <- navigation.tactical_encounter,
          {:ok, source} <- SolarNavigation.tactical_contact(
            server, session.player_id, encounter_id),
-         {:ok, map} <- Simulation.snapshot(session.map_id),
-         %{kind: :npc, strategic_vessel_id: contact_id} <-
-           Enum.find(map.entities, &(&1.id == target_id)),
-         true <- contact_id == source.contact_id,
+         true <- target_id == "npc:#{session.map_id}:solar-#{source.ship_class}-#{session.player_id}:1",
          {:ok, consequence} <- Piracy.record_attack(session.player_id, source),
          :ok <- SolarNavigation.set_faction_standing(server, session.player_id,
            consequence.faction_id, consequence.standing) do
