@@ -48,6 +48,34 @@ defmodule Core.Universe.OrbitalEntry do
   def center(_), do: nil
 
   @doc """
+  Fixed physical orbital site shared by every player map of this planet.
+  The base is above the surface and well beyond the collision exclusion
+  radius; it is a visual/docking destination, not yet a player collision body.
+  """
+  @spec space_base(String.t()) :: map() | nil
+  def space_base(body_id) when is_binary(body_id) do
+    with {:ok, radius} <- Sol.planet_radius_km(body_id),
+         %{} = planet_center <- center(body_id) do
+      %{
+        id: "sol:base:" <> body_id,
+        refinery_id: "sol:refinery:" <> body_id,
+        body_id: body_id,
+        position_3d: %{
+          x: planet_center.x + radius * 1.52,
+          y: planet_center.y,
+          z: radius * 0.14
+        },
+        berth_count: 3,
+        model: :orbital_refinery_v1
+      }
+    else
+      _ -> nil
+    end
+  end
+
+  def space_base(_), do: nil
+
+  @doc """
   The arrival side points toward the previous planet in compressed SOL space.
   All arrivals remain outside CAUTION and face inward. A small deterministic
   per-pilot angular offset prevents exact overlap on repeated voyages.
