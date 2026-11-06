@@ -418,14 +418,16 @@ class SpaceClient {
     channel.on("solar_faction_hit", event => {
       const label = this.root.querySelector("#solar-faction-impact")
       const delta = Number(event.delta)
+      const contactName = String(event.call_sign || event.contact_id || "Unknown contact")
       if (label) {
         label.hidden = false
-        label.textContent = "FACTION HIT · " + event.faction_id +
-          " · " + (delta > 0 ? "+" : "") + delta +
+        label.textContent = "FACTION HIT · " + contactName + " · " +
+          event.faction_id + " · " + (delta > 0 ? "+" : "") + delta +
           " · STANDING " + event.standing
       }
-      this.setCombatMessage("Faction reputation: " + event.faction_id +
-        " " + event.delta + " (now " + event.standing + ")")
+      this.setCombatMessage("Faction penalty for " + contactName +
+        " (" + event.faction_id + "): " + event.delta +
+        " · STANDING " + event.standing)
     })
     channel.on("entity_destroyed", destruction => this.entityDestroyed(destruction))
     channel.on("planetary_proximity_changed", event => this.planetaryProximityChanged(event))
@@ -837,7 +839,8 @@ class SpaceClient {
       return
     }
     const label = panel.querySelector("[data-solar-tactical-name]")
-    if (label) label.textContent = tactical.call_sign || "Hostile interception"
+    if (label) label.textContent = (tactical.call_sign || "Hostile interception") +
+      " · " + (tactical.faction_name || tactical.faction_id || "Unregistered faction")
     const button = panel.querySelector("[data-solar-tactical-retreat]")
     if (button) button.disabled = this.tacticalRetreating
 
