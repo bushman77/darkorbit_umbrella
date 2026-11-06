@@ -103,9 +103,9 @@ defmodule Core.Universe.SpaceBasesTest do
   end
 
   test "disabled traffic preserves remaining cargo and never enters a bay" do
-    fleet = Traffic.seed()
-    disabled = %{fleet["traffic:sol:meridian-01"] | state: :disabled}
-    fleet = Map.put(fleet, disabled.id, disabled)
+    source = Traffic.seed()["traffic:sol:meridian-01"]
+    disabled = %{source | state: :disabled}
+    fleet = %{disabled.id => disabled}
     bases = SpaceBases.seed()
 
     {later, unchanged} = Traffic.advance_with_bases(fleet, 1_000_000, bases)
