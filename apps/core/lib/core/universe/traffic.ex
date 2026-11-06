@@ -185,7 +185,9 @@ defmodule Core.Universe.Traffic do
   Launch one server-scheduled trader on an actual planet-to-planet lane.
   No pilot action or requested destination chooses this vessel. Its stable
   route and origin are shared by all pilots, including free-waypoint pilots.
-  Cargo is a temporary fixture until resource terminals produce stock.
+  The initial manifest is a server-owned *load request*. Navigation debits
+  actual Earth/planet refinery stock using SpaceBases.dispatch/2 before the
+  new vessel appears in the shared SOL traffic map.
   """
   @spec launch_scheduled_trader(map(), String.t(), String.t(), pos_integer()) ::
           {:ok, map()} | {:error, atom()}
