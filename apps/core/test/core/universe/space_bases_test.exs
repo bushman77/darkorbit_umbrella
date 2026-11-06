@@ -26,7 +26,7 @@ defmodule Core.Universe.SpaceBasesTest do
     bases = SpaceBases.seed()
     fleet = Traffic.seed()
     meridian = fleet["traffic:sol:meridian-01"]
-    mars_before = bases["mars"].stock
+    mars_before = SpaceBases.produce(bases, meridian.duration_ms)["mars"].stock
 
     {at_mars, bases} =
       Traffic.advance_with_bases(fleet, meridian.duration_ms, bases)
@@ -74,16 +74,16 @@ defmodule Core.Universe.SpaceBasesTest do
     assert SpaceBases.public(bases, "mars").occupied_berths == 3
     assert bases["mars"].stock["industrial_parts"] == 150 + 3 * 32
 
-    # Departure frees three bays; waiting trader keeps its original identity,
-    # and docks on the next SOL tick without duplicating its cargo.
+    # Departure frees three bays; the waiting trader takes a newly freed
+    # bay in the same clock advancement, without duplicating its cargo.
     {departed, bases} = Traffic.advance_with_bases(arrived, 45_000, bases)
-    assert departed[waiting_id].state == :awaiting_berth
-    assert SpaceBases.public(bases, "mars").occupied_berths == 0
+    assert departed[waiting_id].state == :docked
+    assert SpaceBases.public(bases, "mars").occupied_berths == 1
+    assert bases["mars"].stock["industrial_parts"] == 150 + 4 * 32
 
     {redocked, bases} = Traffic.advance_with_bases(departed, 1_000, bases)
     assert redocked[waiting_id].state == :docked
     assert SpaceBases.public(bases, "mars").occupied_berths == 1
-    assert bases["mars"].stock["industrial_parts"] == 150 + 4 * 32
   end
 
   test "refinery stocks do not fabricate goods and local production occurs once per minute" do
@@ -104,14 +104,14 @@ defmodule Core.Universe.SpaceBasesTest do
 
   test "disabled traffic preserves remaining cargo and never enters a bay" do
     fleet = Traffic.seed()
-    disabled = put_in(fleet["traffic:sol:meridian-01"].state, :disabled)
+    disabled = %{fleet["traffic:sol:meridian-01"] | state: :disabled}
     fleet = Map.put(fleet, disabled.id, disabled)
     bases = SpaceBases.seed()
 
     {later, unchanged} = Traffic.advance_with_bases(fleet, 1_000_000, bases)
     assert later[disabled.id] == disabled
     assert SpaceBases.public(unchanged, "mars").occupied_berths == 0
-    assert unchanged["mars"].stock == bases["mars"].stock +
-      %{}
+    assert unchanged["mars"].stock ==
+      SpaceBases.produce(bases, 1_000_000)["mars"].stock
   end
 end
