@@ -557,6 +557,7 @@ class SpaceClient {
   }
 
   applyWorldState(state) {
+    this.orbitalBase = state.orbital_base || null
     this.boundaries = state.boundaries || this.boundaries
     this.volume = state.volume || this.volume
     this.worldTick = state.tick
