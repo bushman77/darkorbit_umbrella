@@ -736,3 +736,40 @@ Source: [Symbrella `symbolic_generation`](https://github.com/bushman77/Symbrella
 - [x] Add channel and headless tests for authenticated entry/exit, remote map authorization, flight controls and ship condition gating.
 - [x] Targeted Core, Phoenix Channel, and JavaScript tests passed in [SOL free-flight CI](https://github.com/bushman77/darkorbit_umbrella/actions/runs/42067967403) on 2026-11-05.
 - [ ] Manually verify browser transition, reconnect, server restart, and SBS headset; full repository suites remain a separate verification.
+
+
+### SOL merchant cargo seizure and faction consequences V1 (2026-11-05)
+
+- [x] Offer two distinct outcomes after map-verified merchant surrender:
+  **release captain** without taking cargo or **seize cargo** and resume cruise.
+- [x] Map a real SOL traffic manifest into capacity-limited physical cargo
+  crates at a provisional rate of ten strategic units per one-tonne crate;
+  retain the source's remaining manifest units.
+- [x] Lock the account/inventory, enforce active ship cargo capacity, and
+  issue a database-unique claim receipt per vessel and voyage. All item
+  identities are restricted to the authoritative cargo catalog.
+- [x] Apply the receipt's exact debit to the canonical strategic vessel on
+  tactical settlement; reuse the original receipt on interrupted cleanup.
+- [x] Add durable, deduplicated SOL faction events and account standings:
+  first confirmed neutral merchant hit -12, civilian cargo seizure -18,
+  with standing bounded to [-100, 100]. Raider encounters do not incur
+  neutral-merchant penalties.
+- [x] Refresh SOL encounter policy standing from PostgreSQL upon login, and
+  update the in-memory navigation cache after a faction event.
+- [x] Show the two choices in the cockpit and add cargo receipts/standing to
+  the authenticated Equipment Locker.
+- [x] Add isolated tests for catalog conversions, cargo capacity, idempotent
+  replay, unrelated-account rejection, out-of-stock claims, faction penalties,
+  canonical vessel debit and rejection of forged channel requests.
+- [ ] Run database migration, full Elixir/JavaScript suites, build and live
+  phone SBS verification on the developer workstation; these changes are
+  committed but not locally executed in this authoring environment.
+- [ ] Persist/recover the complete SOL navigation and in-flight settlement
+  state across a full OTP/host restart. The SQL receipt prevents repeat cargo
+  minting, but SOL traffic recovery is a separate consistency milestone.
+- [ ] Make faction infractions a first-class map-level event so non-owner
+  attackers and disconnect-mid-hit cases are captured without relying on
+  the owner's Phoenix channel observing the shot.
+- [ ] Add player-selected individual cargo lots, voluntary buy/sell orders,
+  planetary dock warehouses, prices, taxes, smuggling inspections and
+  law-specific reputation penalties.
