@@ -370,6 +370,114 @@ defmodule DarkorbitWeb.WorldChannelTest do
     leave_and_wait(joined)
   end
 
+  test "a confirmed civilian hit and surrendered cargo seizure settle one SOL vessel" do
+    account = verified_player_account_fixture()
+    {joined, server, encounter_id, npc_id, vessel_id} =
+      begin_neutral_cargo_encounter(account)
+
+    assert :ok = prime_scow_for_surrender(account.id, npc_id)
+
+    select_ref = push(joined, "select_target", %{"target_id" => npc_id})
+    assert_reply select_ref, :ok, %{selection: %{target_id: ^npc_id}}
+
+    shot_ref = push(joined, "laser_attack", %{
+      "target_id" => "client-spoofed-target", "damage" => 999_999
+    })
+    assert_reply shot_ref, :ok, %{target_id: ^npc_id, hit: true}
+    assert_push "laser_fired", %{attacker_id: pilot_id, target_id: ^npc_id}
+    assert pilot_id == account.id
+    assert_push "solar_faction_hit", %{faction_id: "independent",
+      applied?: true, delta: -12, standing: -12}
+    assert Darkorbit.Piracy.faction_standing(account.id, "independent") == -12
+
+    assert {:ok, map} = World.snapshot("1-1")
+    assert %{state: :surrendered} = Enum.find(map.entities, &(&1.id == npc_id))
+
+    # Client-provided manifest, cargo mass and faction are entirely ignored.
+    seize_ref = push(joined, "solar_seize_cargo", %{
+      "encounter_id" => encounter_id,
+      "cargo" => %{"rare_ores" => 999_999},
+      "faction_id" => "venus", "player_id" => -1
+    })
+    assert_reply seize_ref, :ok, %{navigation: %{tactical_encounter: nil},
+      claim: %{cargo: %{"industrial_parts" => 3},
+        strategic_debit: %{"industrial_parts" => 30},
+        faction_id: "independent", standing: -30}}
+
+    assert Darkorbit.Inventory.cargo_manifest(account.id) == %{"industrial_parts" => 3}
+    assert Darkorbit.Inventory.cargo_tonnage(account.id) == 3
+    assert Darkorbit.Piracy.faction_standing(account.id, "independent") == -30
+
+    strategic = :sys.get_state(server).traffic[vessel_id]
+    assert strategic.state == :disabled
+    assert strategic.cargo == %{"industrial_parts" => 2}
+    assert MapSet.member?(strategic.settled_encounters, encounter_id)
+
+    assert {:ok, %{cruise_paused: false, tactical_encounter: nil}} =
+      Core.Universe.Navigation.snapshot(server, account.id)
+
+    # A repeated command must not award the same hold or change faction scores.
+    repeat = push(joined, "solar_seize_cargo", %{"encounter_id" => encounter_id})
+    assert_reply repeat, :error, %{reason: "no_tactical_encounter"}
+    assert Darkorbit.Inventory.cargo_manifest(account.id) == %{"industrial_parts" => 3}
+    assert Darkorbit.Piracy.faction_standing(account.id, "independent") == -30
+
+    leave_and_wait(joined)
+  end
+
+  test "release after surrender keeps the ship's cargo and avoids the seizure hit" do
+    account = verified_player_account_fixture()
+    {joined, server, encounter_id, npc_id, vessel_id} =
+      begin_neutral_cargo_encounter(account)
+
+    assert :ok = prime_scow_for_surrender(account.id, npc_id)
+    select_ref = push(joined, "select_target", %{"target_id" => npc_id})
+    assert_reply select_ref, :ok
+    shot_ref = push(joined, "laser_attack", %{})
+    assert_reply shot_ref, :ok, %{hit: true}
+    assert_push "solar_faction_hit", %{standing: -12}
+
+    release = push(joined, "solar_accept_surrender", %{"encounter_id" => encounter_id})
+    assert_reply release, :ok, %{navigation: %{tactical_encounter: nil}}
+    assert Darkorbit.Inventory.cargo_manifest(account.id) == %{}
+    assert Darkorbit.Piracy.faction_standing(account.id, "independent") == -12
+    assert :sys.get_state(server).traffic[vessel_id].cargo ==
+      %{"industrial_parts" => 32}
+    assert {:error, :claim_not_found} =
+      World.cargo_claim_receipt(account.id, encounter_id)
+
+    leave_and_wait(joined)
+  end
+
+  test "a full cargo hold rejects seizure without credits or a second faction hit" do
+    account = verified_player_account_fixture()
+    assert {:ok, _} = Darkorbit.Inventory.add_cargo(account.id, "titanium", 4)
+    {joined, server, encounter_id, npc_id, vessel_id} =
+      begin_neutral_cargo_encounter(account)
+
+    assert :ok = prime_scow_for_surrender(account.id, npc_id)
+    select_ref = push(joined, "select_target", %{"target_id" => npc_id})
+    assert_reply select_ref, :ok
+    shot_ref = push(joined, "laser_attack", %{})
+    assert_reply shot_ref, :ok, %{hit: true}
+    assert_push "solar_faction_hit", %{standing: -12}
+
+    blocked = push(joined, "solar_seize_cargo", %{"encounter_id" => encounter_id})
+    assert_reply blocked, :error, %{reason: "no_cargo_space_or_stock"}
+    assert Darkorbit.Inventory.cargo_manifest(account.id) == %{"titanium" => 4}
+    assert Darkorbit.Piracy.faction_standing(account.id, "independent") == -12
+    assert :sys.get_state(server).traffic[vessel_id].cargo ==
+      %{"industrial_parts" => 32}
+
+    # A failed seizure leaves the map's verified proof for a safe release.
+    release = push(joined, "solar_accept_surrender", %{"encounter_id" => encounter_id})
+    assert_reply release, :ok, %{navigation: %{tactical_encounter: nil}}
+    assert {:error, :claim_not_found} =
+      World.cargo_claim_receipt(account.id, encounter_id)
+
+    leave_and_wait(joined)
+  end
+
   test "a hostile SOL contact enters authenticated tactical combat and can retreat" do
     account = verified_player_account_fixture()
     server = Module.concat(SessionManager, Core.Universe.Navigation)
@@ -1005,6 +1113,64 @@ defmodule DarkorbitWeb.WorldChannelTest do
     send(joined.channel_pid, {:npc_movement_started, %{id: "scow:1"}})
     refute_push "npc_movement_started", _
     leave_and_wait(joined)
+  end
+
+  # A deterministic authentic SOL merchant interception. Only test fixtures
+  # modify the shared SOL server; every gameplay transition below still uses
+  # the regular authenticated Phoenix channel and authoritative MapServer.
+  defp begin_neutral_cargo_encounter(account) do
+    server = Module.concat(SessionManager, Core.Universe.Navigation)
+    original_state = :sys.get_state(server)
+
+    {:ok, traffic} = Core.Universe.Traffic.launch_contact(
+      %{}, "earth", "venus", 1, :independent_trader, 0.5)
+
+    :sys.replace_state(server, fn state ->
+      %{state | traffic: traffic, encountered: %{},
+        procedural_contact_chance: 0.0,
+        voyages: Map.delete(state.voyages, account.id)}
+    end)
+    on_exit(fn -> :sys.replace_state(server, fn _ -> original_state end) end)
+
+    {:ok, socket} = authenticated_socket(account)
+    {:ok, _joined_payload, joined} =
+      subscribe_and_join(socket, WorldChannel, "world:1-1")
+
+    course = push(joined, "solar_set_course", %{"body_id" => "venus"})
+    assert_reply course, :ok, %{navigation: %{status: :traveling}}
+
+    held =
+      Enum.reduce_while(1..125, nil, fn _, _ ->
+        assert :ok = Core.Universe.Navigation.tick(server)
+        {:ok, nav} = Core.Universe.Navigation.snapshot(server, account.id)
+        if nav.pending_encounter, do: {:halt, nav}, else: {:cont, nil}
+      end)
+
+    assert %{pending_encounter: %{id: id, contact_id: vessel_id,
+      classification: :neutral_flyby}} = held
+
+    enter = push(joined, "solar_enter_encounter", %{"encounter_id" => id})
+    assert_reply enter, :ok, %{enemy: %{kind: :npc, id: npc_id}}
+    {joined, server, id, npc_id, vessel_id}
+  end
+
+  # Bring the same physical NPC just above its surrender threshold to make
+  # one actual laser hit sufficient. The test never forges a surrender event.
+  defp prime_scow_for_surrender(player_id, npc_id) do
+    assert [{map_pid, _}] = Registry.lookup(
+      Core.World.Registry, {:world_map, "1-1"})
+
+    :sys.replace_state(map_pid, fn state ->
+      pilot = Map.fetch!(state.entities, player_id)
+      scow = Map.fetch!(state.npcs, npc_id)
+      primed = %{scow |
+        position: pilot.position, destination: nil,
+        speed: 0, damage: 0,
+        hull: trunc(scow.max_hull * 0.35) + 1, shields: 0
+      }
+      %{state | npcs: Map.put(state.npcs, npc_id, primed)}
+    end)
+    :ok
   end
 
   defp authenticated_socket(account) do
