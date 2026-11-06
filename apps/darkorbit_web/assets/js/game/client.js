@@ -416,6 +416,10 @@ class SpaceClient {
     channel.on("combat_disengaged", engagement => this.combatDisengaged(engagement))
     channel.on("laser_fired", attack => this.laserFired(attack))
     channel.on("solar_faction_hit", event => {
+      const current = this.navComputer?.solarNavigation?.tactical_encounter?.id
+      // A delayed message from the previous encounter cannot be mistaken
+      // for an offense against the pilot's newly claimed vessel.
+      if (current && event.encounter_id && event.encounter_id !== current) return
       const label = this.root.querySelector("#solar-faction-impact")
       const delta = Number(event.delta)
       const contactName = String(event.call_sign || event.contact_id || "Unknown contact")
@@ -714,7 +718,18 @@ class SpaceClient {
   }
 
   applySolarNavigation(navigation) {
-    const previouslyTactical = Boolean(this.navComputer?.solarNavigation?.tactical_encounter)
+    const priorEncounterId = this.navComputer?.solarNavigation?.tactical_encounter?.id
+    const nextEncounterId = navigation?.tactical_encounter?.id
+    const previouslyTactical = Boolean(priorEncounterId)
+    // Each penalty belongs to one strategic contact. Never carry a
+    // previous vessel's faction banner into a different tactical fight.
+    if (priorEncounterId !== nextEncounterId) {
+      const impact = this.root.querySelector("#solar-faction-impact")
+      if (impact) {
+        impact.hidden = true
+        impact.textContent = ""
+      }
+    }
     this.navComputer.setSolarNavigation(navigation)
     this.setSolarEncounter(navigation?.tactical_encounter
       ? null : navigation?.pending_encounter || null)
