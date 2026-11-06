@@ -1802,6 +1802,10 @@ defmodule Core.World.MapServer do
       tick: state.tick,
       tick_ms: state.tick_ms,
       planetary_warnings: proximity_warnings,
+      # Stable planet-local station geometry; shared by 3D and read-only SBS.
+      orbital_base: if(state.definition.planet,
+        do: Core.Universe.OrbitalEntry.space_base(state.definition.planet.body_id),
+        else: nil),
       boundaries: %{width: state.definition.width, height: state.definition.height},
       volume: %{altitude_min: state.definition.altitude_min,
                 altitude_max: state.definition.altitude_max},
