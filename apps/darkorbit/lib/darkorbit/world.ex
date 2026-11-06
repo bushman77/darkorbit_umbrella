@@ -8,6 +8,7 @@ defmodule Darkorbit.World do
   """
 
   alias Core.World, as: Simulation
+  alias Core.World.MapServer
   alias Core.Universe.Navigation, as: SolarNavigation
   alias Core.Universe.OrbitalEntry
   alias Core.Universe.FreeFlightRegion
@@ -194,7 +195,7 @@ defmodule Darkorbit.World do
                                      ship_instance_id: ship_id, combat: combat} ->
         ShipCondition.save_verified(player_id, ship_id, combat)
       end,
-      persist_tactical_effect: fn player_id, id, verified_outcome, _npc_report ->
+      persist_tactical_effect: fn player_id, id, verified_outcome, npc_report ->
         if verified_outcome == :surrender do
           # A DB receipt can outlive the temporary SOL tactical lease if map
           # cleanup failed. Replay its exact debit instead of trying to mint
@@ -204,8 +205,14 @@ defmodule Darkorbit.World do
               {:ok, previous} -> {:ok, previous}
 
               {:error, :claim_not_found} when claim_cargo? ->
-                with {:ok, source} <- SolarNavigation.tactical_contact(server, player_id, id) do
+                with {:ok, source} <- SolarNavigation.tactical_contact(server, player_id, id),
+                     true <- source.contact_id == npc_report.contact_id and
+                       source.voyage_number == npc_report.voyage_number and
+                       source.encounter_id == npc_report.encounter_id do
                   Piracy.seize_surrender(player_id, source)
+                else
+                  false -> {:error, :tactical_claim_mismatch}
+                  error -> error
                 end
 
               {:error, :claim_not_found} ->
@@ -248,7 +255,11 @@ defmodule Darkorbit.World do
          %{id: encounter_id} <- navigation.tactical_encounter,
          {:ok, source} <- SolarNavigation.tactical_contact(
            server, session.player_id, encounter_id),
-         true <- target_id == "npc:#{session.map_id}:solar-#{source.ship_class}-#{session.player_id}:1",
+         {:ok, proof} <- MapServer.tactical_target_identity(
+           Core.World.Registry, session.map_id, session.id, session.entity_id, target_id),
+         true <- proof == %{contact_id: source.contact_id,
+                            voyage_number: source.voyage_number,
+                            encounter_id: source.encounter_id},
          {:ok, consequence} <- Piracy.record_attack(session.player_id, source),
          :ok <- SolarNavigation.set_faction_standing(server, session.player_id,
            consequence.faction_id, consequence.standing) do
