@@ -598,6 +598,7 @@ defmodule Core.Universe.Navigation do
 
   defp advance(state) do
     old_traffic = state.traffic
+    old_bases = state.bases
     # Strategic traffic advances even if no pilot has ever joined.
     held = state.tactical_claims |> Map.keys() |> MapSet.new()
     {traffic, bases} =
@@ -646,7 +647,14 @@ defmodule Core.Universe.Navigation do
         # something on their sensors. Other players do not cause spawns.
         before = Traffic.contacts(old_traffic, voyage.position_km)
         after_contacts = Traffic.contacts(current.traffic, voyage.position_km)
-        if before != [] or after_contacts != [] do
+        before_base = Map.get(old_bases, voyage.location_id)
+        after_base = Map.get(current.bases, voyage.location_id)
+        docking_changed? = before_base && after_base &&
+          (before_base.berths != after_base.berths or
+             before_base.docking_events != after_base.docking_events)
+        # Idle pilots get changes to their *local* dock even without passing
+        # SOL traffic. Refinery stock production alone does not spam sockets.
+        if before != [] or after_contacts != [] or docking_changed? do
           broadcast(current, player_id, voyage)
         end
         current
