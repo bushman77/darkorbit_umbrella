@@ -77,7 +77,7 @@ defmodule Darkorbit.World do
       if requested_map == entry.map_id do
         case Simulation.connect(user_id, stats, map_id: requested_map, entry: entry,
                ship_instance_id: player_ship.id, combat_condition: condition) do
-          {:ok, session} = success ->
+          {:ok, _session} = success ->
             # Refresh the policy cache from durable faction standings on every
             # authenticated reconnection. No DB queries run in the map tick.
             server = Module.concat(SessionManager, SolarNavigation)
