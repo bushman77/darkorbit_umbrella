@@ -28,8 +28,8 @@ defmodule DarkorbitWeb.HelmetSurrenderTest do
 
     assert HelmetSurrender.from_world(%{entities: [npc]}, 3) ==
              %{surrendered: false}
-    assert HelmetSurrender.from_world(%{entities: [
-             %{npc | state: :surrendered, status: :destroyed}]}, 3) ==
+    destroyed = Map.merge(npc, %{state: :surrendered, status: :destroyed})
+    assert HelmetSurrender.from_world(%{entities: [destroyed]}, 3) ==
              %{surrendered: false}
     assert HelmetSurrender.from_world(%{entities: []}, 3) ==
              %{surrendered: false}
