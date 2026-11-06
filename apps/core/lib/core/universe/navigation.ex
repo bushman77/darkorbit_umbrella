@@ -18,6 +18,10 @@ defmodule Core.Universe.Navigation do
 
   use GenServer
 
+  # Prevent a crowded shipping lane from presenting a different vessel as
+  # another combat choice immediately when a tactical encounter is settled.
+  @post_encounter_clearance_ms 15_000
+
   alias Core.Universe.Sol
   alias Core.Universe.PlanetaryView
   alias Core.Universe.EncounterDirector
@@ -340,7 +344,11 @@ defmodule Core.Universe.Navigation do
         {:reply, {:error, :tactical_encounter_active}, state}
 
       true ->
-        updated = %{voyage | pending_encounter: nil}
+        updated =
+          voyage
+          |> Map.put(:pending_encounter, nil)
+          |> Map.put(:encounter_clearance_until_ms,
+            state.traffic_time_ms + @post_encounter_clearance_ms)
         state = put_voyage(state, player_id, updated)
         broadcast(state, player_id, updated)
         {:reply, {:ok, public(updated, state, player_id)}, state}
@@ -469,7 +477,11 @@ defmodule Core.Universe.Navigation do
                       voyage_number: voyage.voyage_number}
 
                   _ ->
-                    %{voyage | tactical_encounter: nil, pending_encounter: nil}
+                    voyage
+                    |> Map.put(:tactical_encounter, nil)
+                    |> Map.put(:pending_encounter, nil)
+                    |> Map.put(:encounter_clearance_until_ms,
+                      state.traffic_time_ms + @post_encounter_clearance_ms)
                 end
 
               receipts =
@@ -686,7 +698,15 @@ defmodule Core.Universe.Navigation do
         do: SpaceBases.public(state.bases, voyage.location_id), else: nil),
       traffic_pressure: TradeLanes.pressure(voyage.position_km),
       traffic_band: TradeLanes.band(voyage.position_km),
-      encounter: EncounterDirector.evaluate(traffic, voyage, reputations_for(state, player_id)),
+      # While a decision or fight is active, the *held* physical contact is
+      # the only encounter. A newer nearest contact must not overwrite its
+      # displayed identity or faction during combat.
+      encounter: cond do
+        is_map(voyage.pending_encounter) -> voyage.pending_encounter
+        is_map(voyage.tactical_encounter) -> nil
+        state.traffic_time_ms < Map.get(voyage, :encounter_clearance_until_ms, 0) -> nil
+        true -> EncounterDirector.evaluate(traffic, voyage, reputations_for(state, player_id))
+      end,
       cruise_paused: voyage.pending_encounter != nil or voyage.free_flight,
       # Tactical combat currently takes place in the pilot's existing
       # orbital map. Show that map's ACTUAL planet and collision geometry,
@@ -796,10 +816,23 @@ defmodule Core.Universe.Navigation do
   # repeated SOL snapshots still carry its current relative position.
   defp announce_encounter(state, _player_id, %{free_flight: true}), do: state
 
-  defp announce_encounter(state, _player_id, %{pending_encounter: pending})
+  defp announce_encounter(state, _player_id,
+         %{tactical_encounter: tactical}) when not is_nil(tactical), do: state
+
+  defp announce_encounter(state, player_id, voyage)
+       when is_map(voyage) do
+    if state.traffic_time_ms <
+         Map.get(voyage, :encounter_clearance_until_ms, 0) do
+      state
+    else
+      announce_encounter_ready(state, player_id, voyage)
+    end
+  end
+
+  defp announce_encounter_ready(state, _player_id, %{pending_encounter: pending})
        when not is_nil(pending), do: state
 
-  defp announce_encounter(state, player_id, voyage) do
+  defp announce_encounter_ready(state, player_id, voyage) do
     case EncounterDirector.evaluate(state.traffic, voyage, reputations_for(state, player_id)) do
       nil -> state
       encounter ->
@@ -807,14 +840,11 @@ defmodule Core.Universe.Navigation do
         if MapSet.member?(seen, encounter.id) do
           state
         else
-          # Persist the decision in supervised state before announcing it;
-          # reconnecting pilots see the same pending encounter.
           state = put_voyage(state, player_id, %{voyage | pending_encounter: encounter})
           state = %{state | encountered: Map.put(state.encountered, player_id,
             MapSet.put(seen, encounter.id))}
           EventSink.dispatch(state.event_sink, "sol", :solar_encounter_started, %{
-            player_id: player_id,
-            encounter: encounter
+            player_id: player_id, encounter: encounter
           })
           state
         end
