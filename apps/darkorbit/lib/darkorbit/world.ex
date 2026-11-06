@@ -75,8 +75,21 @@ defmodule Darkorbit.World do
       requested_map = Keyword.get(opts, :map_id, entry.map_id)
 
       if requested_map == entry.map_id do
-        Simulation.connect(user_id, stats, map_id: requested_map, entry: entry,
-          ship_instance_id: player_ship.id, combat_condition: condition)
+        case Simulation.connect(user_id, stats, map_id: requested_map, entry: entry,
+               ship_instance_id: player_ship.id, combat_condition: condition) do
+          {:ok, session} = success ->
+            # Refresh the policy cache from durable faction standings on every
+            # authenticated reconnection. No DB queries run in the map tick.
+            server = Module.concat(SessionManager, SolarNavigation)
+            Enum.each(Piracy.reputations(user_id), fn {faction, standing} ->
+              :ok = SolarNavigation.set_faction_standing(
+                server, user_id, faction, standing)
+            end)
+            success
+
+          error ->
+            error
+        end
       else
         {:error, :wrong_orbital_region}
       end
