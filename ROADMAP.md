@@ -936,6 +936,7 @@ See `docs/space-nova-release.md` for the distribution procedure.
 - [x] Separate working outbound transport from an explicit production registration open switch.
 - [x] Add an operator-only probe to send a single test email without creating an account.
 - [x] Document installation, private SMTP configuration, provider verification and a safe production test.
-- [ ] Resolve and commit new Mix dependency lock entries; validate updated production OTP release.
+- [x] Resolve and commit gen_smtp / ranch Mix dependency lock entries.
+- [ ] Validate production OTP release packaging and an actual SMTP delivery test.
 - [ ] Verify SMTP sending identity, install private credentials, deliver an email to a real inbox.
 - [ ] Open public registration only after real delivery succeeds and abuse controls are reviewed.

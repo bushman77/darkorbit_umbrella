@@ -52,11 +52,6 @@ jobs:
           elixir-version: "1.18.4"
       - name: Fetch dependencies
         run: mix deps.get
-      - name: Report newly resolved Mix lock entries
-        run: |
-          echo "__SPACE_NOVA_MIX_LOCK_BEGIN__"
-          cat mix.lock
-          echo "__SPACE_NOVA_MIX_LOCK_END__"
       - name: Compile with warnings as errors
         run: mix compile --warnings-as-errors
       - name: Verify account lifecycle and registration recovery
@@ -65,3 +60,29 @@ jobs:
           mix test apps/darkorbit/test/darkorbit/accounts_test.exs
           mix test apps/darkorbit_web/test/darkorbit_web/controllers/registration_controller_test.exs
           mix test apps/darkorbit_web/test/darkorbit_web/controllers/session_controller_test.exs
+      - name: Check production SMTP runtime (no email sent)
+        env:
+          MIX_ENV: prod
+          DATABASE_URL: ecto://postgres:postgres@127.0.0.1/darkorbit_test
+          SECRET_KEY_BASE: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+          PHX_HOST: spacenova.ddns.net
+          SPACE_NOVA_PROXY_MODE: 'true'
+          SPACE_NOVA_EMAIL_PROVIDER: smtp
+          SMTP_HOST: smtp.example.test
+          SMTP_PORT: '587'
+          SMTP_USERNAME: ci-smtp-user
+          SMTP_PASSWORD: ci-not-a-real-secret
+          REGISTRATION_FROM_EMAIL: noreply@example.test
+          SPACE_NOVA_REGISTRATION_OPEN: 'false'
+        run: |
+          mix run --no-start -e '
+            cfg = Application.fetch_env!(:darkorbit, Darkorbit.Mailer)
+            unless cfg[:adapter] == Swoosh.Adapters.SMTP and
+                   cfg[:tls] == :always and cfg[:tls_options][:verify] == :verify_peer and
+                   cfg[:port] == 587 and
+                   Application.get_env(:darkorbit_web, :email_delivery_configured) == true and
+                   Application.get_env(:darkorbit_web, :registration_email_enabled) == false do
+              raise "SMTP transport misconfigured or registration accidentally enabled"
+            end
+            IO.puts("SMTP runtime verified; public signup remains closed")
+          '
