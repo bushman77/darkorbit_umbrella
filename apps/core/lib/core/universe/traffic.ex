@@ -294,10 +294,15 @@ defmodule Core.Universe.Traffic do
   only decrease the preexisting hull/shields. Cargo is never awarded here.
   """
   @spec settle(map(), map(), map(), atom()) :: {:ok, map()} | {:error, atom()}
+  def settle(ships, identity, report, outcome),
+    do: settle(ships, identity, report, outcome, %{})
+
+  @doc "Optional debit contains verified strategic units seized under DB receipt."
+  @spec settle(map(), map(), map(), atom(), map()) :: {:ok, map()} | {:error, atom()}
   def settle(ships, %{contact_id: id, voyage_number: voyage, encounter_id: encounter_id},
-             report, outcome)
+             report, outcome, cargo_debit)
       when is_map(ships) and is_binary(id) and is_integer(voyage) and
-           is_binary(encounter_id) and is_map(report) do
+           is_binary(encounter_id) and is_map(report) and is_map(cargo_debit) do
     case Map.fetch(ships, id) do
       :error -> {:error, :unknown_contact}
       {:ok, vessel} ->
@@ -317,6 +322,9 @@ defmodule Core.Universe.Traffic do
           not valid_report?(old, report, outcome) ->
             {:error, :invalid_combat_report}
 
+          not valid_cargo_debit?(vessel.cargo, cargo_debit, outcome) ->
+            {:error, :invalid_cargo_debit}
+
           true ->
             updated_combat = Map.take(report, [:hull, :max_hull, :shields, :max_shields, :status])
             state =
@@ -331,6 +339,7 @@ defmodule Core.Universe.Traffic do
               vessel
               |> Map.put(:combat, updated_combat)
               |> Map.put(:state, state)
+              |> Map.put(:cargo, debit_cargo(vessel.cargo, cargo_debit))
               |> Map.put(:settled_encounters, MapSet.put(settled, encounter_id))
 
             {:ok, Map.put(ships, id, updated)}
@@ -338,7 +347,27 @@ defmodule Core.Universe.Traffic do
     end
   end
 
-  def settle(_ships, _identity, _report, _outcome), do: {:error, :invalid_combat_report}
+  def settle(_ships, _identity, _report, _outcome, _debit),
+    do: {:error, :invalid_combat_report}
+
+  defp valid_cargo_debit?(manifest, debit, outcome) when is_map(manifest) do
+    (outcome == :surrender or map_size(debit) == 0) and
+      Enum.all?(debit, fn {id, units} ->
+        is_binary(id) and is_integer(units) and units > 0 and
+          Map.get(manifest, id, 0) >= units
+      end)
+  end
+
+  defp valid_cargo_debit?(_, _, _), do: false
+
+  defp debit_cargo(manifest, debit) do
+    Enum.reduce(debit, manifest, fn {id, units}, remaining ->
+      case Map.fetch!(remaining, id) - units do
+        0 -> Map.delete(remaining, id)
+        left -> Map.put(remaining, id, left)
+      end
+    end)
+  end
 
   defp valid_report?(old, report, outcome) do
     expected_status =
