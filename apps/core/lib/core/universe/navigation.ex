@@ -194,7 +194,8 @@ defmodule Core.Universe.Navigation do
               contact_id: contact_id, encounter_id: encounter_id,
               voyage_number: voyage_number, faction_id: vessel.faction_id,
               disposition: vessel.disposition, classification: classification,
-              cargo: vessel.cargo, call_sign: vessel.call_sign
+              cargo: vessel.cargo, call_sign: vessel.call_sign,
+              ship_class: vessel.ship_class
             }}
           else
             {:error, :tactical_claim_mismatch}
