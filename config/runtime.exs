@@ -81,41 +81,99 @@ if config_env() == :prod do
 
   # In proxy mode Caddy handles trusted TLS certificates/renewal.
 
-  # ## Configuring the mailer
-  #
-  # In production you need to configure the mailer to use a different adapter.
-  # Here is an example configuration for Mailgun:
-  #
-  #     config :darkorbit, Darkorbit.Mailer,
-  #       adapter: Swoosh.Adapters.Mailgun,
-  #       api_key: System.get_env("MAILGUN_API_KEY"),
-  #       domain: System.get_env("MAILGUN_DOMAIN")
-  #
-  # Most non-SMTP adapters require an API client. Swoosh supports Req, Hackney,
-  # and Finch out-of-the-box. This configuration is typically done at
-  # compile-time in your config/prod.exs:
-  #
-  #     config :swoosh, :api_client, Swoosh.ApiClient.Req
-  #
-  # See https://hexdocs.pm/swoosh/Swoosh.html#module-installation for details.
+  # Email provider is independent from the registration switch. Configure and
+  # smoke-test a real transport before opening public registrations.
+  email_provider =
+    System.get_env("SPACE_NOVA_EMAIL_PROVIDER") ||
+      if(System.get_env("RESEND_API_KEY"), do: "resend", else: "none")
 
-  # Public pilot registration requires a real outbound email provider.
-  # An unverified account may not log in. Never use Swoosh.Local in production
-  # for public registrations: its messages would never reach users.
-  registration_api_key = System.get_env("RESEND_API_KEY")
   registration_from = System.get_env("REGISTRATION_FROM_EMAIL")
-  registration_enabled? =
-    is_binary(registration_api_key) and byte_size(registration_api_key) > 0 and
-      is_binary(registration_from) and byte_size(registration_from) > 0
+  sender_valid? =
+    is_binary(registration_from) and
+      Regex.match?(~r/\A[^\s@]+@[^\s@]+\.[^\s@]+\z/, registration_from)
+
+  present? = fn key ->
+    case System.get_env(key) do
+      value when is_binary(value) -> String.trim(value) != ""
+      _ -> false
+    end
+  end
+
+  smtp_host = System.get_env("SMTP_HOST")
+  smtp_port =
+    case Integer.parse(System.get_env("SMTP_PORT") || "587") do
+      {port, ""} when port in [465, 587, 2525] -> port
+      _ -> nil
+    end
+
+  transport_ready? =
+    case email_provider do
+      "resend" ->
+        sender_valid? and present?.("RESEND_API_KEY")
+
+      "smtp" ->
+        sender_valid? and present?.("SMTP_HOST") and present?.("SMTP_USERNAME") and
+          present?.("SMTP_PASSWORD") and not is_nil(smtp_port) and
+          not String.contains?(smtp_host || "", ["/", " ", "@", ":"])
+
+      _ ->
+        false
+    end
+
+  registration_open? =
+    System.get_env("SPACE_NOVA_REGISTRATION_OPEN") in ~w(1 true)
 
   config :darkorbit_web,
-    registration_email_enabled: registration_enabled?,
+    registration_email_enabled: transport_ready? and registration_open?,
+    email_delivery_configured: transport_ready?,
+    email_provider: if(transport_ready?, do: email_provider, else: "none"),
     registration_from: registration_from || "noreply@localhost"
 
-  if registration_enabled? do
-    config :darkorbit, Darkorbit.Mailer,
-      adapter: Swoosh.Adapters.Resend,
-      api_key: registration_api_key
+  cond do
+    not transport_ready? ->
+      if email_provider != "none" do
+        IO.warn("Space Nova email configuration is incomplete; outbound mail and public registration are disabled")
+      end
+
+    email_provider == "resend" ->
+      config :darkorbit, Darkorbit.Mailer,
+        adapter: Swoosh.Adapters.Resend,
+        api_key: System.fetch_env!("RESEND_API_KEY")
+
+    email_provider == "smtp" ->
+      # Enforce both CA-chain and hostname verification. Plain SMTP and
+      # opportunistic STARTTLS are not permitted for production delivery.
+      tls_options = [
+        verify: :verify_peer,
+        cacerts: :public_key.cacerts_get(),
+        server_name_indication: String.to_charlist(smtp_host),
+        customize_hostname_check: [
+          match_fun: :public_key.pkix_verify_hostname_match_fun(:https)
+        ]
+      ]
+
+      connection_options =
+        if smtp_port == 465 do
+          [ssl: true, sockopts: tls_options]
+        else
+          [ssl: false, tls_options: tls_options]
+        end
+
+      config :darkorbit, Darkorbit.Mailer,
+        [
+          adapter: Swoosh.Adapters.SMTP,
+          relay: smtp_host,
+          port: smtp_port,
+          username: System.fetch_env!("SMTP_USERNAME"),
+          password: System.fetch_env!("SMTP_PASSWORD"),
+          auth: :always,
+          tls: :always,
+          retries: 1
+        ] ++ connection_options
+  end
+
+  if registration_open? and not transport_ready? do
+    IO.warn("Space Nova registration was requested but mail delivery is not ready; signup remains disabled")
   end
 
   config :darkorbit, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")

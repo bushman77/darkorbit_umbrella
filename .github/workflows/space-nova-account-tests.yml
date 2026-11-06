@@ -7,6 +7,11 @@ on:
       - "apps/darkorbit/lib/darkorbit/accounts/**"
       - "apps/darkorbit/lib/darkorbit/accounts.ex"
       - "apps/darkorbit/lib/darkorbit/mailer.ex"
+      - "apps/darkorbit/lib/darkorbit/email/**"
+      - "apps/darkorbit/test/darkorbit/email/**"
+      - "apps/darkorbit/mix.exs"
+      - "mix.lock"
+      - "config/runtime.exs"
       - "apps/darkorbit/test/darkorbit/accounts_test.exs"
       - "apps/darkorbit/test/support/fixtures/accounts_fixtures.ex"
       - "apps/darkorbit_web/lib/darkorbit_web/controllers/registration_controller.ex"
@@ -47,10 +52,16 @@ jobs:
           elixir-version: "1.18.4"
       - name: Fetch dependencies
         run: mix deps.get
+      - name: Report newly resolved Mix lock entries
+        run: |
+          echo "__SPACE_NOVA_MIX_LOCK_BEGIN__"
+          cat mix.lock
+          echo "__SPACE_NOVA_MIX_LOCK_END__"
       - name: Compile with warnings as errors
         run: mix compile --warnings-as-errors
       - name: Verify account lifecycle and registration recovery
         run: |
+          mix test apps/darkorbit/test/darkorbit/email/probe_test.exs
           mix test apps/darkorbit/test/darkorbit/accounts_test.exs
           mix test apps/darkorbit_web/test/darkorbit_web/controllers/registration_controller_test.exs
           mix test apps/darkorbit_web/test/darkorbit_web/controllers/session_controller_test.exs

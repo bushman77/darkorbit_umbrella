@@ -17,10 +17,12 @@ client for sector 1-1.
 - A local `postgres` role with password `postgres` for the checked-in
   development and test configuration, or equivalent local config overrides
 
-Production serves HTTPS directly on TCP port 4000 (no reverse proxy required).
-It reads `DATABASE_URL`, `SECRET_KEY_BASE`, `SPACE_NOVA_TLS_CERTFILE`,
-`SPACE_NOVA_TLS_KEYFILE`, optional `PHX_HOST` / `POOL_SIZE` / `ECTO_IPV6`.
-See [the port-4000 deployment guide](docs/space-nova-port-4000.md).
+The existing production EC2 deployment uses Caddy HTTPS on port 443 with
+Phoenix bound privately to 127.0.0.1:4000 (`SPACE_NOVA_PROXY_MODE=true`).
+Direct Phoenix TLS on port 4000 is an optional separate deployment mode.
+Production requires `DATABASE_URL` and `SECRET_KEY_BASE`.
+See [the networking guide](docs/space-nova-port-4000.md) and
+[the email registration guide](docs/space-nova-registration.md).
 Never commit production secrets or certificate private keys.
 
 ## Development

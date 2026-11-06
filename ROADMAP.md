@@ -928,3 +928,14 @@ See `docs/space-nova-release.md` for the distribution procedure.
 - [x] Domain/controller tests and separate registration CI workflow.
 - [ ] Verify a production sending identity, configure Resend privately on EC2, and test real signup.
 - [ ] Add durable mail outbox/automatic retries, per-IP abuse controls and password reset before public launch.
+
+### Production email sending platform — 2026-11-06
+
+- [x] Retain Swoosh as the mail API and add optional SMTP transport via gen_smtp.
+- [x] Select Swoosh SMTP / Resend through a private environment setting, requiring TLS and provider credentials.
+- [x] Separate working outbound transport from an explicit production registration open switch.
+- [x] Add an operator-only probe to send a single test email without creating an account.
+- [x] Document installation, private SMTP configuration, provider verification and a safe production test.
+- [ ] Resolve and commit new Mix dependency lock entries; validate updated production OTP release.
+- [ ] Verify SMTP sending identity, install private credentials, deliver an email to a real inbox.
+- [ ] Open public registration only after real delivery succeeds and abuse controls are reviewed.

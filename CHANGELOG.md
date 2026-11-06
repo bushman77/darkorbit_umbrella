@@ -819,3 +819,10 @@
 - Added generic resend recovery page with 60-second/5-per-day per-account throttle; failing email sends no longer leave pilots without a recovery interface.
 - Existing verified accounts are unaffected. Old unverified verification links without expiry must be resent.
 - Added targeted GitHub Actions account/controller tests. Production email remains disabled until configured.
+
+### Optional production SMTP mail transport — 2026-11-06
+
+- Added gen_smtp as Swoosh's SMTP dependency, supporting authenticated TLS-only SMTP on ports 587/465/2525 with certificate and hostname validation.
+- Retained Resend API delivery as an alternative; missing or incomplete provider credentials fail closed.
+- Added independent SPACE_NOVA_REGISTRATION_OPEN flag to keep public signup disabled while testing delivery.
+- Added operator-only Darkorbit.Email.Probe.send_test/1 and tests; no email admin HTTP route or automatic production deployment.

@@ -48,3 +48,93 @@ field).
 **Do not enable production registration simply by deploying this code.**
 The EC2 release remains unchanged until explicitly rebuilt, deployed,
 and configured with an approved mail provider.
+
+## Outbound email platform (Swoosh + optional SMTP)
+
+Space Nova uses Swoosh for all pilot verification emails. Development and
+automated tests retain their existing Local and Test adapters. In production,
+set one transport and verify it independently before opening registration.
+
+### SMTP provider (port 587, STARTTLS)
+
+Configure the private environment file used by the running EC2 systemd
+service at /home/ubuntu/.config/space_mmo.env:
+
+~~~dotenv
+SPACE_NOVA_EMAIL_PROVIDER=smtp
+SMTP_HOST=smtp.your-mail-provider.example
+SMTP_PORT=587
+SMTP_USERNAME=your-smtp-username
+SMTP_PASSWORD=your-smtp-credential
+REGISTRATION_FROM_EMAIL=pilots@your-verified-domain.example
+SPACE_NOVA_REGISTRATION_OPEN=false
+~~~
+
+The SMTP transport requires a verified sender at your email provider.
+The application performs SMTP authentication and requires TLS with CA
+and hostname verification. Port 465 (implicit TLS) is also supported; port
+2525 (STARTTLS) is supported for providers offering that alternative. Do
+not use port 25, plaintext SMTP, or disable certificate verification.
+The gen_smtp dependency is used by Swoosh's SMTP adapter.
+
+### Existing Resend API option
+
+Resend remains supported as the HTTP API transport:
+
+~~~dotenv
+SPACE_NOVA_EMAIL_PROVIDER=resend
+RESEND_API_KEY=your-private-resend-api-key
+REGISTRATION_FROM_EMAIL=pilots@your-verified-domain.example
+SPACE_NOVA_REGISTRATION_OPEN=false
+~~~
+
+The provider defaults to Resend only if RESEND_API_KEY exists and
+SPACE_NOVA_EMAIL_PROVIDER is omitted; otherwise email is disabled.
+Incomplete credentials or an invalid sender address disable email delivery.
+No credentials should ever be checked into Git.
+
+The additional SPACE_NOVA_REGISTRATION_OPEN setting is an independent
+fail-closed public signup switch. It is false by default, even if delivery
+credentials exist. After successful provider testing, set it to true
+to enable public registration. Existing account login is unaffected.
+
+### Verify email delivery privately, without opening registration
+
+Build and deploy the updated OTP release after changing dependencies. The
+server must be restarted to read provider environment values. It is not
+necessary to change Caddy or Tauri. With the new OTP release running, issue
+a one-time test through the service's own running BEAM node:
+
+~~~sh
+sudo systemd-run --unit="space-mmo-email-check-$(date +%s)" \
+  --wait --pipe --collect \
+  --property=User=ubuntu \
+  --property=WorkingDirectory=/home/ubuntu/deploy/space_mmo \
+  --property=EnvironmentFile=/home/ubuntu/.config/space_mmo.env \
+  /home/ubuntu/deploy/space_mmo/bin/space_mmo rpc \
+  'IO.inspect(Darkorbit.Email.Probe.send_test("your-inbox@example.com"))'
+~~~
+
+Replace the recipient with an inbox you control. Expected result:
+{:ok, :accepted} means the configured provider accepted the message, NOT
+that the inbox received it. Check the actual inbox and provider delivery
+dashboard. {:error, :not_configured} means email is disabled or incomplete;
+{:error, :delivery_failed} means the provider rejected the attempt.
+The probe exposes neither SMTP credentials nor provider error details.
+
+No admin HTTP route is added. The probe is operator-only and cannot
+register users or affect game progress.
+
+### Provider setup still required
+
+The repository cannot create an external SMTP account, verify domain DNS,
+approve Amazon SES production access, or supply credentials. Those are
+provider-side actions. Once verified delivery succeeds, set
+SPACE_NOVA_REGISTRATION_OPEN=true, restart the service, then test actual
+pilot onboarding through the installed Tauri production client. Keep the
+existing 24-hour verification expiry and resend throttles.
+
+Avoid putting secrets in chat, tickets, GitHub commits or shell history.
+An email provider will generally require a sender domain under your control.
+The existing spacenova.ddns.net game hostname does not itself demonstrate
+ownership of mail-related DNS records.
