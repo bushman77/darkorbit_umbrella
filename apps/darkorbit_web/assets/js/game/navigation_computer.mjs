@@ -474,6 +474,15 @@ export class NavigationComputer {
       const pressure=Math.round(Math.max(0,Math.min(1,Number(nav?.traffic_pressure)||0))*100)
       traffic.textContent=`${String(nav?.traffic_band||"quiet").toUpperCase()} · ${pressure}/100 index`
     }
+    const base=this.root.querySelector("#nav-solar-space-base")
+    const dock=nav?.space_base
+    if(base)base.textContent=dock
+      ? `${dock.name} · ${dock.occupied_berths}/${dock.berth_count} bays occupied`
+      : "NOT IN PLANETARY ORBIT"
+    const refinery=this.root.querySelector("#nav-solar-refinery")
+    if(refinery)refinery.textContent=dock
+      ? `${dock.refinery_name} · ${String(dock.refinery_status).toUpperCase()}`
+      : "—"
     const speed=this.root.querySelector("#nav-solar-speed")
     if(speed)speed.textContent=nav?.free_flight ? "0 game km/s · manual flight" :
       nav?.pending_encounter ? "0 game km/s · held at encounter" :
