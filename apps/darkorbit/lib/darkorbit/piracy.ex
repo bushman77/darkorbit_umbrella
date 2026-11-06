@@ -122,10 +122,18 @@ defmodule Darkorbit.Piracy do
               case Repo.insert(changeset, on_conflict: :nothing,
                      conflict_target: [:contact_id, :voyage_number], returning: true) do
                 {:ok, %{id: id} = row} when is_integer(id) ->
-                  consequence = apply_faction_event!(user_id, verified.faction_id,
-                    "solar:seizure:#{verified.contact_id}:#{verified.voyage_number}:#{user_id}",
-                    "cargo_seizure", @seizure_delta)
-                  claim_result(row, consequence.standing)
+                  standing =
+                    if verified.disposition == :neutral and
+                         verified.classification == :neutral_flyby do
+                      consequence = apply_faction_event!(user_id, verified.faction_id,
+                        "solar:seizure:#{verified.contact_id}:#{verified.voyage_number}:#{user_id}",
+                        "cargo_seizure", @seizure_delta)
+                      consequence.standing
+                    else
+                      faction_standing(user_id, verified.faction_id)
+                    end
+
+                  claim_result(row, standing)
 
                 {:ok, _} -> Repo.rollback(:cargo_already_claimed)
                 {:error, reason} -> Repo.rollback(reason)
