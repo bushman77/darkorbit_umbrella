@@ -128,8 +128,9 @@
       Loaded <strong><%= @cargo_tonnage %></strong> of <strong><%= @stats.cargo_capacity %></strong> tonnes
     </p>
     <p class="mt-1 text-xs text-slate-400">
-      Four original Sunracer cargo pods. Cargo is persistent and capacity-checked;
-      station trading and merchant surrender transfers are not implemented yet.
+      Four original Sunracer cargo pods. Cargo seizures are verified against
+      surrendered strategic vessels and persisted in your account. Planetary
+      market trading is planned separately.
     </p>
     <%= if map_size(@cargo_manifest) == 0 do %>
       <p class="mt-3 text-sm text-slate-500">Cargo hold empty.</p>
@@ -139,6 +140,53 @@
           <li class="flex justify-between rounded-lg border border-slate-700 bg-slate-950 p-3 text-sm">
             <span><%= Map.get(@cargo_catalog, id, %{name: id}).name %></span>
             <strong><%= quantity %> t</strong>
+          </li>
+        <% end %>
+      </ul>
+    <% end %>
+  </section>
+
+  <section class="mt-6 rounded-xl border border-amber-500/30 bg-slate-900 p-5"
+           aria-label="SOL faction standings">
+    <h2 class="text-lg font-bold text-amber-200">SOL faction standings</h2>
+    <p class="mt-1 text-xs text-slate-400">
+      Confirmed attacks on neutral merchant traffic and seized civilian cargo
+      lower standing. These scores are separate from your original MMO company.
+    </p>
+    <%= if @faction_standings == [] do %>
+      <p class="mt-3 text-sm text-slate-500">No recorded faction events. Default standing: Neutral (0).</p>
+    <% else %>
+      <ul class="mt-4 grid gap-2 sm:grid-cols-2">
+        <%= for faction <- @faction_standings do %>
+          <li class="flex flex-wrap justify-between gap-3 rounded-lg border border-slate-700 bg-slate-950 p-3 text-sm">
+            <span><%= faction.name %></span>
+            <strong class={if(faction.standing < 0, do: "text-rose-300", else: "text-emerald-300")}>
+              <%= faction.standing %> · <%= faction.band %>
+            </strong>
+          </li>
+        <% end %>
+      </ul>
+    <% end %>
+  </section>
+
+  <section class="mt-6 rounded-xl border border-slate-700 bg-slate-900 p-5"
+           aria-label="Recent cargo seizures">
+    <h2 class="text-lg font-bold text-cyan-200">Recent cargo seizures</h2>
+    <%= if @recent_cargo_claims == [] do %>
+      <p class="mt-3 text-sm text-slate-500">No cargo claims recorded.</p>
+    <% else %>
+      <ul class="mt-4 grid gap-2">
+        <%= for claim <- @recent_cargo_claims do %>
+          <li class="rounded-lg border border-slate-700 bg-slate-950 p-3 text-sm">
+            <p class="font-semibold"><%= claim.contact_id %> · voyage <%= claim.voyage_number %></p>
+            <p class="mt-1 text-xs text-slate-400">
+              <%= claim.faction_id %> · <%= claim.at %>
+            </p>
+            <p class="mt-2 text-emerald-200">
+              <%= for {id, amount} <- claim.cargo do %>
+                <span class="mr-3"><%= Map.get(@cargo_catalog, id, %{name: id}).name %> ×<%= amount %></span>
+              <% end %>
+            </p>
           </li>
         <% end %>
       </ul>
