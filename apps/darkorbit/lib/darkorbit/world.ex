@@ -19,6 +19,7 @@ defmodule Darkorbit.World do
   alias Darkorbit.Loadouts
   alias Darkorbit.ShipStats
   alias Darkorbit.ShipCondition
+  alias Darkorbit.Piracy
   alias Darkorbit.World.PubSub
 
   @legacy_test_earth_sector Application.compile_env(:darkorbit, :legacy_test_earth_sector, false)
@@ -167,14 +168,71 @@ defmodule Darkorbit.World do
   defdelegate solar_hail(session_id, contact_id), to: Simulation
   defdelegate solar_resolve_encounter(session_id, encounter_id, choice), to: Simulation
   defdelegate solar_enter_tactical(session_id, encounter_id), to: Simulation
-  @doc "Persist player damage before releasing the strategic NPC claim."
-  def solar_finish_tactical(session_id, encounter_id, outcome) do
+  @doc """
+  Settle the map-verified encounter and optionally seize cargo. Cargo cannot
+  be claimed from a browser-supplied manifest. The DB receipt is idempotent.
+  """
+  def solar_finish_tactical(session_id, encounter_id, outcome, opts \\ []) do
+    server = Module.concat(SessionManager, SolarNavigation)
+    claim_cargo? = Keyword.get(opts, :claim_cargo, false) == true
+
     Simulation.solar_finish_tactical(session_id, encounter_id, outcome,
       persist_player_condition: fn %{player_id: player_id,
                                      ship_instance_id: ship_id, combat: combat} ->
         ShipCondition.save_verified(player_id, ship_id, combat)
+      end,
+      persist_tactical_effect: fn player_id, id, verified_outcome, _npc_report ->
+        if verified_outcome == :surrender and claim_cargo? do
+          with {:ok, source} <- SolarNavigation.tactical_contact(server, player_id, id),
+               {:ok, receipt} <- Piracy.seize_surrender(player_id, source),
+               :ok <- SolarNavigation.set_faction_standing(
+                 server, player_id, receipt.faction_id, receipt.standing) do
+            {:ok, receipt}
+          end
+        else
+          {:ok, %{}}
+        end
       end)
   end
+
+  @doc "Read-only receipt for an authenticated pilot after cargo seizure."
+  def cargo_claim_receipt(player_id, encounter_id) do
+    Piracy.claim_receipt(player_id, encounter_id)
+  end
+
+  @doc """
+  Receive a server-produced hit event, verify its local target matches the
+  pilot's claimed strategic vessel, then assess a one-time civilian attack hit.
+  Never accept this event type directly from a Phoenix client.
+  """
+  def record_tactical_hit(session_id, %{attacker_id: attacker_id,
+                                         target_id: target_id, hit: true}) do
+    server = Module.concat(SessionManager, SolarNavigation)
+
+    with {:ok, session} <- SessionManager.fetch(SessionManager, session_id),
+         true <- session.player_id == attacker_id,
+         {:ok, navigation} <- Simulation.solar_snapshot(session_id),
+         %{id: encounter_id} <- navigation.tactical_encounter,
+         {:ok, source} <- SolarNavigation.tactical_contact(
+           server, session.player_id, encounter_id),
+         {:ok, map} <- Simulation.snapshot(session.map_id),
+         %{kind: :npc, strategic_vessel_id: contact_id} <-
+           Enum.find(map.entities, &(&1.id == target_id)),
+         true <- contact_id == source.contact_id,
+         {:ok, consequence} <- Piracy.record_attack(session.player_id, source),
+         :ok <- SolarNavigation.set_faction_standing(server, session.player_id,
+           consequence.faction_id, consequence.standing) do
+      {:ok, consequence}
+    else
+      false -> {:error, :unrelated_attack}
+      nil -> {:error, :no_tactical_target}
+      :error -> {:error, :unknown_session}
+      {:error, _} = error -> error
+      _ -> {:error, :unrelated_attack}
+    end
+  end
+
+  def record_tactical_hit(_session_id, _payload), do: {:error, :unrelated_attack}
   defdelegate flight_controls(session_id, input), to: Simulation
   defdelegate select_target(session_id, target_id), to: Simulation
   defdelegate clear_target(session_id), to: Simulation
