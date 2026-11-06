@@ -216,8 +216,11 @@ defmodule Core.World do
          {:ok, verified} <- MapServer.prepare_solar_tactical(registry, session.map_id,
            session.id, session.entity_id, encounter_id, outcome),
          :ok <- persist_tactical_player(verified.player, opts),
+         {:ok, cargo_effect} <- persist_tactical_effect(
+           session.player_id, encounter_id, outcome, verified.npc, opts),
          {:ok, navigation} <- SolarNavigation.finish_tactical(server, session.player_id,
-           encounter_id, outcome, verified.npc),
+           encounter_id, outcome, verified.npc,
+           Map.get(cargo_effect, :strategic_debit, %{})),
          :ok <- MapServer.complete_solar_tactical(registry, session.map_id,
            session.id, session.entity_id, encounter_id) do
       {:ok, navigation}
@@ -240,6 +243,15 @@ defmodule Core.World do
       nil -> :ok
       fun when is_function(fun, 1) -> fun.(player)
       _ -> {:error, :invalid_persistence_callback}
+    end
+  end
+
+  defp persist_tactical_effect(player_id, encounter_id, outcome, verified, opts) do
+    case Keyword.get(opts, :persist_tactical_effect) do
+      nil -> {:ok, %{}}
+      fun when is_function(fun, 4) ->
+        fun.(player_id, encounter_id, outcome, verified)
+      _ -> {:error, :invalid_tactical_effect_callback}
     end
   end
 
