@@ -162,9 +162,17 @@ defmodule DarkorbitWeb.WorldChannelTest do
     # Displaying the deep-space cockpit during cruise no longer redirects to
     # the departure planet. Only actual arrivals change orbital regions.
     refute_push "world_region_changed", %{map_id: "1-1"}
-    leave_and_wait(cockpit)
 
+    # Channel leave and private-map teardown are two supervised lifecycles.
+    # Monitor the actual registered map before disconnecting and wait for
+    # its termination rather than making an immediate registry assertion.
+    assert [{map_pid, _}] =
+      Registry.lookup(Core.World.Registry, {:world_map, map_id})
+    map_monitor = Process.monitor(map_pid)
+    leave_and_wait(cockpit)
+    assert_receive {:DOWN, ^map_monitor, :process, ^map_pid, _reason}, 1_000
     refute Core.World.MapServer.available?(Core.World.Registry, map_id)
+
     server = Module.concat(SessionManager, Core.Universe.Navigation)
     assert {:ok, %{free_flight: false, destination_id: "mars"}} =
       Core.Universe.Navigation.snapshot(server, account.id)
