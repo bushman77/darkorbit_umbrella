@@ -22,6 +22,7 @@ defmodule Core.Universe.Navigation do
   alias Core.Universe.PlanetaryView
   alias Core.Universe.EncounterDirector
   alias Core.Universe.Traffic
+  alias Core.Universe.SpaceBases
   alias Core.Universe.TradeLanes
   alias Core.Universe.Territory
   alias Core.World.EventSink
@@ -145,6 +146,7 @@ defmodule Core.Universe.Navigation do
     state = %{
       voyages: %{},
       traffic: Keyword.get(opts, :traffic, Traffic.seed()),
+      bases: Keyword.get(opts, :bases, SpaceBases.seed()),
       encountered: %{},
       # At most one pilot owns a given physical vessel during a tactical
       # encounter. Leases are bound to its current traffic voyage number.
@@ -598,7 +600,9 @@ defmodule Core.Universe.Navigation do
     old_traffic = state.traffic
     # Strategic traffic advances even if no pilot has ever joined.
     held = state.tactical_claims |> Map.keys() |> MapSet.new()
-    state = %{state | traffic: Traffic.advance(state.traffic, state.tick_ms, held)}
+    {traffic, bases} =
+      Traffic.advance_with_bases(state.traffic, state.tick_ms, state.bases, held)
+    state = %{state | traffic: traffic, bases: bases}
     state = advance_scheduled_traders(state)
 
     Enum.reduce(state.voyages, state, fn
@@ -668,6 +672,10 @@ defmodule Core.Universe.Navigation do
       progress: progress,
       remaining_ms: remaining_ms,
       contacts: Traffic.contacts(traffic, voyage.position_km),
+      # Only the local base is included, avoiding nine facility records on
+      # every tick and keeping remote refinery inventories server-private.
+      space_base: if(voyage.status == :idle and is_binary(voyage.location_id),
+        do: SpaceBases.public(state.bases, voyage.location_id), else: nil),
       traffic_pressure: TradeLanes.pressure(voyage.position_km),
       traffic_band: TradeLanes.band(voyage.position_km),
       encounter: EncounterDirector.evaluate(traffic, voyage, reputations_for(state, player_id)),
@@ -709,7 +717,11 @@ defmodule Core.Universe.Navigation do
         scheduled_trader_route_index: state.scheduled_trader_route_index + 1}
 
       case result do
-        {:ok, updated} -> %{state | traffic: updated}
+        {:ok, updated} ->
+          vessel = Map.fetch!(updated, "traffic:sol:cruise-" <> Integer.to_string(serial))
+          {bases, loaded} = SpaceBases.dispatch(state.bases, vessel)
+          %{state | traffic: Map.put(updated, loaded.id, loaded), bases: bases}
+
         {:error, _} -> state
       end
     else
@@ -734,7 +746,10 @@ defmodule Core.Universe.Navigation do
       case Traffic.launch_contact(state.traffic, voyage.origin_id,
              voyage.destination_id, serial, kind, phase) do
         {:ok, traffic} ->
-          %{state | traffic: traffic, next_contact_serial: serial + 1}
+          vessel = Map.fetch!(traffic, "traffic:sol:cruise-" <> Integer.to_string(serial))
+          {bases, loaded} = SpaceBases.dispatch(state.bases, vessel)
+          %{state | traffic: Map.put(traffic, loaded.id, loaded), bases: bases,
+            next_contact_serial: serial + 1}
 
         {:error, _reason} ->
           state
