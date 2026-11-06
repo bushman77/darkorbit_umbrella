@@ -45,6 +45,8 @@ test("Atlas shows an in-range neutral freighter and uses safe text-only renderin
       contacts: [{
         id: "traffic:sol:meridian-01",
         call_sign: "Meridian-01",
+        faction_id: "sol_merchant_league",
+        faction_name: "Solar Merchant League",
         disposition: "neutral",
         origin_id: "earth",
         destination_id: "mars",
@@ -55,8 +57,9 @@ test("Atlas shows an in-range neutral freighter and uses safe text-only renderin
     nav.renderTrafficContacts()
     assert.equal(contacts.children.length, 1)
     const card = contacts.children[0]
-    assert.equal(card.children[0].textContent, "Meridian-01 · NEUTRAL")
+    assert.equal(card.children[0].textContent, "Meridian-01 · Solar Merchant League")
     assert.match(card.children[1].textContent, /earth → mars/)
+    assert.match(card.children[1].textContent, /NEUTRAL/)
     assert.match(card.children[1].textContent, /1,234,568 game km/)
     assert.equal(card.children[2].dataset.trafficHail, "traffic:sol:meridian-01")
     assert.equal(card.children[2].textContent, "Hail vessel")
