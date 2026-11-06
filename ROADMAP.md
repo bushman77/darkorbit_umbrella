@@ -918,3 +918,13 @@ See `docs/space-nova-release.md` for the distribution procedure.
 - [x] Add one-command SSH tunnel + installed client runner and regression tests.
 - [ ] Rebuild, reinstall and smoke-test the installed Linux production client
   through SSH with the current Fortinet-filtered network.
+
+### Pilot registration verification recovery (2026-11-06)
+
+- [x] 24-hour, SHA-256-digested, single-use email verification tokens.
+- [x] CSRF-protected activation confirmation POST (safe GET for link scanners).
+- [x] Non-enumerating resend form and per-account resend throttling.
+- [x] Recovery path for failed initial email delivery without duplicating starter assets.
+- [x] Domain/controller tests and separate registration CI workflow.
+- [ ] Verify a production sending identity, configure Resend privately on EC2, and test real signup.
+- [ ] Add durable mail outbox/automatic retries, per-IP abuse controls and password reset before public launch.

@@ -18,6 +18,11 @@ defmodule DarkorbitWeb.RegistrationEmail do
 
     #{verification_url}
 
+    This link expires after 24 hours. Opening it shows a confirmation page;
+    activating the account requires selecting Confirm email.
+    If it expired or delivery failed, request a replacement at:
+    https://spacenova.ddns.net/register/resend
+
     If you did not request this account, you can ignore this email.
     """)
   end

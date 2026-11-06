@@ -29,7 +29,10 @@ defmodule DarkorbitWeb.Router do
     get "/register", RegistrationController, :new
     post "/register", RegistrationController, :create
     get "/register/success", RegistrationController, :success
+    get "/register/resend", RegistrationController, :resend_new
+    post "/register/resend", RegistrationController, :resend
     get "/verify-account", RegistrationController, :verify
+    post "/verify-account", RegistrationController, :confirm
     delete "/logout", SessionController, :delete
   end
 

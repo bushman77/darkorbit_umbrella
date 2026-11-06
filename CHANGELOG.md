@@ -811,3 +811,11 @@
 - Updated SSL forwarded-protocol handling for trusted Caddy connections and preserved HSTS; no direct internet listener is opened by the proxied Phoenix endpoint.
 - Fixed the Tauri launcher default to `https://spacenova.ddns.net`, migrated saved `:4000` production origin, retained local port-4000 development and optional direct-TLS mode, and expanded launcher regression coverage.
 - Replaced obsolete port-4000-only deployment guidance. No EC2 runtime or Caddy service was changed by the repository commit; production needs a newly built server archive.
+
+### Pilot registration verification recovery (2026-11-06)
+
+- New registration email tokens are securely random, SHA-256 digested at rest, expire after 24 hours and are single-use.
+- Opening a verification link no longer activates accounts. Activation requires CSRF-protected confirmation POST.
+- Added generic resend recovery page with 60-second/5-per-day per-account throttle; failing email sends no longer leave pilots without a recovery interface.
+- Existing verified accounts are unaffected. Old unverified verification links without expiry must be resent.
+- Added targeted GitHub Actions account/controller tests. Production email remains disabled until configured.
