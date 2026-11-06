@@ -432,7 +432,7 @@ defmodule DarkorbitWeb.WorldChannelTest do
 
     assert :ok = prime_scow_for_surrender(account.id, npc_id)
     select_ref = push(joined, "select_target", %{"target_id" => npc_id})
-    assert_reply select_ref, :ok
+    assert_reply select_ref, :ok, %{selection: %{target_id: ^npc_id}}
     shot_ref = push(joined, "laser_attack", %{})
     assert_reply shot_ref, :ok, %{hit: true}
     assert_push "solar_faction_hit", %{standing: -12}
@@ -457,7 +457,7 @@ defmodule DarkorbitWeb.WorldChannelTest do
 
     assert :ok = prime_scow_for_surrender(account.id, npc_id)
     select_ref = push(joined, "select_target", %{"target_id" => npc_id})
-    assert_reply select_ref, :ok
+    assert_reply select_ref, :ok, %{selection: %{target_id: ^npc_id}}
     shot_ref = push(joined, "laser_attack", %{})
     assert_reply shot_ref, :ok, %{hit: true}
     assert_push "solar_faction_hit", %{standing: -12}
