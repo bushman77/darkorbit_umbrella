@@ -75,6 +75,14 @@ defmodule Core.WorldTest do
       }
     end)
 
+    assert {:ok, %{contact_id: "traffic:sol:alpha",
+                   encounter_id: "flyby:alpha", voyage_number: 1}} =
+      Core.World.MapServer.tactical_target_identity(
+        @registry, "1-1", first.id, 4_501, mine.id)
+    assert {:error, :target_outside_encounter} =
+      Core.World.MapServer.tactical_target_identity(
+        @registry, "1-1", first.id, 4_501, theirs.id)
+
     assert {:error, :target_outside_encounter} =
       World.select_target(first.id, theirs.id, options)
     assert {:error, :target_outside_encounter} =
