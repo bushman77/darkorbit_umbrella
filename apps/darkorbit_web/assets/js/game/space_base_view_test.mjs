@@ -37,10 +37,11 @@ test("station bearing is maintained and far geometry stays within camera clippin
   assert.ok(distant.position.x > 0 && distant.position.z < 0)
 })
 
-test("headset camera movement changes station position, never authoritative coordinates", () => {
-  const pose = spaceBasePose(earth)
+test("headset camera movement changes long-range projection, not authoritative coordinates", () => {
+  const pose = {position: {x: 5600, y: 60, z: 1200}}
   const saved = {...pose.position}
   const moved = spaceBaseProjection(pose, {x: 100, y: 0, z: 0})
-  assert.notDeepEqual(moved.position, pose.position)
+  const initial = spaceBaseProjection(pose, {x: 0, y: 0, z: 0})
+  assert.notDeepEqual(moved.position, initial.position)
   assert.deepEqual(pose.position, saved)
 })
