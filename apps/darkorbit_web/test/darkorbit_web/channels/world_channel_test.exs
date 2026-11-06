@@ -170,6 +170,7 @@ defmodule DarkorbitWeb.WorldChannelTest do
       Registry.lookup(Core.World.Registry, {:world_map, map_id})
     map_monitor = Process.monitor(map_pid)
     leave_and_wait(cockpit)
+    assert :error = SessionManager.fetch_player(SessionManager, account.id)
     assert_receive {:DOWN, ^map_monitor, :process, ^map_pid, _reason}, 1_000
     refute Core.World.MapServer.available?(Core.World.Registry, map_id)
 
