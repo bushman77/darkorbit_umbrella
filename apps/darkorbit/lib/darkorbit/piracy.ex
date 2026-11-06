@@ -165,6 +165,17 @@ defmodule Darkorbit.Piracy do
 
   def claim_receipt(_, _), do: {:error, :claim_not_found}
 
+  @doc "Last five server-verified cargo claims for an authenticated account."
+  def recent_claims(user_id) when is_integer(user_id) and user_id > 0 do
+    from(c in CargoClaim, where: c.user_id == ^user_id,
+      order_by: [desc: c.inserted_at], limit: 5,
+      select: %{contact_id: c.contact_id, voyage_number: c.voyage_number,
+        faction_id: c.faction_id, cargo: c.cargo_units, at: c.inserted_at})
+    |> Repo.all()
+  end
+
+  def recent_claims(_), do: []
+
   @doc "Read-only account stance; no implicit faction creation."
   def faction_standing(user_id, faction_id) do
     case Repo.one(from(s in FactionStanding,
