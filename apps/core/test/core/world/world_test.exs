@@ -40,6 +40,63 @@ defmodule Core.WorldTest do
   end
 
   @tag no_initial_encounter: true
+  test "two overlapping faction Scows cannot be merged into one pilot's wing burst", context do
+    options = context.world_options
+    assert {:ok, first} = World.connect(4_501, context.stats, options)
+    assert {:ok, second} = World.connect(4_502, context.stats, options)
+    assert [{map_pid, _}] = Registry.lookup(@registry, {:world_map, "1-1"})
+
+    template = Core.NPC.Catalog.fetch!("scow")
+    base = %Core.World.Position{x: 1_000.0, y: 700.0, z: 1.3 / 0.06}
+    positions = [
+      %{base | x: 1_000.0 - 1.75 / 0.06},
+      %{base | x: 1_000.0 + 1.75 / 0.06}
+    ]
+
+    [mine, theirs] =
+      Enum.zip([4_501, 4_502], positions)
+      |> Enum.map(fn {pilot, pos} ->
+        definition = %{template |
+          id: "solar-scow-#{pilot}",
+          spawn: %{template.spawn | map_id: "1-1", positions: [pos]}
+        }
+        Core.NPC.Entity.spawn(definition, 0, 100)
+      end)
+
+    :sys.replace_state(map_pid, fn state ->
+      %{state |
+        npcs: %{mine.id => mine, theirs.id => theirs},
+        solar_tactical: %{
+          4_501 => %{npc_id: mine.id, encounter_id: "flyby:alpha",
+            contact_id: "traffic:sol:alpha", voyage_number: 1},
+          4_502 => %{npc_id: theirs.id, encounter_id: "flyby:beta",
+            contact_id: "traffic:sol:beta", voyage_number: 1}
+        }
+      }
+    end)
+
+    assert {:error, :target_outside_encounter} =
+      World.select_target(first.id, theirs.id, options)
+    assert {:error, :target_outside_encounter} =
+      World.select_target(second.id, mine.id, options)
+
+    assert {:ok, %{selection: %{target_id: owned}}} =
+      World.select_target(first.id, mine.id, options)
+    assert owned == mine.id
+
+    assert {:ok, %{hits: [%{target_id: hit_id}], hit: true}} =
+      World.fire_ready_weapon(first.id, options)
+    assert hit_id == mine.id
+
+    assert {:ok, snapshot} = World.snapshot("1-1", options)
+    damaged = Enum.find(snapshot.entities, &(&1.id == mine.id))
+    untouched = Enum.find(snapshot.entities, &(&1.id == theirs.id))
+    assert damaged.hull < mine.hull or damaged.shields < mine.shields
+    assert untouched.hull == theirs.hull
+    assert untouched.shields == theirs.shields
+  end
+
+  @tag no_initial_encounter: true
   test "manual free-flight is isolated to its private map and resumes the same voyage", context do
     options = Keyword.merge(context.world_options,
       event_sink: fn _map, _event, _payload -> :ok end, auto_tick: false,
