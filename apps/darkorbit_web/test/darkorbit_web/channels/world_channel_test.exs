@@ -341,6 +341,16 @@ defmodule DarkorbitWeb.WorldChannelTest do
 
     ref = push(joined, "solar_accept_surrender", %{"encounter_id" => encounter_id})
     assert_reply ref, :error, %{reason: "enemy_not_surrendered"}
+
+    # Supplying a counterfeit manifest cannot create cargo or bypass the
+    # authoritative, map-verified surrender prerequisite.
+    ref = push(joined, "solar_seize_cargo",
+      %{"encounter_id" => encounter_id,
+        "cargo" => %{"rare_ores" => 999_999}, "faction_id" => "venus"})
+    assert_reply ref, :error, %{reason: "enemy_not_surrendered"}
+    assert Darkorbit.Inventory.cargo_manifest(account.id) == %{}
+    assert Darkorbit.Piracy.reputations(account.id) == %{}
+
     assert :ok = Core.Universe.Navigation.tick(server)
     assert {:ok, paused} = Core.Universe.Navigation.snapshot(server, account.id)
     assert paused.cruise_paused
