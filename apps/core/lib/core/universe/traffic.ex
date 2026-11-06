@@ -205,7 +205,8 @@ defmodule Core.Universe.Traffic do
           from_id == to_id -> {:error, :invalid_route}
       Map.has_key?(ships, id) -> {:error, :duplicate_contact}
       true ->
-        provisional_cargo = %{"industrial_parts" => 32}
+        provisional_cargo = SpaceBases.export_manifest(from_id)
+        return_request = SpaceBases.export_manifest(to_id)
         dist = Sol.cruise_distance_km(from_id, to_id)
         vessel = %{
           id: id,
@@ -223,7 +224,7 @@ defmodule Core.Universe.Traffic do
           location_id: from_id,
           cargo: provisional_cargo,
           outbound_cargo: provisional_cargo,
-          return_cargo: provisional_cargo,
+          return_cargo: return_request,
           combat: initial_condition(:independent_trader),
           settled_encounters: MapSet.new(),
           cruise_speed_km_s: @cruise_speed_km_s,
