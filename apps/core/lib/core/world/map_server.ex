@@ -430,7 +430,10 @@ defmodule Core.World.MapServer do
       if Map.has_key?(state.npcs, npc.id) do
         {:reply, {:error, :encounter_active}, state}
       else
+        # No stale target/automatic fire crosses into a different encounter.
+        ship = %{ship | target_id: nil, engaged_target_id: nil}
         updated = %{state |
+          entities: Map.put(state.entities, ship.id, ship),
           npcs: Map.put(state.npcs, npc.id, npc),
           npc_definitions: Map.put(state.npc_definitions, type_id, definition),
           solar_tactical: Map.put(state.solar_tactical, player_id,
@@ -666,6 +669,7 @@ defmodule Core.World.MapServer do
     with {:ok, entity} <- authorized_entity(state, session_id, entity_id),
          :ok <- living_attacker(entity),
          {:ok, target} <- fetch_npc(state, target_id),
+         :ok <- authorize_tactical_target(state, entity, target.id),
          true <- Combat.valid_target?(entity, target) do
       changing_target? = entity.target_id != target.id
 
@@ -720,6 +724,7 @@ defmodule Core.World.MapServer do
          :ok <- living_attacker(entity),
          {:ok, target_id} <- selected_target(entity),
          {:ok, target} <- fetch_npc(state, target_id),
+         :ok <- authorize_tactical_target(state, entity, target.id),
          true <- Combat.valid_target?(entity, target),
          :ok <- armed_weapon(entity) do
       {new_state, payload} = engage_entity(state, entity, target, ActionCatalog.x1_laser())
@@ -761,6 +766,39 @@ defmodule Core.World.MapServer do
     end
   end
 
+  # A tactical claim binds each pilot to exactly one NPC actor in the shared
+  # map. Wing lasers and target locks must not leak into unrelated encounters.
+  defp tactical_owner_npc_ids(state) do
+    state.solar_tactical
+    |> Map.values()
+    |> Enum.map(& &1.npc_id)
+    |> MapSet.new()
+  end
+
+  defp tactical_weapon_targets(state, %{player_id: player_id}) do
+    case Map.get(state.solar_tactical, player_id) do
+      %{npc_id: id} ->
+        case Map.get(state.npcs, id) do
+          nil -> []
+          npc -> [npc]
+        end
+
+      nil ->
+        reserved = tactical_owner_npc_ids(state)
+        Enum.reject(Map.values(state.npcs), &MapSet.member?(reserved, &1.id))
+    end
+  end
+
+  defp authorize_tactical_target(state, %{player_id: player_id}, target_id) do
+    case Map.get(state.solar_tactical, player_id) do
+      %{npc_id: ^target_id} -> :ok
+      %{npc_id: _} -> {:error, :target_outside_encounter}
+      nil ->
+        if MapSet.member?(tactical_owner_npc_ids(state), target_id),
+          do: {:error, :target_outside_encounter}, else: :ok
+    end
+  end
+
   def handle_call({:fire_ready_weapon, session_id, entity_id}, _from, state) do
     with {:ok, attacker} <- authorized_entity(state, session_id, entity_id),
          :ok <- living_attacker(attacker),
@@ -769,7 +807,8 @@ defmodule Core.World.MapServer do
       orientation = attacker.orientation || Orientation.from_angles(attacker.attitude)
       shots =
         Core.Combat.LineOfFire.trace_pair(
-          attacker.position, orientation, Map.values(state.npcs), attacker.attack_range
+          attacker.position, orientation, tactical_weapon_targets(state, attacker),
+          attacker.attack_range
         )
 
       {next_state, payload} = resolve_manual_wing_burst(state, attacker, shots)
@@ -785,6 +824,7 @@ defmodule Core.World.MapServer do
          :ok <- living_attacker(attacker),
          {:ok, target_id} <- selected_target(attacker),
          {:ok, target} <- fetch_npc(state, target_id),
+         :ok <- authorize_tactical_target(state, attacker, target.id),
          :ok <- Combat.validate_attack(attacker, target, state.tick) do
       {new_state, payload} = resolve_player_attack(state, attacker, target)
       {:reply, {:ok, payload}, new_state}
@@ -1118,6 +1158,7 @@ defmodule Core.World.MapServer do
   defp resolve_player_engagement(state, attacker) do
     with :ok <- living_attacker(attacker),
          {:ok, target} <- fetch_npc(state, attacker.engaged_target_id),
+         :ok <- authorize_tactical_target(state, attacker, target.id),
          true <- attacker.target_id == target.id,
          :ok <- Combat.validate_attack(attacker, target, state.tick) do
       {new_state, _payload} = resolve_player_attack(state, attacker, target)
@@ -1349,6 +1390,7 @@ defmodule Core.World.MapServer do
   defp toggle_laser_fire(state, %{engaged_target_id: nil} = entity, action) do
     with {:ok, target_id} <- selected_target(entity),
          {:ok, target} <- fetch_npc(state, target_id),
+         :ok <- authorize_tactical_target(state, entity, target.id),
          true <- Combat.valid_target?(entity, target),
          :ok <- armed_weapon(entity) do
       engage_entity(state, entity, target, action)
