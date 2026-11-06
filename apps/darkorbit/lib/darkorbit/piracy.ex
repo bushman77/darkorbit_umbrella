@@ -146,6 +146,17 @@ defmodule Darkorbit.Piracy do
 
   def seize_surrender(_user_id, _verified), do: {:error, :invalid_identity}
 
+  @doc "Read-only, pilot-scoped claim receipt for a completed encounter."
+  def claim_receipt(user_id, encounter_id)
+      when is_integer(user_id) and user_id > 0 and is_binary(encounter_id) do
+    case Repo.get_by(CargoClaim, user_id: user_id, encounter_id: encounter_id) do
+      %CargoClaim{} = row -> {:ok, claim_result(row, faction_standing(user_id, row.faction_id))}
+      nil -> {:error, :claim_not_found}
+    end
+  end
+
+  def claim_receipt(_, _), do: {:error, :claim_not_found}
+
   @doc "Read-only account stance; no implicit faction creation."
   def faction_standing(user_id, faction_id) do
     case Repo.one(from(s in FactionStanding,
