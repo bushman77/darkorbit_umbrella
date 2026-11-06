@@ -773,3 +773,44 @@ Source: [Symbrella `symbolic_generation`](https://github.com/bushman77/Symbrella
 - [ ] Add player-selected individual cargo lots, voluntary buy/sell orders,
   planetary dock warehouses, prices, taxes, smuggling inspections and
   law-specific reputation penalties.
+
+
+### SOL orbital bases and forward refineries V1 (2026-11-05)
+
+- [x] Derive one stable planetary **orbital base**, **forward refinery** and
+  **three named docking bays** from each registered SOL destination
+  (Mercury–Pluto, Earth included). The Sun is not a port.
+- [x] Create a shared strategic stock ledger with distinct provisional
+  industrial profiles and minute-based bounded refinery production.
+- [x] Advance merchant traffic and refinery inventories in the same
+  Solar Navigation GenServer clock, independent of active pilots.
+- [x] Queue traders at full bays, unload their real arriving manifests,
+  load outbound requested cargo only from available refinery stock and
+  free berths on departure. Trade ships retain vessel/voyage identities,
+  damage state and faction; disabled/destroyed vessels do not deliver.
+- [x] Debit the origin refinery whenever the global shipping timetable
+  or procedural neutral traffic launches a new trader. Previously
+  underway seed ships count as starting-world assets.
+- [x] Report local orbital-base occupancy only in authorized navigation
+  snapshots and on berth changes; avoid remote inventories and full
+  station broadcasts on every world tick.
+- [x] Publish a fixed, safe orbital site in every planetary tactical map
+  and render an original lightweight 3D base in desktop and paired SBS
+  cockpit views. No new asset bundle or external download is required.
+- [x] Add isolated tests for stock transfers, production, arrival/departure,
+  bay queues, future-body station fallback, fixed orbital geometry and
+  live Navigation-backed inventory consumption; Node tests cover the
+  station pose and camera-relative stereo placement.
+- [ ] Run the new ExUnit/Node tests and visually verify the orbital base
+  in the real laptop and paired Galaxy SBS cockpit.
+- [ ] Render *individual physically docked Scows* at their occupied bay
+  coordinates and implement actual ship-to-station approach/docking
+  trajectories. Current bay movements are strategic, not tactical
+  physics or player-interactive docking.
+- [ ] Add ship docking permissions, collision-safe approach corridors,
+  port fees, faction-based access, purchase/sale pricing and warehouse
+  transaction APIs.
+- [ ] Persist refinery reserves, berth leases, production clocks and
+  strategic voyages across OTP/server restarts. V1 station state is
+  supervised RAM state; account cargo/standing already has its own
+  PostgreSQL persistence boundary.
