@@ -86,8 +86,13 @@ defmodule Core.Universe.SpaceBases do
           base.stock
         else
           Enum.reduce(base.production, base.stock, fn {good, rate}, held ->
-            Map.update(held, good, min(@stock_ceiling, cycles * rate),
-              &min(@stock_ceiling, &1 + cycles * rate))
+            Map.update(held, good, min(@stock_ceiling, cycles * rate), fn held_units ->
+              # The production ceiling throttles output; it must never
+              # discard stock that arrived legitimately on another freighter.
+              if held_units >= @stock_ceiling,
+                do: held_units,
+                else: min(@stock_ceiling, held_units + cycles * rate)
+            end)
           end)
         end
 
@@ -127,7 +132,13 @@ defmodule Core.Universe.SpaceBases do
   def dock(bases, %{destination_id: destination, id: ship_id} = ship) do
     case Map.fetch(bases, destination) do
       {:ok, base} ->
-        case available_berth(base) do
+        # The same strategic ship cannot unload twice by retrying a docking
+        # event. The normal Navigation state machine only calls this during
+        # arrival or while awaiting a bay, but the guard protects helpers too.
+        if Enum.any?(base.berths, fn {_bay, held_id} -> held_id == ship_id end) do
+          {bases, ship}
+        else
+          case available_berth(base) do
           nil ->
             {bases, %{ship | state: :awaiting_berth,
               location_id: destination, position_km: position!(destination)}}
@@ -150,6 +161,7 @@ defmodule Core.Universe.SpaceBases do
              %{ship | state: :docked, location_id: destination,
                position_km: position!(destination),
                cargo: outbound, dwell_remaining_ms: 45_000}}
+          end
         end
 
       :error ->
