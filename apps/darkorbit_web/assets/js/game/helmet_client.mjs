@@ -46,6 +46,7 @@ export class HelmetClient {
     this.view = null
     // StereoSpaceView reads the same navComputer.visual data on laptop and HMD.
     this.navComputer = {solarNavigation: {planetary_view: null}}
+    this.orbitalBase = null
     this.screenWake = new HelmetScreenWake()
     this.running = false
     this.frameCount = 0
@@ -447,6 +448,7 @@ export class HelmetClient {
     this.canvas.hidden = true
     this.entities.clear()
     this.navComputer.solarNavigation = {planetary_view: null}
+    this.orbitalBase = null
     this.beams = []
     this.report(false)
   }
@@ -467,6 +469,7 @@ export class HelmetClient {
 
   applyWorld(map) {
     if (!map?.entities || this.mode !== "combat") return
+    this.orbitalBase = map.orbital_base || null
     const active = new Set()
     for (const e of map.entities) {
       const id = key(e.id)
