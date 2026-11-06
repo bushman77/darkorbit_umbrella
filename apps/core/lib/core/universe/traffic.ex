@@ -15,6 +15,7 @@ defmodule Core.Universe.Traffic do
   """
 
   alias Core.Universe.Sol
+  alias Core.Universe.SpaceBases
   alias Core.Factions
   alias Core.NPC.Catalog, as: NPCCatalog
 
@@ -293,6 +294,113 @@ defmodule Core.Universe.Traffic do
   never by a player payload. A settlement is recorded at most once and can
   only decrease the preexisting hull/shields. Cargo is never awarded here.
   """
+  @doc """
+  Advance shared traffic together with real refineries and occupied berths.
+
+  Navigation uses this path; the legacy advance/3 remains available for
+  isolated movement fixtures. No merchant may magically refill its cargo on
+  departure: inbound units are unloaded and outbound units are withdrawn
+  from the owning planet's stock exactly once, at docking.
+  """
+  @spec advance_with_bases(map(), non_neg_integer(), map(), MapSet.t(String.t())) ::
+          {map(), map()}
+  def advance_with_bases(ships, elapsed_ms, bases, active_contact_ids \\ MapSet.new())
+
+  def advance_with_bases(ships, elapsed_ms, bases, active_contact_ids)
+      when is_map(ships) and is_map(bases) and
+           is_integer(elapsed_ms) and elapsed_ms >= 0 and
+           is_struct(active_contact_ids, MapSet) do
+    produced = SpaceBases.produce(bases, elapsed_ms)
+
+    ships
+    |> Enum.sort_by(fn {id, _} -> id end)
+    |> Enum.reduce({%{}, produced}, fn {id, vessel}, {fleet, station_state} ->
+      leased? = MapSet.member?(active_contact_ids, id)
+      allowed_ms =
+        if leased? and vessel.state == :in_transit do
+          max(0, min(elapsed_ms, vessel.duration_ms - vessel.elapsed_ms - 1))
+        else
+          elapsed_ms
+        end
+
+      {updated, station_state} =
+        if vessel.kind in [:commercial_freighter, :courier, :independent_trader] and
+             vessel.disposition != :hostile do
+          advance_vessel_with_bases(vessel, allowed_ms, station_state)
+        else
+          {advance_vessel(vessel, allowed_ms), station_state}
+        end
+
+      if Map.get(vessel, :procedural?, false) do
+        remaining = vessel.lifetime_remaining_ms - elapsed_ms
+
+        if remaining <= 0 and not leased? do
+          {fleet, SpaceBases.undock(station_state, updated)}
+        else
+          {Map.put(fleet, id, %{updated | lifetime_remaining_ms: max(1, remaining)}),
+           station_state}
+        end
+      else
+        {Map.put(fleet, id, updated), station_state}
+      end
+    end)
+  end
+
+  defp advance_vessel_with_bases(%{state: state} = vessel, _elapsed, bases)
+       when state in [:destroyed, :disabled], do: {vessel, bases}
+
+  defp advance_vessel_with_bases(%{state: :in_transit} = vessel, elapsed, bases) do
+    remaining = max(0, vessel.duration_ms - vessel.elapsed_ms)
+    used = min(remaining, elapsed)
+    next = vessel.elapsed_ms + used
+
+    if next >= vessel.duration_ms do
+      landed = %{vessel | elapsed_ms: vessel.duration_ms,
+        position_km: position!(vessel.destination_id),
+        location_id: vessel.destination_id}
+      {bases, docked} = SpaceBases.dock(bases, landed)
+      advance_vessel_with_bases(docked, elapsed - used, bases)
+    else
+      progress = next / vessel.duration_ms
+      moved = %{vessel | elapsed_ms: next,
+        position_km: Sol.interpolate_game_position(
+          position!(vessel.origin_id), position!(vessel.destination_id), progress)}
+      {moved, bases}
+    end
+  end
+
+  defp advance_vessel_with_bases(%{state: :awaiting_berth} = vessel, elapsed, bases) do
+    {bases, docked} = SpaceBases.dock(bases, vessel)
+
+    if docked.state == :docked do
+      advance_vessel_with_bases(docked, elapsed, bases)
+    else
+      {docked, bases}
+    end
+  end
+
+  defp advance_vessel_with_bases(%{state: :docked} = vessel, elapsed, bases) do
+    used = min(elapsed, vessel.dwell_remaining_ms)
+    remaining = vessel.dwell_remaining_ms - used
+
+    if remaining == 0 do
+      origin = vessel.location_id
+      destination =
+        if origin == vessel.home_destination_id,
+          do: vessel.home_origin_id, else: vessel.home_destination_id
+      next = %{vessel |
+        state: :in_transit, origin_id: origin, destination_id: destination,
+        elapsed_ms: 0, dwell_remaining_ms: 0,
+        voyage_number: vessel.voyage_number + 1,
+        distance_km: Sol.cruise_distance_km(origin, destination),
+        position_km: position!(origin)}
+      next = Map.put(next, :duration_ms, duration(next))
+      advance_vessel_with_bases(next, elapsed - used, SpaceBases.undock(bases, vessel))
+    else
+      {%{vessel | dwell_remaining_ms: remaining}, bases}
+    end
+  end
+
   @spec settle(map(), map(), map(), atom()) :: {:ok, map()} | {:error, atom()}
   def settle(ships, identity, report, outcome),
     do: settle(ships, identity, report, outcome, %{})
