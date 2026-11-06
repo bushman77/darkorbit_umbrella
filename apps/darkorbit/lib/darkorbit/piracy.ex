@@ -148,11 +148,12 @@ defmodule Darkorbit.Piracy do
 
   @doc "Read-only account stance; no implicit faction creation."
   def faction_standing(user_id, faction_id) do
-    from(s in FactionStanding,
-      where: s.user_id == ^user_id and s.faction_id == ^faction_id,
-      select: s.standing)
-    |> Repo.one()
-    |> Kernel.||(0)
+    case Repo.one(from(s in FactionStanding,
+           where: s.user_id == ^user_id and s.faction_id == ^faction_id,
+           select: s.standing)) do
+      nil -> 0
+      value -> value
+    end
   end
 
   defp valid_identity(%{
