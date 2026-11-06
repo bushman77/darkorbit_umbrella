@@ -85,6 +85,20 @@ defmodule Darkorbit.PiracyTest do
     assert Piracy.faction_standing(pilot.id, source.faction_id) == -30
   end
 
+  test "outlaw or hostile seizure does not penalize a civilian faction" do
+    pilot = player_account_fixture()
+    hostile = contact(%{
+      disposition: :hostile,
+      classification: :hostile_contact,
+      faction_id: "independent_raiders",
+      cargo: %{"industrial_parts" => 40}
+    })
+
+    assert {:ok, %{cargo: %{"industrial_parts" => 4}, standing: 0}} =
+      Piracy.seize_surrender(pilot.id, hostile)
+    assert Piracy.reputations(pilot.id) == %{}
+  end
+
   test "unrecognized or fractional strategic stock cannot create cargo" do
     pilot = player_account_fixture()
     source = contact(%{cargo: %{"arbitrary_super_item" => 200, "industrial_parts" => 9}})
