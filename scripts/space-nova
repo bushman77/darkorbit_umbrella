@@ -56,19 +56,38 @@ linux_build() (
   cp "${debs[0]}" "$ROOT/dist/releases/space-nova-linux-x64.deb"
   echo "Linux diagnostic installers: $ROOT/dist/releases"
 )
-server_build() {
-  require git; require mix; require tar; on_branch; clean_tree
-  if find "$ROOT/apps/darkorbit_web/priv/cert" -type f -name '*key*' -print -quit 2>/dev/null | grep -q .; then
-    die "Local TLS key detected. Build the official clean server artifact in GitHub Actions."
+server_build() (
+  require git; require mix; require npm; require tar; on_branch; clean_tree
+  # Build an archive of committed files, never the live workstation checkout.
+  # This excludes ignored/untracked development TLS keys and other local data.
+  umask 077
+  local buildroot output
+  buildroot="$(mktemp -d "${TMPDIR:-/tmp}/space-nova-server.XXXXXXXX")"
+  trap 'rm -rf -- "$buildroot"' EXIT
+  echo "Preparing isolated source from $(git -C "$ROOT" rev-parse --short HEAD)"
+  git -C "$ROOT" archive HEAD | tar -xf - -C "$buildroot"
+
+  # Refuse the archive if anyone accidentally committed a local TLS private key.
+  if find "$buildroot/apps/darkorbit_web/priv/cert" -type f -name '*key*' -print -quit 2>/dev/null | grep -q .; then
+    die "A TLS private key is tracked in Git. Refusing to package it."
   fi
-  (cd "$ROOT" && MIX_ENV=prod mix deps.get --only prod &&
+
+  (cd "$buildroot" &&
+    npm ci --prefix apps/darkorbit_web/assets &&
+    MIX_ENV=prod mix deps.get --only prod &&
     MIX_ENV=prod mix compile --warnings-as-errors &&
     MIX_ENV=prod mix assets.deploy &&
+    test -s apps/darkorbit_web/priv/static/cache_manifest.json &&
     MIX_ENV=prod mix release space_mmo --overwrite)
+
   mkdir -p "$ROOT/dist/releases"
-  tar -C "$ROOT/_build/prod/rel" -czf "$ROOT/dist/releases/space-nova-server-linux-x64.tar.gz" space_mmo
-  echo "Local diagnostic archive in dist/releases (official build runs on Ubuntu CI)."
-}
+  output="$ROOT/dist/releases/space-nova-server-linux-x64.tar.gz"
+  tar -C "$buildroot/_build/prod/rel" -czf "$output" space_mmo
+  tar -tzf "$output" | grep -F 'space_mmo/bin/space_mmo' >/dev/null
+  tar -tzf "$output" | grep -F 'cache_manifest.json' >/dev/null
+  echo "Local diagnostic archive: $output"
+  echo "The official portable Ubuntu 24.04 release is built on GitHub Actions."
+)
 windows_build() {
   require git; on_branch; gh_ready
   gh workflow run space-nova-windows.yml --repo "$REPO" --ref "$BRANCH"

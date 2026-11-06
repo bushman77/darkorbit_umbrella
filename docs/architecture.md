@@ -356,3 +356,7 @@ The umbrella root `mix.exs` is the sole public release-version source. The Linux
 Release CI gates full Elixir, browser JavaScript and Tauri tests, builds the Ubuntu 24.04 x86_64 `space_mmo` OTP release after asset digestion, exercises a temporary database migration and HTTPS startup, and packages Linux/Windows Tauri installers. The publish job validates installer signatures, creates `SHA256SUMS` and `latest.json`, and publishes all assets together via a draft release. Signing credentials remain in GitHub Actions secrets. EC2 deployment is deliberately independent of release publication; Android SBS remains a server-served viewer. See `docs/space-nova-release.md`.
 
 Validation status: helper commands were reviewed; full CI signing, release publication and real-device verification are pending.
+
+### Local server diagnostic isolation (2026-11-06)
+
+The `scripts/space-nova server` diagnostic builds `git archive HEAD` in a temporary isolated workspace. It fetches production dependencies and digests assets there, avoiding the live checkout and ignored local development TLS keys. Official server artifacts remain CI-built on Ubuntu 24.04, with production secrets injected only at deployment.

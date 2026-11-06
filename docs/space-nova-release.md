@@ -73,6 +73,18 @@ The publish action never restarts or deploys to EC2.
 
 ## Dedicated server
 
+The local **option 8 / `./scripts/space-nova server`** is diagnostic.
+It builds an isolated copy from `git archive HEAD` under a temporary
+directory, excluding ignored/untracked local development certificates and
+workstation files. It neither deletes nor moves your TLS keys. Build tools
+and dependencies are fetched into the temporary copy, which is removed
+when the command finishes. Its output is
+`dist/releases/space-nova-server-linux-x64.tar.gz`. Sufficient free disk
+space and a working production Mix/npm toolchain are required. Local
+builds are not guaranteed to be ABI-compatible with Ubuntu 24.04; use
+the GitHub Actions package for EC2 deployment.
+
+
 The server build uses OTP/Elixir on Ubuntu 24.04 x86_64, builds/digests
 production Phoenix assets, creates `mix release space_mmo`, and validates
 the release archive. A release-only entrypoint is provided for migrations:

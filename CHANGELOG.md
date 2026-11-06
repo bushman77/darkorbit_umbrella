@@ -798,3 +798,9 @@
 - Extended the Linux `scripts/space-nova` menu with a unified server and signed desktop release command.
 - Expanded the signed GitHub Actions release to validate Elixir and JavaScript suites, build an Ubuntu OTP server archive, package stable-name Windows/Linux installers, generate checksums and publish a complete release after signing.
 - Added an OTP database-migration entry point, release validation CI and the release runbook. Publication, EC2 deployment and device smoke tests have not been performed.
+
+### Local server diagnostic packaging correction (2026-11-06)
+
+- Replaced the blanket refusal to build when workstation development TLS keys exist with an isolated `git archive HEAD` production build.
+- The archive uses only committed source, excludes ignored/untracked local credentials, validates Phoenix digested assets and the OTP bundle, and leaves workstation TLS files untouched.
+- Automated workflow syntax validation is provided; local production packaging still requires manual execution on Pop!_OS and has not been independently verified here.
