@@ -126,6 +126,37 @@ the endpoint.
     laser, damage, destruction, respawn, and world-state events.
     `Darkorbit.World.PubSub` publishes them on `world:<map-id>` topics.
 
+## SOL tactical merchant invariants
+
+1. A tactical Scow is a temporary map actor leased to one authenticated pilot
+   but retains the strategic vessel ID, voyage identity, faction attribution,
+   cargo settlement boundary, origin, destination, and projected course.
+2. Neutral selection and attack intent do not provoke a merchant. Only a
+   server-confirmed weapon impact marks that exact tactical lease as provoked;
+   its target list then contains only the owning pilot.
+3. Scows remain in `:cruise` or `:evade` while defending. Their turret may
+   generate one cooldown-eligible action without replacing the existing route
+   destination or switching to Dart pursuit behavior.
+4. NPC AI evaluates range against the post-player-movement tick snapshot.
+   MapServer carries that authoritative firing position into resolution, then
+   rechecks current alive state, target validity, cooldown and range against
+   that same origin before applying damage and publishing `:laser_fired`.
+   NPC route movement later in the tick therefore cannot invalidate a shot
+   that was legal when selected.
+5. Scow encounter placement first tries front, side and rear positions 340
+   units from the pilot. Every candidate passes normal map-boundary and
+   planetary-exclusion checks; the prior 520-unit positions remain fallbacks
+   when all preferred positions are unsafe. No ship is teleported after the
+   encounter starts.
+6. At 80% remaining hull or below a Scow retains its destination and enters
+   faster evasion. At 35% or below it surrenders, clears its target and
+   destination, and stops. Surrendered or destroyed actors cannot generate or
+   resolve attacks.
+7. The current private tactical-lease model authorizes each pilot and weapon
+   against only that lease's NPC. It prevents another encounter's Scow from
+   targeting or damaging the wrong pilot; genuinely shared tactical combat is
+   a separate future architecture.
+
 ## Browser transport invariants
 
 1. Credential login rotates the persisted account session. The game page
@@ -235,7 +266,11 @@ range and cooldown enforcement, damage/destruction/respawn, repeated and
 concurrent attacks, persistent engagement, automatic cooldown cadence,
 out-of-range pause/resume, movement during combat, destruction/respawn lock
 clearing, dead-player rejection, action validation, cancellation, and
-disconnect cleanup. Laser-control regressions additionally cover direct and
+disconnect cleanup. SOL merchant regressions additionally cover neutral
+non-aggression, confirmed-hit provocation, decision-time range preservation,
+Garnet damage/events, exact cooldown readiness, out-of-range rejection,
+course and evasive movement, surrender/destruction, settlement preservation,
+and per-pilot tactical isolation. Laser-control regressions additionally cover direct and
 X1 alternating toggles, selection-preserving stop/resume, clear semantics,
 cooldown preservation across toggles, sequential NPC engagements, invalid or
 empty actions, missing targets, unauthorized sessions, and destroyed players.

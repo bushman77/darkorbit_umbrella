@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Original sentinel NPC placeholder">
+  <path d="m32 4 20 12 8 22-15 18H19L4 38l8-22Z" fill="#29140f" stroke="#fb923c" stroke-width="2"/>
+  <path d="m32 13 12 12-5 18H25l-5-18Z" fill="#7c2d12" stroke="#fdba74"/>
+  <circle cx="32" cy="31" r="6" fill="#ffedd5"/><circle cx="32" cy="31" r="3" fill="#f97316"/>
+</svg>

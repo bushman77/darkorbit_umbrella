@@ -839,3 +839,28 @@ Source: [Symbrella `symbolic_generation`](https://github.com/bushman77/Symbrella
 - [ ] Longer term: separate physically shared multiplayer combat arenas from
   the current exclusive private tactical lease model, with explicit lawful
   collateral damage and faction-incident attribution.
+
+
+### Scow defensive combat reliability (2026-11-06)
+
+- [x] Reproduce the movement/range ordering defect through the complete
+  MapServer combat path before changing production logic.
+- [x] Preserve the AI decision-time firing origin through authoritative
+  resolution so same-tick cruise/evasion cannot cancel a legitimate shot.
+- [x] Keep neutral Scows passive until a confirmed hit and target only the
+  pilot who owns the provoked tactical encounter.
+- [x] Preserve the Scow's strategic identity, cargo settlement, faction,
+  route heading and destination while it defends, evades or surrenders.
+- [x] Prefer a collision-checked 340-unit Scow encounter separation and keep
+  520-unit directional candidates as safe planetary/map fallbacks.
+- [x] Cover defensive events/damage, cooldown, range rejection, movement,
+  surrender/destruction and concurrent pilot isolation with deterministic
+  full-MapServer tests.
+- [x] Pass the focused NPC AI (4 tests), focused world/MapServer (45 tests),
+  full umbrella (358 tests), and warnings-as-errors compilation checks.
+- [ ] Resolve repository-wide Elixir 1.20 RC formatter drift before
+  `mix precommit` can pass without unrelated formatting changes.
+- [ ] Perform manual browser/SBS verification of neutral approach, defensive
+  fire, evasion and surrender presentation.
+- [ ] Replace private per-pilot tactical leases with a genuinely shared combat
+  arena before introducing lawful collateral damage or cooperative defense.

@@ -27,6 +27,10 @@ defmodule Core.World.MapServer do
   alias Core.World.Position
   alias Core.World.Session
 
+  @default_tactical_spawn_distance 520.0
+  # Leaves a 40-unit turret margin for the first 100 ms cruise/evasion tick.
+  @scow_tactical_spawn_distance 340.0
+
   def child_spec(opts) do
     definition = opts |> Keyword.fetch!(:definition) |> MapDefinition.new()
 
@@ -415,7 +419,7 @@ defmodule Core.World.MapServer do
          false <- Map.has_key?(state.solar_tactical, player_id),
          {:ok, base} <- NPCCatalog.fetch(ship_class, NPCCatalog.all()),
          :ok <- validate_tactical_condition(route, base),
-         {:ok, spawn} <- solar_tactical_position(state.definition, ship),
+         {:ok, spawn} <- solar_tactical_position(state.definition, ship, base),
          {:ok, cruise_course} <- tactical_course(ship_class, route, spawn, state.definition) do
       type_id = "solar-" <> ship_class <> "-" <> Integer.to_string(player_id)
       definition = %{base |
@@ -1071,7 +1075,9 @@ defmodule Core.World.MapServer do
           {
             Map.put(npcs, moved_npc.id, moved_npc),
             actions ++
-              Enum.map(new_actions, fn {:attack, target_id} -> {moved_npc.id, target_id} end),
+              Enum.map(new_actions, fn {:attack, target_id} ->
+                {moved_npc.id, target_id, decided_npc.position}
+              end),
             events ++ Enum.map(changed, &{&1, moved_npc.id}),
             finished
           }
@@ -1247,10 +1253,14 @@ defmodule Core.World.MapServer do
   end
   defp maybe_add_player_wing_beams(payload, _attacker, _target, _beam), do: payload
 
-  defp resolve_npc_attack(state, {npc_id, player_id}) do
+  defp resolve_npc_attack(state, {npc_id, player_id, firing_position}) do
     with {:ok, attacker} <- Map.fetch(state.npcs, npc_id),
          {:ok, target} <- Map.fetch(state.entities, player_id),
-         :ok <- Combat.validate_attack(attacker, target, state.tick) do
+         # AI selected this shot against the post-player-movement snapshot.
+         # Preserve that authoritative firing origin so subsequent merchant
+         # cruise/evasion movement cannot silently invalidate the action.
+         firing_attacker = %{attacker | position: firing_position},
+         :ok <- Combat.validate_attack(firing_attacker, target, state.tick) do
       {damaged_target, damage} = Combat.apply_damage(target, attacker.damage)
 
       damaged_target =
@@ -1690,29 +1700,37 @@ defmodule Core.World.MapServer do
   # Spawn an opponent in front of the pilot where possible. On planetary
   # maps the server rejects positions inside the physical collision exclusion,
   # so a tactical encounter never conceals an invisible fatal planet.
-  defp solar_tactical_position(definition, %Entity{} = ship) do
+  defp solar_tactical_position(definition, %Entity{} = ship, npc_definition) do
     direction = Orientation.forward(ship.orientation)
-    {dx, dy} = {direction.x, direction.y}
     ship_pos = ship.position
 
-    offsets = [
-      {dx * 520.0, dy * 520.0},
-      {-dy * 520.0, dx * 520.0},
-      {-dx * 520.0, -dy * 520.0}
-    ]
+    distances =
+      if npc_definition.id == "scow",
+        do: [@scow_tactical_spawn_distance, @default_tactical_spawn_distance],
+        else: [@default_tactical_spawn_distance]
 
     candidate =
-      Enum.find_value(offsets, fn {x, y} ->
+      Enum.find_value(tactical_spawn_offsets(direction, distances), fn {x, y, z} ->
         position = %Position{
           x: ship_pos.x + x,
           y: ship_pos.y + y,
-          z: ship_pos.z + direction.z * 520.0
+          z: ship_pos.z + z
         }
 
         if safe_tactical_spawn?(definition, position), do: position
       end)
 
     if candidate, do: {:ok, candidate}, else: {:error, :no_spawn_position}
+  end
+
+  defp tactical_spawn_offsets(direction, distances) do
+    Enum.flat_map(distances, fn distance ->
+      [
+        {direction.x * distance, direction.y * distance, direction.z * distance},
+        {-direction.y * distance, direction.x * distance, direction.z * distance},
+        {-direction.x * distance, -direction.y * distance, direction.z * distance}
+      ]
+    end)
   end
 
   defp safe_tactical_spawn?(definition, %Position{} = position) do

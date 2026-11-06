@@ -2,6 +2,46 @@
 
 ## Unreleased
 
+### Scow defensive combat repair (2026-11-06)
+
+#### Fixed
+
+- Preserved the server-owned NPC firing origin selected by `Core.NPC.AI`
+  through `Core.World.MapServer` attack resolution. Merchant cruise or evasive
+  movement later in the same tick can no longer move an otherwise valid
+  Garnet shot out of range and cause `resolve_npc_attack/2` to discard it.
+- Kept the resolution-time checks for current alive state, legal target,
+  cooldown, damage, and range. The correction does not extend the Scow's
+  380-unit weapon reach or let a merchant pursue a pilot.
+- Changed Scow tactical placement to prefer a direction-aware 340-unit
+  separation, inside the defensive turret envelope, while retaining the
+  existing 520-unit front/side/rear candidates as safe fallbacks when map or
+  planetary collision exclusions reject the preferred positions.
+
+#### Tests
+
+- Added a failing-before-fix full-MapServer regression in which a confirmed
+  hit provokes an evasive Scow at valid range; its same-tick movement
+  previously left the player at 300 hull instead of applying 10 damage.
+- Extended world coverage for neutral non-aggression, confirmed provocation,
+  authoritative `:laser_fired` publication, exact player damage, Scow
+  cooldown cadence, out-of-range rejection, cruise/evasive movement,
+  surrendered/destroyed actors, and two-pilot tactical target isolation.
+- `mix test apps/core/test/core/npc/ai_test.exs` passes 4 tests and
+  `mix test apps/core/test/core/world/world_test.exs` passes 45 tests.
+- `mix test` passes 358 tests: 238 Core, 48 persistence, and 72 web tests.
+  It reports only the existing signed-zero pattern warnings in `sol_test.exs`
+  and `world_channel_test.exs`.
+- `mix compile --warnings-as-errors` passes. The modified-file formatting
+  check and `mix precommit` stop at `mix format --check-formatted` because the
+  installed Elixir 1.20 RC formatter rewrites these pre-existing files and many
+  untouched repository files. The unrelated formatter output was not applied;
+  `mix precommit` therefore did not reach its embedded test step.
+
+#### Manual verification
+
+- Manual browser and SBS/headset combat verification was not performed.
+
 ### Milestone A — Persistent player domains
 
 - Added account registration, authentication, inventory, fleet, two ship loadouts, preferences, titles, and starter-state provisioning.

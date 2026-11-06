@@ -63,14 +63,22 @@ defmodule Core.WorldTest do
         Core.NPC.Entity.spawn(definition, 0, 100)
       end)
 
+    mine = %{mine | damage: 7}
+    theirs = %{theirs | damage: 13}
+
     :sys.replace_state(map_pid, fn state ->
       %{state |
         npcs: %{mine.id => mine, theirs.id => theirs},
+        npc_definitions: state.npc_definitions
+          |> Map.put(mine.npc_type_id, %{template | id: mine.npc_type_id})
+          |> Map.put(theirs.npc_type_id, %{template | id: theirs.npc_type_id}),
         solar_tactical: %{
           4_501 => %{npc_id: mine.id, encounter_id: "flyby:alpha",
-            contact_id: "traffic:sol:alpha", voyage_number: 1},
+            contact_id: "traffic:sol:alpha", voyage_number: 1,
+            provoked?: true, prepared: nil, escape_pending: nil},
           4_502 => %{npc_id: theirs.id, encounter_id: "flyby:beta",
-            contact_id: "traffic:sol:beta", voyage_number: 1}
+            contact_id: "traffic:sol:beta", voyage_number: 1,
+            provoked?: true, prepared: nil, escape_pending: nil}
         }
       }
     end)
@@ -102,6 +110,24 @@ defmodule Core.WorldTest do
     assert damaged.hull < mine.hull or damaged.shields < mine.shields
     assert untouched.hull == theirs.hull
     assert untouched.shields == theirs.shields
+
+    assert {:ok, tick} = World.tick("1-1", options)
+    first_pilot = Enum.find(tick.entities, &(&1.id == first.entity_id))
+    second_pilot = Enum.find(tick.entities, &(&1.id == second.entity_id))
+    assert first_pilot.hull == first_pilot.max_hull - 7
+    assert second_pilot.hull == second_pilot.max_hull - 13
+
+    assert_receive {"1-1", :laser_fired,
+                    %{attacker_id: attacker_id, target_id: target_id, damage: 7}}
+
+    assert attacker_id == mine.id
+    assert target_id == first.entity_id
+
+    assert_receive {"1-1", :laser_fired,
+                    %{attacker_id: attacker_id, target_id: target_id, damage: 13}}
+
+    assert attacker_id == theirs.id
+    assert target_id == second.entity_id
   end
 
   @tag no_initial_encounter: true
@@ -1032,6 +1058,10 @@ defmodule Core.WorldTest do
     assert enemy.damage == 10
     assert enemy.speed == 105
 
+    assert {:ok, initial_tactical} = World.snapshot("1-1", opts)
+    initial_pilot = Enum.find(initial_tactical.entities, &(&1.id == session.entity_id))
+    assert Core.Combat.in_range?(enemy, initial_pilot, enemy.attack_range)
+
     [{map_pid, _}] = Registry.lookup(@registry, {:world_map, "1-1"})
     assert :sys.get_state(map_pid).solar_tactical[session.entity_id].provoked? == false
 
@@ -1039,16 +1069,83 @@ defmodule Core.WorldTest do
     # pilot selected Attack; it can defend itself after the first hit.
     assert {:ok, before} = World.tick("1-1", opts)
     idle_enemy = Enum.find(before.entities, &(&1.id == enemy.id))
+    peaceful_pilot = Enum.find(before.entities, &(&1.id == session.entity_id))
+    enemy_id = enemy.id
     assert idle_enemy.target_id == nil
+    assert peaceful_pilot.hull == peaceful_pilot.max_hull
+    assert peaceful_pilot.shields == peaceful_pilot.max_shields
+    refute_receive {"1-1", :laser_fired, %{attacker_id: ^enemy_id}}
+
     assert {:ok, _} = World.select_target(session.id, enemy.id, opts)
     assert {:ok, %{destroyed: false, target_id: target_id}} =
       World.attack(session.id, opts)
     assert target_id == enemy.id
     assert :sys.get_state(map_pid).solar_tactical[session.entity_id].provoked? == true
 
+    combat_state = :sys.get_state(map_pid)
+    armed_scow = Map.fetch!(combat_state.npcs, enemy.id)
+    current_pilot = Map.fetch!(combat_state.entities, session.entity_id)
+    {expected_pilot, expected_damage} = Core.Combat.apply_damage(current_pilot, armed_scow.damage)
+
     assert {:ok, after_hit} = World.tick("1-1", opts)
     defending = Enum.find(after_hit.entities, &(&1.id == enemy.id))
+    hit_pilot = Enum.find(after_hit.entities, &(&1.id == session.entity_id))
     assert defending.target_id == session.entity_id
+    assert defending.position != idle_enemy.position
+    assert defending.destination == enemy.destination
+    assert defending.course == enemy.course
+    assert hit_pilot.shields == expected_pilot.shields
+    assert hit_pilot.hull == expected_pilot.hull
+
+    pilot_id = session.entity_id
+
+    assert_receive {"1-1", :laser_fired,
+                    %{attacker_id: ^enemy_id, target_id: ^pilot_id,
+                      shield_damage: shield_damage, hull_damage: hull_damage}}
+
+    assert shield_damage == expected_damage.shield_damage
+    assert hull_damage == expected_damage.hull_damage
+
+    assert {:ok, cooling_down} = World.tick("1-1", opts)
+    cooling_pilot = Enum.find(cooling_down.entities, &(&1.id == session.entity_id))
+    assert cooling_pilot.shields == hit_pilot.shields
+    assert cooling_pilot.hull == hit_pilot.hull
+    refute_receive {"1-1", :laser_fired, %{attacker_id: ^enemy_id}}
+
+    :sys.replace_state(map_pid, fn state ->
+      scow = Map.fetch!(state.npcs, enemy_id)
+      pilot = Map.fetch!(state.entities, session.entity_id)
+      heading = scow.course.heading
+
+      ahead = %Core.World.Position{
+        x: scow.position.x + heading.x * 100.0,
+        y: scow.position.y + heading.y * 100.0,
+        z: scow.position.z + heading.z * 100.0
+      }
+
+      %{state | entities: Map.put(state.entities, pilot.id, %{pilot | position: ahead})}
+    end)
+
+    for expected_tick <- (cooling_down.tick + 1)..(defending.next_attack_tick - 1) do
+      assert {:ok, %{tick: ^expected_tick}} = World.tick("1-1", opts)
+    end
+
+    assert {:ok, before_ready} = World.snapshot("1-1", opts)
+    cooldown_pilot = Enum.find(before_ready.entities, &(&1.id == session.entity_id))
+    assert cooldown_pilot.shields == hit_pilot.shields
+    assert cooldown_pilot.hull == hit_pilot.hull
+
+    ready_state = :sys.get_state(map_pid)
+    ready_scow = Map.fetch!(ready_state.npcs, enemy_id)
+    ready_pilot = Map.fetch!(ready_state.entities, session.entity_id)
+    {expected_second_hit, _damage} = Core.Combat.apply_damage(ready_pilot, ready_scow.damage)
+
+    assert {:ok, ready_tick} = World.tick("1-1", opts)
+    assert ready_tick.tick == defending.next_attack_tick
+    twice_hit_pilot = Enum.find(ready_tick.entities, &(&1.id == session.entity_id))
+    assert twice_hit_pilot.shields == expected_second_hit.shields
+    assert twice_hit_pilot.hull == expected_second_hit.hull
+    assert_receive {"1-1", :laser_fired, %{attacker_id: ^enemy_id}}
 
     # Retiring the encounter must release the original cruise without
     # accidentally retaining the NPC's aggression in future voyages.
@@ -1066,6 +1163,90 @@ defmodule Core.WorldTest do
     assert survivor.combat.shields == defending.shields
     assert survivor.state == :in_transit
     assert survivor.cargo == %{"medical_supplies" => 48}
+  end
+
+  @tag no_initial_encounter: true, no_auto_respawn: true
+  test "a provoked Scow's valid defensive shot survives same-tick evasive movement", context do
+    opts = context.world_options
+    assert {:ok, session} = World.connect(9_738, context.stats, opts)
+    assert {:ok, _} = World.solar_set_course(session.id, "venus", opts)
+    for _ <- 1..85, do: assert(:ok = SolarNavigation.tick(@solar_navigation_server))
+
+    assert {:ok, held} = World.solar_snapshot(session.id, opts)
+    encounter_id = held.pending_encounter.id
+    assert {:ok, %{enemy: enemy}} = World.solar_enter_tactical(session.id, encounter_id, opts)
+    assert {:ok, _} = World.select_target(session.id, enemy.id, opts)
+
+    [{map_pid, _}] = Registry.lookup(@registry, {:world_map, "1-1"})
+
+    :sys.replace_state(map_pid, fn state ->
+      scow = Map.fetch!(state.npcs, enemy.id)
+      injured = %{scow | hull: 170, shields: 0}
+      %{state | npcs: Map.put(state.npcs, scow.id, injured)}
+    end)
+
+    assert {:ok, %{destroyed: false}} = World.attack(session.id, opts)
+
+    initial_state = :sys.get_state(map_pid)
+    player = Map.fetch!(initial_state.entities, session.entity_id)
+    scow = Map.fetch!(initial_state.npcs, enemy.id)
+    assert scow.state == :evade
+    assert scow.speed > enemy.speed
+    heading = scow.course.heading
+    distance = scow.attack_range - 1.0
+
+    player_position = %Core.World.Position{
+      x: scow.position.x - heading.x * distance,
+      y: scow.position.y - heading.y * distance,
+      z: scow.position.z - heading.z * distance
+    }
+
+    positioned_player = %{player | position: player_position}
+    {expected_player, _damage} = Core.Combat.apply_damage(positioned_player, scow.damage)
+    enemy_id = scow.id
+    initial_enemy_position = scow.position
+
+    :sys.replace_state(map_pid, fn state ->
+      %{state | entities: Map.put(state.entities, player.id, positioned_player)}
+    end)
+
+    assert {:ok, tick} = World.tick("1-1", opts)
+    moved_enemy = Enum.find(tick.entities, &(&1.id == enemy_id))
+    damaged_player = Enum.find(tick.entities, &(&1.id == session.entity_id))
+
+    assert moved_enemy.position != initial_enemy_position
+    assert damaged_player.shields == expected_player.shields
+    assert damaged_player.hull == expected_player.hull
+
+    assert_receive {"1-1", :laser_fired,
+                    %{attacker_id: ^enemy_id, target_id: target_id, damage: 10}}
+
+    assert target_id == session.entity_id
+
+    out_of_range_state = :sys.get_state(map_pid)
+    moved_scow = Map.fetch!(out_of_range_state.npcs, enemy_id)
+    current_player = Map.fetch!(out_of_range_state.entities, session.entity_id)
+
+    distant_position = %Core.World.Position{
+      x: moved_scow.position.x - heading.x * (moved_scow.attack_range + 100.0),
+      y: moved_scow.position.y - heading.y * (moved_scow.attack_range + 100.0),
+      z: moved_scow.position.z - heading.z * (moved_scow.attack_range + 100.0)
+    }
+
+    :sys.replace_state(map_pid, fn state ->
+      ready_scow = %{Map.fetch!(state.npcs, enemy_id) | next_attack_tick: state.tick}
+      distant_player = %{Map.fetch!(state.entities, session.entity_id) | position: distant_position}
+
+      %{state |
+        npcs: Map.put(state.npcs, enemy_id, ready_scow),
+        entities: Map.put(state.entities, session.entity_id, distant_player)}
+    end)
+
+    assert {:ok, out_of_range_tick} = World.tick("1-1", opts)
+    untouched_player = Enum.find(out_of_range_tick.entities, &(&1.id == session.entity_id))
+    assert untouched_player.shields == current_player.shields
+    assert untouched_player.hull == current_player.hull
+    refute_receive {"1-1", :laser_fired, %{attacker_id: ^enemy_id}}
   end
 
   @tag no_initial_encounter: true, no_auto_respawn: true
@@ -1102,6 +1283,9 @@ defmodule Core.WorldTest do
     assert fleeing.hull == 160
 
     for _ <- 1..8, do: assert({:ok, _} = World.tick("1-1", opts))
+    fleeing_id = fleeing.id
+    assert_receive {"1-1", :laser_fired, %{attacker_id: ^fleeing_id}}
+
     :sys.replace_state(pid, fn map ->
       npc = Map.fetch!(map.npcs, enemy.id)
       %{map | npcs: Map.put(map.npcs, enemy.id, %{npc | hull: 78})}
@@ -1113,6 +1297,17 @@ defmodule Core.WorldTest do
     assert surrendered.hull == 68
     assert surrendered.destination == nil
     assert {:error, :invalid_target} = World.attack(session.id, opts)
+
+    before_surrender_tick = :sys.get_state(pid).entities[session.entity_id]
+    surrendered_id = surrendered.id
+    assert {:ok, after_surrender_tick} = World.tick("1-1", opts)
+    stopped = Enum.find(after_surrender_tick.entities, &(&1.id == surrendered_id))
+    safe_pilot = Enum.find(after_surrender_tick.entities, &(&1.id == session.entity_id))
+    assert stopped.position == %{x: surrendered.position.x, y: surrendered.position.y}
+    assert stopped.target_id == nil
+    assert safe_pilot.hull == before_surrender_tick.hull
+    assert safe_pilot.shields == before_surrender_tick.shields
+    refute_receive {"1-1", :laser_fired, %{attacker_id: ^surrendered_id}}
 
     assert {:ok, resumed} =
       World.solar_finish_tactical(session.id, encounter_id, :surrender, opts)
@@ -1245,6 +1440,16 @@ defmodule Core.WorldTest do
 
     assert {:ok, _lock} = World.select_target(session.id, enemy.id, opts)
     assert {:ok, %{destroyed: true}} = World.attack(session.id, opts)
+    [{map_pid, _}] = Registry.lookup(@registry, {:world_map, "1-1"})
+    before_destroyed_tick = :sys.get_state(map_pid).entities[session.entity_id]
+    destroyed_enemy_id = enemy.id
+    assert {:ok, destroyed_tick} = World.tick("1-1", opts)
+    refute Enum.any?(destroyed_tick.entities, &(&1.id == destroyed_enemy_id))
+    safe_pilot = Enum.find(destroyed_tick.entities, &(&1.id == session.entity_id))
+    assert safe_pilot.hull == before_destroyed_tick.hull
+    assert safe_pilot.shields == before_destroyed_tick.shields
+    refute_receive {"1-1", :laser_fired, %{attacker_id: ^destroyed_enemy_id}}
+
     assert {:ok, resumed} =
       World.solar_finish_tactical(session.id, encounter_id, :victory, opts)
     assert resumed.status == :traveling
