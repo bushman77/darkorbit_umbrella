@@ -149,6 +149,28 @@ defmodule DarkorbitWeb.WorldChannel do
   def handle_in("solar_accept_surrender", _payload, socket),
     do: {:reply, {:error, %{reason: "invalid_encounter"}}, socket}
 
+  # A distinct deliberate piracy choice: verified surrender is mandatory,
+  # the player never supplies an item, quantity, faction, or target ship.
+  def handle_in("solar_seize_cargo", %{"encounter_id" => id}, socket)
+      when is_binary(id) do
+    case World.solar_finish_tactical(socket.assigns.world_session_id, id,
+           :surrender, claim_cargo: true) do
+      {:ok, navigation} ->
+        receipt = World.cargo_claim_receipt(socket.assigns.current_player_id, id)
+        case receipt do
+          {:ok, cargo} -> {:reply, {:ok, %{navigation: navigation, claim: cargo}}, socket}
+          {:error, reason} ->
+            {:reply, {:error, %{reason: error_reason(reason)}}, socket}
+        end
+
+      {:error, reason} ->
+        {:reply, {:error, %{reason: error_reason(reason)}}, socket}
+    end
+  end
+
+  def handle_in("solar_seize_cargo", _payload, socket),
+    do: {:reply, {:error, %{reason: "invalid_encounter"}}, socket}
+
   def handle_in("solar_hail", %{"contact_id" => id}, socket)
       when is_binary(id) do
     case World.solar_hail(socket.assigns.world_session_id, id) do
@@ -391,6 +413,21 @@ defmodule DarkorbitWeb.WorldChannel do
     end
 
     :ok = push(socket, "entity_destroyed", payload)
+    {:noreply, socket}
+  end
+
+  # This is a server-generated MapServer damage event, never a socket command.
+  # Only the attacking pilot's own channel can record the faction consequence.
+  def handle_info({:laser_fired, payload}, socket) do
+    case World.record_tactical_hit(socket.assigns.world_session_id, payload) do
+      {:ok, %{applied?: true} = effect} ->
+        push(socket, "solar_faction_hit", effect)
+
+      _ ->
+        :ok
+    end
+
+    push(socket, "laser_fired", payload)
     {:noreply, socket}
   end
 
