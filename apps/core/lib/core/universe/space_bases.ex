@@ -53,7 +53,10 @@ defmodule Core.Universe.SpaceBases do
   @spec seed() :: %{String.t() => map()}
   def seed do
     Map.new(Sol.planets(), fn body ->
-      {stock, production} = Map.fetch!(@profiles, body.id)
+      # New registered planets get a conservative default refinery without
+      # requiring a manual profile before their orbital region can start.
+      {stock, production} = Map.get(@profiles, body.id,
+        {%{"refined_minerals" => 100}, %{"refined_minerals" => 4}})
       {body.id,
        %{
          id: "sol:base:" <> body.id,
