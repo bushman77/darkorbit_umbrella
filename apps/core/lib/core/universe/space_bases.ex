@@ -49,6 +49,19 @@ defmodule Core.Universe.SpaceBases do
                  %{"rock_samples" => 14, "rare_ores" => 6}}
   }
 
+  @doc """
+  Server-planned export manifest for a new scheduled route. Each refinery
+  exports its highest-output commodity, never a client-selected resource.
+  This is a *request*, subsequently debited by dispatch/2.
+  """
+  @spec export_manifest(String.t()) :: %{String.t() => pos_integer()}
+  def export_manifest(body_id) do
+    {_stock, production} = Map.get(@profiles, body_id,
+      {%{"refined_minerals" => 100}, %{"refined_minerals" => 4}})
+    {good, _rate} = Enum.max_by(production, fn {id, rate} -> {rate, id} end)
+    %{good => 32}
+  end
+
   @doc "Generate one independent orbital hub and forward refinery per destination."
   @spec seed() :: %{String.t() => map()}
   def seed do
