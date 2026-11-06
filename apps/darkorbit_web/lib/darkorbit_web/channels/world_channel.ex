@@ -418,7 +418,8 @@ defmodule DarkorbitWeb.WorldChannel do
 
   # This is a server-generated MapServer damage event, never a socket command.
   # Only the attacking pilot's own channel can record the faction consequence.
-  def handle_info({:laser_fired, payload}, socket) do
+  def handle_info({:laser_fired, %{attacker_id: attacker_id} = payload},
+                  %{assigns: %{current_player_id: attacker_id}} = socket) do
     case World.record_tactical_hit(socket.assigns.world_session_id, payload) do
       {:ok, %{applied?: true} = effect} ->
         push(socket, "solar_faction_hit", effect)
@@ -427,6 +428,12 @@ defmodule DarkorbitWeb.WorldChannel do
         :ok
     end
 
+    push(socket, "laser_fired", payload)
+    {:noreply, socket}
+  end
+
+  def handle_info({:laser_fired, payload}, socket) do
+    # Spectators and other pilots see the laser, but do not touch the DB.
     push(socket, "laser_fired", payload)
     {:noreply, socket}
   end
