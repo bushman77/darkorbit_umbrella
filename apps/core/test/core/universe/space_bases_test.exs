@@ -86,13 +86,22 @@ defmodule Core.Universe.SpaceBasesTest do
     # bay in the same clock advancement, without duplicating its cargo.
     {departed, bases} = Traffic.advance_with_bases(arrived, 45_000, bases)
     assert departed[waiting_id].state == :docked
+    # The berth became available at the END of that 45-second period.
+    # Time in the docking queue must not count as time being serviced.
+    assert departed[waiting_id].dwell_remaining_ms == 45_000
     assert departed["traffic:sol:cruise-1"].cargo == %{"refined_minerals" => 32}
     assert SpaceBases.public(bases, "mars").occupied_berths == 1
     assert bases["mars"].stock["industrial_parts"] == 150 + 4 * 32
 
     {redocked, bases} = Traffic.advance_with_bases(departed, 1_000, bases)
     assert redocked[waiting_id].state == :docked
+    assert redocked[waiting_id].dwell_remaining_ms == 44_000
     assert SpaceBases.public(bases, "mars").occupied_berths == 1
+
+    {after_service, bases} = Traffic.advance_with_bases(redocked, 44_000, bases)
+    assert after_service[waiting_id].state == :in_transit
+    assert after_service[waiting_id].voyage_number == 2
+    assert SpaceBases.public(bases, "mars").occupied_berths == 0
   end
 
   test "refinery stocks do not fabricate goods and local production occurs once per minute" do
