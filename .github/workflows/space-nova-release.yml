@@ -159,6 +159,62 @@ jobs:
           if-no-files-found: error
           path: dist/space-nova-server-linux-x64.tar.gz
 
+  server-proxy-smoke:
+    needs: server
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: space_nova_proxy_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: space-nova-server
+          path: dist
+      - name: Verify loopback-only Caddy proxy mode
+        shell: bash
+        env:
+          DATABASE_URL: ecto://postgres:postgres@127.0.0.1/space_nova_proxy_ci
+          PHX_HOST: spacenova.ddns.net
+          SPACE_NOVA_PROXY_MODE: 'true'
+        run: |
+          export SECRET_KEY_BASE="$(openssl rand -hex 48)"
+          mkdir -p "$RUNNER_TEMP/server"
+          tar -xzf dist/space-nova-server-linux-x64.tar.gz -C "$RUNNER_TEMP/server"
+          bin="$RUNNER_TEMP/server/space_mmo/bin/space_mmo"
+          "$bin" eval 'Darkorbit.Release.migrate()'
+          "$bin" start > "$RUNNER_TEMP/proxy-server.log" 2>&1 &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true' EXIT
+          ready=0
+          for _ in $(seq 1 45); do
+            if curl -sSf -H 'Host: spacenova.ddns.net' -H 'X-Forwarded-Proto: https' \
+              --max-time 2 http://127.0.0.1:4000/login -o /dev/null; then
+              ready=1
+              break
+            fi
+            if ! kill -0 "$pid" 2>/dev/null; then break; fi
+            sleep 1
+          done
+          if [[ "$ready" != 1 ]]; then
+            cat "$RUNNER_TEMP/proxy-server.log" >&2
+            exit 1
+          fi
+          curl -sSf -D "$RUNNER_TEMP/headers" \
+            -H 'Host: spacenova.ddns.net' -H 'X-Forwarded-Proto: https' \
+            http://127.0.0.1:4000/login -o /dev/null
+          grep -qi '^strict-transport-security:' "$RUNNER_TEMP/headers"
+          ss -lnt | grep -Eq '127\.0\.0\.1:4000\b'
   windows:
     needs: tests
     if: github.ref == 'refs/heads/sbs'
@@ -281,7 +337,7 @@ jobs:
 
   publish:
     if: github.ref == 'refs/heads/sbs'
-    needs: [tests, server, windows, linux]
+    needs: [tests, server, server-proxy-smoke, windows, linux]
     permissions:
       contents: write
     runs-on: ubuntu-24.04

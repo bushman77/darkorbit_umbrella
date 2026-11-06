@@ -7,6 +7,10 @@ on:
       - "scripts/space-nova-version.py"
       - "scripts/test_space_nova_version.py"
       - "mix.exs"
+      - "config/runtime.exs"
+      - "config/prod.exs"
+      - "clients/tauri/ui/**"
+      - "clients/tauri/tests/**"
       - ".github/workflows/space-nova-release.yml"
       - ".github/workflows/space-nova-release-validation.yml"
   workflow_dispatch:
@@ -25,5 +29,13 @@ jobs:
         run: |
           python3 -m unittest discover -s scripts -p 'test_space_nova_version.py' -v
           python3 scripts/space-nova-version.py check "$(python3 scripts/space-nova-version.py get)"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate launcher origins and markup
+        working-directory: clients/tauri
+        run: |
+          npm ci
+          npm test
       - name: Confirm no whitespace errors
         run: git diff --check

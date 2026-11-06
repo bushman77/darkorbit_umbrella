@@ -1,12 +1,12 @@
-export const DEFAULT_SERVER_URL = "https://spacenova.ddns.net:4000"
+export const DEFAULT_SERVER_URL = "https://spacenova.ddns.net"
 export const LOCAL_SERVER_URL = "http://127.0.0.1:4000"
 
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"])
 const LAUNCH_ROUTES = new Set(["/", "/play", "/register"])
 
-// Older launcher builds persisted origins without the explicit game port.
+// Migrate the old direct-4000 origin to Caddy's public HTTPS:443 origin.
 export function initialServerOrigin(saved) {
-  if (saved === "https://spacenova.ddns.net") return DEFAULT_SERVER_URL
+  if (saved === "https://spacenova.ddns.net:4000" || saved === DEFAULT_SERVER_URL) return DEFAULT_SERVER_URL
   if (saved === "http://127.0.0.1") return LOCAL_SERVER_URL
   if (saved === "http://localhost") return "http://localhost:4000"
   return saved || DEFAULT_SERVER_URL
@@ -35,11 +35,15 @@ export function serverOrigin(raw) {
   if (url.pathname !== "/" || url.search || url.hash) {
     throw new Error("Enter only the server address, without a path, query or fragment.")
   }
-  if (url.port !== "4000") {
-    throw new Error("Space Nova servers use port 4000. Include :4000 in the address.")
-  }
-  if (url.protocol === "http:" && !LOOPBACK_HOSTS.has(url.hostname)) {
-    throw new Error("Remote multiplayer servers must use HTTPS.")
+  if (url.protocol === "http:") {
+    if (!LOOPBACK_HOSTS.has(url.hostname)) {
+      throw new Error("Remote multiplayer servers must use HTTPS.")
+    }
+    if (url.port !== "4000") {
+      throw new Error("Local HTTP development requires port 4000.")
+    }
+  } else if (url.port !== "" && url.port !== "4000") {
+    throw new Error("Remote HTTPS must use standard port 443 or direct TLS port 4000.")
   }
   return url.origin
 }

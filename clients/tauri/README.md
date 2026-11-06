@@ -4,14 +4,14 @@ This is the first, server-hosted Space Nova desktop client for Pop!_OS and
 other supported Linux desktops. The launcher UI is bundled in the app, but
 the game remains served over HTTPS from the authoritative Phoenix server.
 
-By default, the launcher connects to `https://spacenova.ddns.net:4000`.
+By default, the launcher connects to `https://spacenova.ddns.net`.
 It offers **Launch game** (`/play`), **Create pilot account** (`/register`),
 and **Visit homepage** (`/`). A previous server origin saved inside the
 client's local storage takes precedence; edit the server field to switch
 between local and remote environments.
 
 There is also a **Use local server** shortcut for `http://127.0.0.1:4000`.
-The launcher requires port 4000, validates that remote servers use HTTPS, and refuses
+The launcher permits public HTTPS port 443, optional direct HTTPS port 4000, and localhost HTTP port 4000. It refuses
 credentials, paths, query strings and fragments in the server-origin field.
 It navigates the *top-level webview*, so Phoenix handles the session cookie,
 CSRF token, LiveView and `/socket` game channel normally. Remote HTML and
@@ -54,13 +54,13 @@ verification email is displayed in the development mailbox at
 `http://127.0.0.1:4000/dev/mailbox`. Follow its link and sign in. The
 browser-login session is separate from a normal Firefox profile.
 
-You can also enter `https://spacenova.ddns.net:4000` to access the deployed site.
+You can also enter `https://spacenova.ddns.net` to access the deployed site.
 Registration there is disabled until production email delivery is configured.
 
 For local TLS, set up mkcert as documented in the umbrella project and run
 Phoenix with `DARKORBIT_DEV_HTTPS=1`, then enter `https://localhost:4000`.
 HTTPS replaces HTTP on port 4000; restart Phoenix when switching protocols.
-The default development listener is HTTP-only.
+The default development listener is HTTP-only. The current EC2 deployment uses Caddy on public HTTPS 443 and forwards to localhost Phoenix on port 4000.
 
 ## Easy desktop build and release manager
 

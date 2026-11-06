@@ -902,3 +902,11 @@ See `docs/space-nova-release.md` for the distribution procedure.
 
 - [x] Build local server diagnostics from temporary committed source rather than accidentally bundling workstation TLS keys.
 - [ ] Run `./scripts/space-nova server` on Pop!_OS and verify a complete archive; isolated build may require additional disk space.
+
+### Production Caddy compatibility (2026-11-06)
+
+- [x] Align production runtime with observed working EC2 Caddy TLS on 443 and loopback-only Phoenix HTTP on 4000; preserve optional direct TLS.
+- [x] Align Tauri default launcher URL with public HTTPS 443, migrate saved old production origin and revise tests/docs.
+- [ ] Rebuild and stage server release from updated source; configure `SPACE_NOVA_PROXY_MODE=true` only in private EC2 systemd environment.
+- [ ] Run production migration and controlled cutover after verifying database backup, then confirm public HTTPS and websocket operation.
+- [ ] Publish/install new signed client version so existing Tauri installations adopt port 443 by default.

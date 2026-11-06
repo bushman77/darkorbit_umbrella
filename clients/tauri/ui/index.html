@@ -38,8 +38,8 @@
           <p class="console-subtitle">Select the authoritative Space Nova server to begin your flight.</p>
           <form id="connect-form" novalidate>
             <label for="server-url">Game server address</label>
-            <input id="server-url" type="url" inputmode="url" autocomplete="url" spellcheck="false" placeholder="https://spacenova.ddns.net:4000" required>
-            <p class="hint">Secure public server: <code>https://spacenova.ddns.net:4000</code>. For local Phoenix development, use <code>http://127.0.0.1:4000</code>.</p>
+            <input id="server-url" type="url" inputmode="url" autocomplete="url" spellcheck="false" placeholder="https://spacenova.ddns.net" required>
+            <p class="hint">Secure public server: <code>https://spacenova.ddns.net</code>. For local Phoenix development, use <code>http://127.0.0.1:4000</code>.</p>
             <div class="actions">
               <button type="submit" class="primary">Launch game <span aria-hidden="true">→</span></button>
               <button type="button" id="register-pilot" class="secondary">Create pilot account</button>
@@ -56,7 +56,7 @@
 
       <div class="launcher-commandbar">
         <span>SPACE NOVA // PILOT ACCESS</span>
-        <span>TCP 4000 · AUTHORITATIVE SERVER</span>
+        <span>HTTPS 443 · AUTHORITATIVE SERVER</span>
       </div>
     </div>
   </body>

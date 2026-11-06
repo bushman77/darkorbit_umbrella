@@ -19,6 +19,6 @@ test("all connection controls are preserved for the launcher controller", () => 
     assert.equal((html.match(new RegExp('id="' + id + '"', "g")) ?? []).length, 1, id)
   }
   assert.match(html, /type="submit"/)
-  assert.match(html, /https:\/\/spacenova\.ddns\.net:4000/)
+  assert.match(html, /https:\/\/spacenova\.ddns\.net/)
   assert.match(html, /http:\/\/127\.0\.0\.1:4000/)
 })

@@ -804,3 +804,10 @@
 - Replaced the blanket refusal to build when workstation development TLS keys exist with an isolated `git archive HEAD` production build.
 - The archive uses only committed source, excludes ignored/untracked local credentials, validates Phoenix digested assets and the OTP bundle, and leaves workstation TLS files untouched.
 - Automated workflow syntax validation is provided; local production packaging still requires manual execution on Pop!_OS and has not been independently verified here.
+
+### Restore existing EC2 Caddy proxy topology (2026-11-06)
+
+- Reconciled the release's production runtime with the verified existing EC2 architecture: Caddy public TLS on 443 → loopback Phoenix HTTP on 4000; explicit `SPACE_NOVA_PROXY_MODE=true` opt-in retains optional direct Phoenix TLS.
+- Updated SSL forwarded-protocol handling for trusted Caddy connections and preserved HSTS; no direct internet listener is opened by the proxied Phoenix endpoint.
+- Fixed the Tauri launcher default to `https://spacenova.ddns.net`, migrated saved `:4000` production origin, retained local port-4000 development and optional direct-TLS mode, and expanded launcher regression coverage.
+- Replaced obsolete port-4000-only deployment guidance. No EC2 runtime or Caddy service was changed by the repository commit; production needs a newly built server archive.

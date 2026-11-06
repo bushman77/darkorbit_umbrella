@@ -6,10 +6,10 @@ import {
 } from "../ui/server_url.mjs"
 
 test("default launches the live Space Nova server", () => {
-  assert.equal(DEFAULT_SERVER_URL, "https://spacenova.ddns.net:4000")
-  assert.equal(gameUrl(DEFAULT_SERVER_URL), "https://spacenova.ddns.net:4000/play")
-  assert.equal(registrationUrl(DEFAULT_SERVER_URL), "https://spacenova.ddns.net:4000/register")
-  assert.equal(homeUrl(DEFAULT_SERVER_URL), "https://spacenova.ddns.net:4000/")
+  assert.equal(DEFAULT_SERVER_URL, "https://spacenova.ddns.net")
+  assert.equal(gameUrl(DEFAULT_SERVER_URL), "https://spacenova.ddns.net/play")
+  assert.equal(registrationUrl(DEFAULT_SERVER_URL), "https://spacenova.ddns.net/register")
+  assert.equal(homeUrl(DEFAULT_SERVER_URL), "https://spacenova.ddns.net/")
 })
 
 test("the local development server supports registration and gameplay", () => {
@@ -42,16 +42,19 @@ test("rejects schemes, embedded credentials and arbitrary routes", () => {
 test("migrates launcher origins saved by older builds", () => {
   assert.equal(initialServerOrigin(null), DEFAULT_SERVER_URL)
   assert.equal(initialServerOrigin("https://spacenova.ddns.net"), DEFAULT_SERVER_URL)
+  assert.equal(initialServerOrigin("https://spacenova.ddns.net:4000"), DEFAULT_SERVER_URL)
   assert.equal(initialServerOrigin("http://127.0.0.1"), LOCAL_SERVER_URL)
   assert.equal(initialServerOrigin("http://localhost"), "http://localhost:4000")
   assert.equal(initialServerOrigin("https://example.org:4000"), "https://example.org:4000")
 })
 
-test("requires explicit port 4000", () => {
-  for (const origin of [
-    "http://127.0.0.1", "http://localhost:80", "https://spacenova.ddns.net",
-    "https://spacenova.ddns.net:443", "https://game.example.org:4500"
-  ]) assert.throws(() => gameUrl(origin), /port 4000/, origin)
+test("permits Caddy HTTPS on 443 and direct TLS on 4000", () => {
+  assert.equal(gameUrl("https://spacenova.ddns.net"), "https://spacenova.ddns.net/play")
+  assert.equal(gameUrl("https://spacenova.ddns.net:443"), "https://spacenova.ddns.net/play")
+  assert.equal(gameUrl("https://spacenova.ddns.net:4000"), "https://spacenova.ddns.net:4000/play")
+  assert.throws(() => gameUrl("https://game.example.org:4500"), /443 or direct TLS/)
+  assert.throws(() => gameUrl("http://127.0.0.1"), /port 4000/)
+  assert.throws(() => gameUrl("http://localhost:80"), /port 4000/)
 })
 
 test("canonicalizes whitespace and hostname", () => {

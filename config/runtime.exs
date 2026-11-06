@@ -7,8 +7,8 @@ import Config
 # any compile-time configuration in here, as it won't be applied.
 # The block below contains prod specific runtime configuration.
 
-# All game listeners use TCP port 4000. Development serves HTTP or HTTPS;
-# production serves HTTPS directly without requiring a reverse proxy.
+# Local Phoenix listens on TCP 4000. Production supports HTTPS via Caddy
+# on 443, or optional direct Phoenix TLS on 4000.
 
 if config_env() == :prod do
   database_url =
@@ -40,34 +40,46 @@ if config_env() == :prod do
       You can generate one by calling: mix phx.gen.secret
       """
 
-  # Direct TLS on port 4000. PEM paths point to separately managed credentials.
-  tls_certfile =
-    System.get_env("SPACE_NOVA_TLS_CERTFILE") ||
-      raise "SPACE_NOVA_TLS_CERTFILE must point to the production TLS certificate PEM"
-
-  tls_keyfile =
-    System.get_env("SPACE_NOVA_TLS_KEYFILE") ||
-      raise "SPACE_NOVA_TLS_KEYFILE must point to the production TLS private key PEM"
+  # Explicitly opt into Caddy TLS termination on EC2. In proxy mode,
+  # Phoenix listens on loopback only and generates public HTTPS:443 URLs.
+  # Other deployments can continue terminating TLS directly on port 4000.
+  behind_proxy? = System.get_env("SPACE_NOVA_PROXY_MODE") in ~w(1 true)
 
   config :darkorbit_web, DarkorbitWeb.Endpoint,
     url: [
       host: System.get_env("PHX_HOST", "spacenova.ddns.net"),
       scheme: "https",
-      port: 4000
-    ],
-    http: false,
-    https: [
-      ip: {0, 0, 0, 0},
-      port: 4000,
-      cipher_suite: :strong,
-      certfile: tls_certfile,
-      keyfile: tls_keyfile
+      port: if(behind_proxy?, do: 443, else: 4000)
     ],
     server: true,
     secret_key_base: secret_key_base
 
-  # HTTPS is configured above for production. Certificate issuance and renewal
-  # are managed outside the release; see docs/space-nova-port-4000.md.
+  if behind_proxy? do
+    # Never expose this plaintext listener outside the EC2 loopback interface.
+    config :darkorbit_web, DarkorbitWeb.Endpoint,
+      http: [ip: {127, 0, 0, 1}, port: 4000],
+      https: false
+  else
+    tls_certfile =
+      System.get_env("SPACE_NOVA_TLS_CERTFILE") ||
+        raise "SPACE_NOVA_TLS_CERTFILE must point to the production TLS certificate PEM"
+
+    tls_keyfile =
+      System.get_env("SPACE_NOVA_TLS_KEYFILE") ||
+        raise "SPACE_NOVA_TLS_KEYFILE must point to the production TLS private key PEM"
+
+    config :darkorbit_web, DarkorbitWeb.Endpoint,
+      http: false,
+      https: [
+        ip: {0, 0, 0, 0},
+        port: 4000,
+        cipher_suite: :strong,
+        certfile: tls_certfile,
+        keyfile: tls_keyfile
+      ]
+  end
+
+  # In proxy mode Caddy handles trusted TLS certificates/renewal.
 
   # ## Configuring the mailer
   #

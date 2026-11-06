@@ -133,3 +133,34 @@ still prompt Windows SmartScreen.
 - Re-running a release for an existing tag is intentionally rejected.
 - If the final publish step fails after creating a draft, inspect and
   manually resolve that draft; do not overwrite a tag or force-push it.
+
+## EC2 existing Caddy deployment — 2026-11-06 correction
+
+Production TLS is already terminating in Caddy on standard 443 for
+`https://spacenova.ddns.net`. Caddy proxies to Phoenix HTTP on
+`127.0.0.1:4000`. The old documentation incorrectly expected Phoenix
+to manage its own certificate on EC2.
+
+Before replacing the running server:
+
+1. Rebuild the **server** archive after pulling the Caddy proxy mode commit:
+   `./scripts/space-nova server`. An archive built before this correction
+   does not support `SPACE_NOVA_PROXY_MODE=true`.
+2. Upload and stage the rebuilt archive. Keep the existing running
+   service intact until the database backup and new runtime configuration
+   have been verified.
+3. Add `SPACE_NOVA_PROXY_MODE=true` to the existing private
+   `/home/ubuntu/.config/space_mmo.env`. Keep its existing database
+   and session secrets untouched.
+4. Preserve the previous release directory; perform a controlled service
+   stop, binary swap, database migration and systemd restart. Verify
+   localhost HTTP on 4000 and public Caddy HTTPS on 443.
+5. Deploy the new Tauri client in a separately versioned future release.
+   The new launcher defaults to port 443 and migrates saved
+   `https://spacenova.ddns.net:4000` URLs. Old signed clients do not
+   receive this change until rebuilt/upgraded.
+
+Both configurations remain supported: Caddy proxy mode must be
+explicitly enabled; direct Phoenix TLS still requires its own PEM files.
+
+See `docs/space-nova-port-4000.md` for listener/security details.

@@ -360,3 +360,7 @@ Validation status: helper commands were reviewed; full CI signing, release publi
 ### Local server diagnostic isolation (2026-11-06)
 
 The `scripts/space-nova server` diagnostic builds `git archive HEAD` in a temporary isolated workspace. It fetches production dependencies and digests assets there, avoiding the live checkout and ignored local development TLS keys. Official server artifacts remain CI-built on Ubuntu 24.04, with production secrets injected only at deployment.
+
+### Production network topology reconciliation (2026-11-06)
+
+EC2's current public endpoint is Caddy TLS on 443 forwarding to the private Phoenix HTTP socket at 127.0.0.1:4000. `SPACE_NOVA_PROXY_MODE=true` selects this mode at runtime while preserving direct TLS on port 4000 as an explicitly configured alternative. Phoenix's production SSL plug rewrites Caddy's trusted forwarded scheme to prevent proxy redirect loops and retain HSTS. The launcher defaults to the correct public origin without `:4000`, while preserving local development on loopback port 4000. See `docs/space-nova-port-4000.md`.

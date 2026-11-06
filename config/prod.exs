@@ -6,14 +6,16 @@ import Config
 # which you should run after static files are built and
 # before starting your production server.
 config :darkorbit_web, DarkorbitWeb.Endpoint,
-  url: [host: "spacenova.ddns.net", scheme: "https", port: 4000],
+  url: [host: "spacenova.ddns.net", scheme: "https", port: 443],
   cache_static_manifest: "priv/static/cache_manifest.json"
 
-# TLS terminates in Bandit rather than a proxy. Do not trust X-Forwarded-Proto
-# headers from unauthenticated clients. HSTS applies to production HTTPS.
-# Note `:force_ssl` is a compile-time endpoint setting.
+# Caddy sets X-Forwarded-Proto and discards untrusted client values.
+# Rewriting it prevents redirect loops in the Caddy deployment.
+# Both modes enforce TLS at the public listener: proxy mode binds HTTP to
+# 127.0.0.1 only, while direct mode binds HTTPS only.
+# force_ssl is compile-time config, shared across both modes.
 config :darkorbit_web, DarkorbitWeb.Endpoint,
-  force_ssl: [hsts: true]
+  force_ssl: [hsts: true, rewrite_on: [:x_forwarded_proto]]
 
 # Configure Swoosh API Client
 config :swoosh, :api_client, Swoosh.ApiClient.Req
