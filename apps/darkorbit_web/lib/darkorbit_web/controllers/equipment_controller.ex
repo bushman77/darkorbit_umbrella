@@ -8,6 +8,7 @@ defmodule DarkorbitWeb.EquipmentController do
   alias Darkorbit.Cargo.Catalog, as: CargoCatalog
   alias Darkorbit.Fleet
   alias Darkorbit.Inventory
+  alias Darkorbit.Piracy
   alias Darkorbit.Loadouts
   alias Darkorbit.ShipStats
 
@@ -28,6 +29,14 @@ defmodule DarkorbitWeb.EquipmentController do
             count: Inventory.equipment_count(account.id, item.id)}
         end)
 
+      standings =
+        Piracy.reputations(account.id)
+        |> Enum.sort_by(fn {id, _} -> id end)
+        |> Enum.map(fn {id, value} ->
+          {:ok, band} = Core.Factions.band(value)
+          %{id: id, name: Core.Factions.name(id) || id, standing: value, band: band}
+        end)
+
       render(conn, :show,
         page_title: "Ship equipment · " <> ship.name,
         ship: ship,
@@ -41,6 +50,8 @@ defmodule DarkorbitWeb.EquipmentController do
         cargo_tonnage: Inventory.cargo_tonnage(account.id),
         cargo_manifest: Inventory.cargo_manifest(account.id),
         cargo_catalog: CargoCatalog.all(),
+        faction_standings: standings,
+        recent_cargo_claims: Piracy.recent_claims(account.id),
         lasers: Enum.filter(items, &(&1.category == :laser)),
         generators: Enum.filter(items, &(&1.category in [:generator, :shield])),
         laser_slots: loadout.lasers["ship"] |> Enum.take(ship.laser_slots) |> Enum.with_index(),
