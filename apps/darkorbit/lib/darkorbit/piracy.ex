@@ -46,6 +46,11 @@ defmodule Darkorbit.Piracy do
         event_key = "solar:attack:#{verified.contact_id}:#{verified.voyage_number}:#{user_id}"
         apply_faction_event!(user_id, verified.faction_id, event_key,
           "unlawful_attack", @attack_delta)
+        |> Map.merge(%{
+          contact_id: verified.contact_id,
+          encounter_id: verified.encounter_id,
+          call_sign: Map.get(verified, :call_sign, verified.contact_id)
+        })
       end)
     else
       false -> {:error, :no_civilian_faction_penalty}
