@@ -189,6 +189,16 @@ defmodule Core.World.MapServer do
       {:complete_solar_tactical, session_id, player_id, encounter_id})
   end
 
+  @doc """
+  Recheck a confirmed hit against the map's *actual leased* tactical actor.
+  This remains available even if the hit destroyed its NPC, because the
+  map retains the strategic lease until settlement.
+  """
+  def tactical_target_identity(registry, map_id, session_id, player_id, target_id) do
+    call_map(registry, map_id,
+      {:tactical_target_identity, session_id, player_id, target_id})
+  end
+
   @doc "Determine a disconnect outcome from map-owned combat state only."
   def tactical_outcome(registry, map_id, session_id, player_id, encounter_id) do
     call_map(registry, map_id,
@@ -449,6 +459,26 @@ defmodule Core.World.MapServer do
       true -> {:reply, {:error, :encounter_active}, state}
       error -> {:reply, error, state}
     end
+  end
+
+  def handle_call(
+        {:tactical_target_identity, session_id, player_id, target_id},
+        _from, state
+      ) do
+    result =
+      with {:ok, _ship} <- find_session_entity(state, session_id, player_id),
+           {:ok, held} <- Map.fetch(state.solar_tactical, player_id),
+           true <- held.npc_id == target_id,
+           true <- is_nil(held.prepared) do
+        {:ok, %{contact_id: held.contact_id,
+          voyage_number: held.voyage_number, encounter_id: held.encounter_id}}
+      else
+        :error -> {:error, :no_tactical_encounter}
+        false -> {:error, :target_outside_encounter}
+        error -> error
+      end
+
+    {:reply, result, state}
   end
 
   def handle_call(
