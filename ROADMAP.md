@@ -68,6 +68,26 @@ Inspired by:
 
 ## ✅ Completed Milestones
 
+### Repository-generated artifact hygiene
+
+- [x] Remove the five accidental empty Phoenix asset-root files and the empty
+  root npm lockfile without changing either real npm package lockfile.
+- [x] Reproduce and checksum all 31 tracked Phoenix digest/compression outputs
+  with `mix assets.deploy`, then remove only those generated copies while
+  preserving every undigested original artwork/static input.
+- [x] Ignore compiled Phoenix bundles, the digest manifest, gzip copies,
+  32-hex fingerprint copies, and the identified command-token files.
+- [x] Preserve `mix.lock`, both package-scoped npm lockfiles, the Tauri
+  `Cargo.lock`, source assets, configuration, and user data.
+- [x] Pass strict compilation, all 358 ExUnit tests, all 253 browser JavaScript
+  tests, all 12 Tauri JavaScript tests, the Phoenix asset build, and a local
+  unsigned Tauri Linux release build.
+- [ ] Resolve pre-existing repository-wide Elixir 1.20 RC formatter drift so
+  the complete `mix precommit` alias can pass without an unrelated bulk-format
+  change.
+- [ ] Decide separately whether Tauri release workflows should enforce
+  lockfile-only installs with `npm ci` instead of `npm install`.
+
 ### Milestone A — Persistent player domains
 
 - Account registration and authentication

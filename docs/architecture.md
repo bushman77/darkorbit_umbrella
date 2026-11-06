@@ -251,6 +251,36 @@ the endpoint.
    backing dimensions after a floating-width change, so navigation projection
    continues to use the rendered CSS dimensions.
 
+## Build and release artifact boundaries
+
+1. `apps/darkorbit_web/assets/` is the Phoenix browser source package. Its
+   `package.json` and `package-lock.json`, CSS, JavaScript, tests, and vendored
+   source modules are tracked; `node_modules/` and accidental root-level
+   command-token files are ignored.
+2. Undigested files in `apps/darkorbit_web/priv/static/` are deployable source
+   inputs. Original game SVG artwork, the favicon, and `robots.txt` stay under
+   source control. `mix assets.build` writes compiled CSS/JavaScript under the
+   ignored `priv/static/assets/` directory.
+3. `mix assets.deploy` runs the minified Tailwind and esbuild pipelines and
+   then `phx.digest`. The resulting cache manifest, gzip copies, and 32-hex
+   fingerprinted copies are reproducible release output and are ignored rather
+   than tracked. Release construction must run the deploy task before booting
+   the production endpoint that consumes `cache_manifest.json`.
+4. The umbrella root is not an npm package and therefore owns no npm lockfile.
+   Dependency locks remain scoped to their consumers: `mix.lock` for the
+   umbrella, the Phoenix asset `package-lock.json`, the Tauri
+   `package-lock.json`, and Tauri's `src-tauri/Cargo.lock`.
+5. `clients/tauri/` tracks launcher UI/Rust source and its package locks.
+   Node dependencies, generated bindings, Rust targets, and local package
+   output remain under ignored `node_modules/`, `src-tauri/gen/`,
+   `src-tauri/target/`, and `dist/` boundaries. The Linux, Windows, and signed
+   release workflows package from those generated locations and upload them as
+   workflow/release artifacts, not repository source.
+6. Signed desktop publishing remains an explicitly dispatched `sbs`-branch
+   operation guarded by signing secrets and version matching. Local validation
+   may build unsigned installers, but it cannot substitute for the uninvoked
+   signed multi-platform release workflow.
+
 ## Test baseline
 
 The test suite covers complete registration provisioning, rejection of

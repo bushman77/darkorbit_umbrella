@@ -2,6 +2,51 @@
 
 ## Unreleased
 
+### Repository-generated artifact cleanup (2026-11-06)
+
+#### Removed
+
+- Removed five accidental zero-byte command-token files from the Phoenix asset
+  project: `FETCH_HEAD`, `core`, `darkorbit`, `node`, and `test`.
+- Removed the empty root `package-lock.json`; the umbrella root has no
+  `package.json`, while the Phoenix asset and Tauri npm lockfiles remain at
+  their actual package roots.
+- Removed 31 tracked `phx.digest` outputs: 11 fingerprinted copies and 20 gzip
+  copies. The 11 undigested static inputs, including every original game SVG,
+  remain tracked.
+- Added precise ignore rules for the removed root/asset-token files and for
+  Phoenix gzip and 32-hex fingerprint output. Existing compiled asset-directory
+  and cache-manifest rules remain in force.
+
+#### Verification
+
+- Before removal, `mix assets.deploy` regenerated all 31 tracked digest files
+  byte-for-byte; SHA-256 checks passed for every file.
+- `MIX_ENV=test mix compile --warnings-as-errors` and `mix assets.build` pass.
+- `mix test` passes 358 tests: 238 Core, 48 persistence, and 72 web tests. It
+  reports only the existing signed-zero pattern warnings in `sol_test.exs` and
+  `world_channel_test.exs`.
+- The Phoenix browser suite passes 253 JavaScript tests; the Tauri launcher
+  suite passes 12 JavaScript tests. The browser suite retains its existing
+  Node module-type warning.
+- The local unsigned Tauri Linux release build passes and produces the Debian
+  and AppImage bundles only under the ignored `src-tauri/target/` tree.
+- `git diff --check` passes. No automated tests were added because this change
+  alters repository hygiene only.
+- `mix precommit` passes strict compilation and the unused-dependency check,
+  then stops at `mix format --check-formatted` on existing repository-wide
+  Elixir 1.20 RC formatter drift. No formatter output was applied, and its
+  embedded test step was not reached; the full suite was run separately.
+
+#### Manual verification and limitations
+
+- No browser, headset, installer-launch, or signed-release manual verification
+  was performed. The signed release workflow requires publishing secrets and
+  explicit operator authorization and was not invoked.
+- The audited Tauri workflows keep Node, generated bindings, Rust targets, and
+  packaged output ignored, but still use `npm install` rather than the stricter
+  lockfile-only `npm ci`; changing release dependency policy remains separate.
+
 ### Scow defensive combat repair (2026-11-06)
 
 #### Fixed
