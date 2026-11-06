@@ -48,13 +48,20 @@ linux_build() (
   trap 'for file in "${files[@]}"; do cp "$backup/$file" "$ROOT/$file"; done; rm -rf "$backup"' EXIT
   python3 "$ROOT/scripts/space-nova-version.py" sync
   (cd "$CLIENT" && npm ci && npm test && npm run build)
-  mapfile -t images < <(find "$CLIENT/src-tauri/target/release/bundle/appimage" -maxdepth 1 -name '*.AppImage' -type f)
-  mapfile -t debs < <(find "$CLIENT/src-tauri/target/release/bundle/deb" -maxdepth 1 -name '*.deb' -type f)
-  [[ ${#images[@]} == 1 && ${#debs[@]} == 1 ]] || die "Expected one AppImage and one Debian package"
+  # Tauri's bundle directories may contain installers from earlier builds.
+  # Select only the currently requested version, not every historical package.
+  local version image deb
+  version="$(version_now)"
+  image="$CLIENT/src-tauri/target/release/bundle/appimage/Space Nova_${version}_amd64.AppImage"
+  deb="$CLIENT/src-tauri/target/release/bundle/deb/Space Nova_${version}_amd64.deb"
+  [[ -s "$image" ]] || die "Missing current AppImage: $image"
+  [[ -s "$deb" ]] || die "Missing current Debian package: $deb"
   mkdir -p "$ROOT/dist/releases"
-  cp "${images[0]}" "$ROOT/dist/releases/space-nova-linux-x64.AppImage"
-  cp "${debs[0]}" "$ROOT/dist/releases/space-nova-linux-x64.deb"
+  cp -- "$image" "$ROOT/dist/releases/space-nova-linux-x64.AppImage"
+  cp -- "$deb" "$ROOT/dist/releases/space-nova-linux-x64.deb"
   echo "Linux diagnostic installers: $ROOT/dist/releases"
+  echo "To replace an already installed same-version package:"
+  echo "  sudo dpkg -i \"$ROOT/dist/releases/space-nova-linux-x64.deb\""
 )
 server_build() (
   require git; require mix; require npm; require tar; on_branch; clean_tree
