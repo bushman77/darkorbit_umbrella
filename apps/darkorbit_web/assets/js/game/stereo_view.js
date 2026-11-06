@@ -10,6 +10,7 @@ import {createScowModel} from "./scow_model.mjs"
 import {npcVisualClass} from "./ship_model_selection.mjs"
 import {surrenderedHudLabel} from "./target_hud_status.mjs"
 import {PlanetaryBody} from "./planetary_body.js"
+import {SpaceBaseVisual} from "./space_base_visual.js"
 import {EncounterShipVisual} from "./encounter_ship.js"
 
 // Rendering only: no Phoenix socket, no movement authority, no combat calculations.
@@ -89,6 +90,7 @@ export class StereoSpaceView {
     // The spherical planet is visually scaled by its angular diameter.
     // It must not inherit the tactical map's 3,000-unit clipping limits.
     this.planetaryBody = new PlanetaryBody(THREE, this.scene)
+    this.spaceBase = new SpaceBaseVisual(THREE, this.scene)
     this.encounterShip = new EncounterShipVisual(THREE, this.scene)
     this.addCockpit()
     this.beamGroup = new THREE.Group()
@@ -426,6 +428,7 @@ export class StereoSpaceView {
     // strategic traffic avatar once its tactical Dart opponent is present.
     const navigation = client.navComputer?.solarNavigation
     this.planetaryBody.update(navigation, this.camera, time, ownShip)
+    this.spaceBase.update(client.orbitalBase, this.camera)
     this.encounterShip.update(navigation?.tactical_encounter ? null : navigation, this.camera)
     this.syncShips(client)
     this.syncBeams(client, time)
