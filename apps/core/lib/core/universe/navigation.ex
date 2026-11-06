@@ -96,7 +96,32 @@ defmodule Core.Universe.Navigation do
           {:ok, map()} | {:error, atom()}
   def finish_tactical(server, player_id, encounter_id, outcome, report)
       when is_integer(player_id) and player_id > 0 do
-    GenServer.call(server, {:finish_tactical, player_id, encounter_id, outcome, report})
+    finish_tactical(server, player_id, encounter_id, outcome, report, %{})
+  end
+
+  @spec finish_tactical(GenServer.server(), pos_integer(), String.t(),
+          atom(), map() | nil, map()) :: {:ok, map()} | {:error, atom()}
+  def finish_tactical(server, player_id, encounter_id, outcome, report, cargo_debit)
+      when is_integer(player_id) and player_id > 0 and is_map(cargo_debit) do
+    GenServer.call(server,
+      {:finish_tactical, player_id, encounter_id, outcome, report, cargo_debit})
+  end
+
+  @doc """
+  Return the authenticated pilot's live strategic tactical contact.
+  Never call from a client-supplied player ID; server callers must bind it
+  to an authenticated SessionManager session. Manifest is authoritative.
+  """
+  def tactical_contact(server, player_id, encounter_id)
+      when is_integer(player_id) and player_id > 0 and is_binary(encounter_id) do
+    GenServer.call(server, {:tactical_contact, player_id, encounter_id})
+  end
+
+  @doc "Refresh the in-memory policy cache after a durable faction event."
+  def set_faction_standing(server, player_id, faction_id, standing)
+      when is_integer(player_id) and player_id > 0 and is_binary(faction_id) and
+           is_integer(standing) and standing >= -100 and standing <= 100 do
+    GenServer.call(server, {:set_faction_standing, player_id, faction_id, standing})
   end
 
   @doc "Hail an in-range contact; identity and position come from the server."
@@ -129,6 +154,7 @@ defmodule Core.Universe.Navigation do
       # Server-owned reputation fixtures until the faction ledger is connected.
       # Never supplied by Phoenix client payloads or exposed in public snapshots.
       pilot_reputations: Keyword.get(opts, :pilot_reputations, %{}),
+      reputation_loader: Keyword.get(opts, :reputation_loader),
       # Isolated Navigation tests opt in; the actual world supervisor enables
       # procedural shared contacts so real departures are encounter-capable.
       procedural_contact_chance: Keyword.get(opts, :procedural_contact_chance, 0.0),
@@ -149,6 +175,46 @@ defmodule Core.Universe.Navigation do
   def handle_call({:snapshot, player_id}, _from, state) do
     {voyage, state} = ensure_player(state, player_id)
     {:reply, {:ok, public(voyage, state, player_id)}, state}
+  end
+
+  def handle_call({:tactical_contact, player_id, encounter_id}, _from, state) do
+    {voyage, state} = ensure_player(state, player_id)
+
+    response =
+      case voyage.tactical_encounter do
+        %{id: ^encounter_id, contact_id: contact_id,
+          voyage_number: voyage_number, classification: classification} ->
+          claim = Map.get(state.tactical_claims, contact_id)
+          vessel = Map.get(state.traffic, contact_id)
+
+          if claim == %{player_id: player_id, encounter_id: encounter_id,
+                        voyage_number: voyage_number} and is_map(vessel) and
+               vessel.voyage_number == voyage_number do
+            {:ok, %{
+              contact_id: contact_id, encounter_id: encounter_id,
+              voyage_number: voyage_number, faction_id: vessel.faction_id,
+              disposition: vessel.disposition, classification: classification,
+              cargo: vessel.cargo, call_sign: vessel.call_sign
+            }}
+          else
+            {:error, :tactical_claim_mismatch}
+          end
+
+        _ ->
+          {:error, :no_tactical_encounter}
+      end
+
+    {:reply, response, state}
+  end
+
+  def handle_call({:set_faction_standing, player_id, faction_id, standing},
+                  _from, state) do
+    {voyage, state} = ensure_player(state, player_id)
+    updated = Map.put(reputations_for(state, player_id), faction_id, standing)
+    state = %{state | pilot_reputations:
+      Map.put(state.pilot_reputations, player_id, updated)}
+    broadcast(state, player_id, voyage)
+    {:reply, :ok, state}
   end
 
 
@@ -333,7 +399,7 @@ defmodule Core.Universe.Navigation do
     end
   end
 
-  def handle_call({:finish_tactical, player_id, encounter_id, outcome, report},
+  def handle_call({:finish_tactical, player_id, encounter_id, outcome, report, cargo_debit},
                   _from, state) do
     {voyage, state} = ensure_player(state, player_id)
 
@@ -382,7 +448,7 @@ defmodule Core.Universe.Navigation do
               Traffic.settle(state.traffic,
                 %{contact_id: tactical.contact_id, encounter_id: encounter_id,
                   voyage_number: tactical.voyage_number},
-                report.combat, outcome)
+                report.combat, outcome, cargo_debit)
             end
 
           case settlement do
@@ -472,6 +538,26 @@ defmodule Core.Universe.Navigation do
   end
 
   defp ensure_player(state, player_id) do
+    state =
+      if Map.has_key?(state.pilot_reputations, player_id) do
+        state
+      else
+        persisted =
+          case state.reputation_loader do
+            fun when is_function(fun, 1) ->
+              case fun.(player_id) do
+                values when is_map(values) -> values
+                _ -> %{}
+              end
+
+            _ ->
+              %{}
+          end
+
+        %{state | pilot_reputations: Map.put(state.pilot_reputations,
+          player_id, persisted)}
+      end
+
     case Map.fetch(state.voyages, player_id) do
       {:ok, voyage} -> {voyage, state}
       :error ->
