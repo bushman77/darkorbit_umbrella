@@ -22,6 +22,14 @@ defmodule Core.Universe.SpaceBasesTest do
     assert SpaceBases.public(bases, "sun") == nil
   end
 
+  test "scheduled exports reflect the producing planet rather than cloning cargo" do
+    assert SpaceBases.export_manifest("earth") == %{"industrial_parts" => 32}
+    assert SpaceBases.export_manifest("mars") == %{"refined_minerals" => 32}
+    assert SpaceBases.export_manifest("jupiter") == %{"hydrogen_cells" => 32}
+    assert SpaceBases.export_manifest("pluto") == %{"rock_samples" => 32}
+    assert SpaceBases.export_manifest("neptune") == %{"research_data" => 32}
+  end
+
   test "merchant unloads into the Mars forward refinery and loads a real return manifest" do
     bases = SpaceBases.seed()
     fleet = Traffic.seed()
@@ -78,6 +86,7 @@ defmodule Core.Universe.SpaceBasesTest do
     # bay in the same clock advancement, without duplicating its cargo.
     {departed, bases} = Traffic.advance_with_bases(arrived, 45_000, bases)
     assert departed[waiting_id].state == :docked
+    assert departed["traffic:sol:cruise-1"].cargo == %{"refined_minerals" => 32}
     assert SpaceBases.public(bases, "mars").occupied_berths == 1
     assert bases["mars"].stock["industrial_parts"] == 150 + 4 * 32
 
