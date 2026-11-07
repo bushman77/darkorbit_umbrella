@@ -2,7 +2,7 @@ name: Validate Space Nova HUD and pilot screens
 
 on:
   push:
-    branches: [sbs]
+    branches: [native_client]
     paths:
       - "apps/darkorbit_web/assets/css/app.css"
       - "apps/darkorbit_web/lib/darkorbit_web/controllers/**/*.heex"

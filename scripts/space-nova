@@ -4,11 +4,11 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 CLIENT="$ROOT/clients/tauri"
 REPO=bushman77/darkorbit_umbrella
-BRANCH=sbs
+BRANCH=native_client
 die() { echo "Error: $*" >&2; exit 1; }
 require() { command -v "$1" >/dev/null 2>&1 || die "Install $1 first."; }
 gh_ready() { require gh; gh auth status >/dev/null 2>&1 || die "Run 'gh auth login' first."; }
-on_branch() { [[ "$(git -C "$ROOT" branch --show-current)" == "$BRANCH" ]] || die "Switch to the sbs branch first."; }
+on_branch() { [[ "$(git -C "$ROOT" branch --show-current)" == "$BRANCH" ]] || die "Switch to the native_client branch first."; }
 clean_tree() { [[ -z "$(git -C "$ROOT" status --porcelain --untracked-files=no)" ]] || die "Commit or stash existing changes first."; }
 version_now() { python3 "$ROOT/scripts/space-nova-version.py" get; }
 usage() {
@@ -119,7 +119,7 @@ prepare_version() {
   local v="${1:-}"
   require git; require python3; on_branch; clean_tree
   python3 "$ROOT/scripts/space-nova-version.py" set "$v"
-  echo "Only umbrella mix.exs changed. Commit and push to sbs before releasing."
+  echo "Only umbrella mix.exs changed. Commit and push to native_client before releasing."
 }
 publish_release() {
   local v="${1:-}" confirmed sha
@@ -128,7 +128,7 @@ publish_release() {
   git -C "$ROOT" fetch --quiet origin "$BRANCH"
   sha="$(git -C "$ROOT" rev-parse HEAD)"
   [[ "$sha" == "$(git -C "$ROOT" rev-parse "origin/$BRANCH")" ]] ||
-    die "Push your version commit to origin/sbs before publishing."
+    die "Push your version commit to origin/native_client before publishing."
   if gh release view "v$v" --repo "$REPO" >/dev/null 2>&1; then die "Release v$v already exists."; fi
   if gh api "repos/$REPO/git/ref/tags/v$v" >/dev/null 2>&1; then die "Tag v$v already exists."; fi
   echo "Publish v$v from commit $sha after server, Linux and Windows builds pass?"
@@ -147,9 +147,9 @@ deploy_ec2() (
   local sha row run_id status conclusion archive_dir key target confirmed stage i
   git -C "$ROOT" fetch --quiet origin "$BRANCH"
   sha="$(git -C "$ROOT" rev-parse "origin/$BRANCH")"
-  [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || die "Cannot determine origin/sbs commit."
+  [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || die "Cannot determine origin/native_client commit."
 
-  # Only deploy a successful Ubuntu artifact built from the exact remote sbs commit.
+  # Only deploy a successful Ubuntu artifact built from the exact remote native_client commit.
   row="$(gh run list --repo "$REPO" --workflow space-nova-server-build.yml \
     --branch "$BRANCH" --limit 50 \
     --json databaseId,headSha,status,conclusion \

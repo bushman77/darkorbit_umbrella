@@ -2,13 +2,13 @@ name: Build Space Nova EC2 server package
 
 on:
   push:
-    branches: [sbs]
+    branches: [native_client]
   workflow_dispatch:
 
 permissions:
   contents: read
 
-# Only the newest sbs revision needs an EC2 package.
+# Only the newest native_client revision needs an EC2 package.
 concurrency:
   group: space-nova-ec2-server-${{ github.ref }}
   cancel-in-progress: true

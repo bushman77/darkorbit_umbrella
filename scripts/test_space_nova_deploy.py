@@ -24,8 +24,8 @@ class DeploymentOptionTest(unittest.TestCase):
             (fakebin / "git").write_text(
                 "#!/bin/sh\n"
                 "case \"$*\" in\n"
-                '  *"branch --show-current"*) echo sbs ;;\n'
-                '  *"rev-parse origin/sbs"*) printf "%040d\\n" 1 ;;\n'
+                '  *"branch --show-current"*) echo native_client ;;\n'
+                '  *"rev-parse origin/native_client"*) printf "%040d\\n" 1 ;;\n'
                 "esac\n"
             )
             (fakebin / "gh").write_text(

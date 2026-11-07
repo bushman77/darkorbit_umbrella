@@ -2,7 +2,7 @@ name: Verify SBS optics do not drift
 
 on:
   push:
-    branches: [sbs]
+    branches: [native_client]
     paths:
       - "apps/darkorbit_web/assets/js/game/stereo_view.js"
       - "apps/darkorbit_web/assets/js/game/stereo_viewport.mjs"

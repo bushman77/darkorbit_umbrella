@@ -2,7 +2,7 @@ name: Build Space Nova Windows installer
 
 on:
   push:
-    branches: [sbs]
+    branches: [native_client]
     paths:
       - "clients/tauri/**"
       - ".github/workflows/space-nova-windows.yml"
@@ -15,7 +15,7 @@ jobs:
   windows-nsis:
     runs-on: windows-latest
     steps:
-      - name: Check out SBS source
+      - name: Check out native_client source
         uses: actions/checkout@v4
 
       - name: Set up Node.js

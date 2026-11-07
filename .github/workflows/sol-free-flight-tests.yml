@@ -2,7 +2,7 @@ name: Verify SOL free-flight mechanics
 
 on:
   push:
-    branches: [sbs]
+    branches: [native_client]
     paths:
       - "apps/core/lib/core/universe/navigation.ex"
       - "apps/core/lib/core/universe/trade_lanes.ex"

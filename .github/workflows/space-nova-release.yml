@@ -9,7 +9,7 @@ on:
         type: string
         required: true
       expected_sha:
-        description: Exact 40-character sbs commit SHA
+        description: Exact 40-character native_client commit SHA
         type: string
         required: true
 
@@ -22,7 +22,7 @@ concurrency:
 
 jobs:
   tests:
-    if: github.ref == 'refs/heads/sbs'
+    if: github.ref == 'refs/heads/native_client'
     runs-on: ubuntu-24.04
     services:
       postgres:
@@ -54,7 +54,7 @@ jobs:
           RELEASE_VERSION: ${{ inputs.version }}
           GH_TOKEN: ${{ github.token }}
         run: |
-          [[ "$GITHUB_REF" == refs/heads/sbs ]]
+          [[ "$GITHUB_REF" == refs/heads/native_client ]]
           [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]
           [[ "$GITHUB_SHA" == "$EXPECTED_SHA" ]]
           python3 -m py_compile scripts/space-nova-version.py
@@ -217,7 +217,7 @@ jobs:
           ss -lnt | grep -Eq '127\.0\.0\.1:4000\b'
   windows:
     needs: tests
-    if: github.ref == 'refs/heads/sbs'
+    if: github.ref == 'refs/heads/native_client'
     runs-on: windows-latest
     env:
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -277,7 +277,7 @@ jobs:
 
   linux:
     needs: tests
-    if: github.ref == 'refs/heads/sbs'
+    if: github.ref == 'refs/heads/native_client'
     runs-on: ubuntu-24.04
     env:
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -336,7 +336,7 @@ jobs:
             dist/space-nova-linux-x64.deb
 
   publish:
-    if: github.ref == 'refs/heads/sbs'
+    if: github.ref == 'refs/heads/native_client'
     needs: [tests, server, server-proxy-smoke, windows, linux]
     permissions:
       contents: write

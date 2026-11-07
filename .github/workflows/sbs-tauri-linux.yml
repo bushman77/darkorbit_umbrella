@@ -2,7 +2,7 @@ name: Build Space Nova Linux client
 
 on:
   push:
-    branches: [sbs]
+    branches: [native_client]
     paths:
       - "clients/tauri/**"
       - ".github/workflows/sbs-tauri-linux.yml"
@@ -15,7 +15,7 @@ jobs:
   linux:
     runs-on: ubuntu-24.04
     steps:
-      - name: Check out SBS source
+      - name: Check out native_client source
         uses: actions/checkout@v4
 
       - name: Install WebKitGTK build prerequisites

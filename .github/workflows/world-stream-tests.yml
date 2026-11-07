@@ -2,7 +2,7 @@ name: World stream JS regression tests
 
 on:
   push:
-    branches: [sbs]
+    branches: [native_client]
     paths:
       - "apps/darkorbit_web/assets/js/game/world_stream_delta*"
       - "apps/darkorbit_web/assets/js/game/client.js"

@@ -1,7 +1,7 @@
 name: Verify Space Nova release manager
 on:
   push:
-    branches: [sbs]
+    branches: [native_client]
     paths:
       - "scripts/space-nova"
       - "scripts/space-nova-version.py"
