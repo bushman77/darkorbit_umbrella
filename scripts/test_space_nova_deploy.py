@@ -51,7 +51,7 @@ class DeploymentOptionTest(unittest.TestCase):
             release = data / "release.tar.gz"
             executable = root / "space_mmo" / "bin" / "space_mmo"
             executable.parent.mkdir(parents=True)
-            executable.write_text("#!/bin/sh\\nexit 0\\n")
+            executable.write_text("#!/bin/sh\nexit 0\n")
             executable.chmod(0o755)
             subprocess.run(["tar", "-czf", str(release), "-C", str(root), "space_mmo"],
                            check=True)
@@ -63,6 +63,7 @@ class DeploymentOptionTest(unittest.TestCase):
             env = os.environ.copy()
             env["PATH"] = str(fakebin) + os.pathsep + env["PATH"]
             env["MOCK_DATA"] = str(data)
+            env["SPACE_NOVA_DEPLOY_SSH_KEY"] = str(fakebin / "git")
             result = subprocess.run(["bash", str(SCRIPT), "deploy"],
                                     input="NO\n", text=True, capture_output=True,
                                     env=env)
