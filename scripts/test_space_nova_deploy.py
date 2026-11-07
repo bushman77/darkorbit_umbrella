@@ -68,7 +68,7 @@ class DeploymentOptionTest(unittest.TestCase):
     def test_corrupted_artifact_never_reaches_ssh(self):
         result = self.run_mock_deploy(corrupt=True)
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("checksum mismatch", result.stderr)
+        self.assertIn("checksum mismatch", result.stderr, f"exit={result.returncode} stdout={result.stdout!r} stderr={result.stderr!r}")
 
 
 if __name__ == "__main__":
