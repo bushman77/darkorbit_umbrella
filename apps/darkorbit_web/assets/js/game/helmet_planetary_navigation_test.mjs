@@ -1,0 +1,42 @@
+import test from "node:test"
+import assert from "node:assert/strict"
+import {helmetPlanetaryNavigation} from "./helmet_planetary_navigation.mjs"
+
+function planet(id, stage = "orbital_preview") {
+  const radius = 6371
+  const angle = 65 * Math.PI / 360
+  return {
+    body_id: id,
+    radius_km: radius,
+    visual_distance_km: radius / Math.sin(angle),
+    angular_diameter_deg: 65,
+    visual_only: true,
+    stage,
+    planet_center: {x: 100000, y: 200000, z: 0},
+  }
+}
+
+test("HMD uses the verified planet from the pilot's navigation feed", () => {
+  const visual = planet("mars")
+  const navigation = helmetPlanetaryNavigation({planetary_view: visual, tactical_active: false})
+  assert.deepEqual(navigation, {planetary_view: visual, tactical_active: false})
+  assert.equal(navigation.planetary_view.body_id, "mars")
+})
+
+test("HMD clears planets on deep-space transitions and rejects malformed data", () => {
+  assert.deepEqual(helmetPlanetaryNavigation({planetary_view: null, tactical_active: false}),
+    {planetary_view: null, tactical_active: false})
+  assert.deepEqual(helmetPlanetaryNavigation({planetary_view: {...planet("venus"),
+    visual_distance_km: 1}}), {planetary_view: null, tactical_active: false})
+  assert.deepEqual(helmetPlanetaryNavigation({planetary_view: {
+    ...planet("venus"), visual_only: false}}), {planetary_view: null, tactical_active: false})
+  assert.deepEqual(helmetPlanetaryNavigation(null), {planetary_view: null, tactical_active: false})
+})
+
+
+test("HMD retains only a boolean tactical hint, never encounter details", () => {
+  const navigation = helmetPlanetaryNavigation({tactical_active: true,
+    encounter: {secret: "not forwarded"}, cargo: ["test"]})
+  assert.deepEqual(navigation, {planetary_view: null, tactical_active: true})
+  assert.equal(helmetPlanetaryNavigation({tactical_active: "true"}).tactical_active, false)
+})

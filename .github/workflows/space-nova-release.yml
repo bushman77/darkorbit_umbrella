@@ -1,0 +1,437 @@
+name: Publish signed Space Nova server and desktop release
+run-name: Space Nova v${{ inputs.version }} (${{ inputs.expected_sha }})
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version from umbrella mix.exs, e.g. 0.3.1"
+        type: string
+        required: true
+      expected_sha:
+        description: Exact 40-character sbs commit SHA
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: space-nova-signed-release
+  cancel-in-progress: false
+
+jobs:
+  tests:
+    if: github.ref == 'refs/heads/sbs'
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: darkorbit_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: '27.3'
+          elixir-version: '1.18.4'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate branch, commit, version and unused tag
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          RELEASE_VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [[ "$GITHUB_REF" == refs/heads/sbs ]]
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$GITHUB_SHA" == "$EXPECTED_SHA" ]]
+          python3 -m py_compile scripts/space-nova-version.py
+          python3 scripts/space-nova-version.py check "$RELEASE_VERSION"
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v$RELEASE_VERSION" >/dev/null 2>&1; then
+            echo "Tag already exists" >&2; exit 1
+          fi
+      - name: Full Elixir suite
+        env:
+          MIX_ENV: test
+        run: |
+          mix deps.get
+          mix compile --warnings-as-errors
+          mix test
+      - name: All browser JavaScript tests
+        working-directory: apps/darkorbit_web/assets
+        run: |
+          npm ci
+          npm test
+      - name: Tauri launcher tests
+        working-directory: clients/tauri
+        run: |
+          npm ci
+          npm test
+
+  server:
+    needs: tests
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: space_nova_release_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: '27.3'
+          elixir-version: '1.18.4'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Build production assets and standalone OTP release
+        env:
+          MIX_ENV: prod
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          python3 scripts/space-nova-version.py check "$RELEASE_VERSION"
+          test "$(uname -m)" = x86_64
+          npm ci --prefix apps/darkorbit_web/assets
+          mix deps.get --only prod
+          mix compile --warnings-as-errors
+          mix assets.deploy
+          test -s apps/darkorbit_web/priv/static/cache_manifest.json
+          mix release space_mmo --overwrite
+          test -x _build/prod/rel/space_mmo/bin/space_mmo
+      - name: Exercise release migration and HTTPS startup
+        env:
+          DATABASE_URL: ecto://postgres:postgres@127.0.0.1/space_nova_release_ci
+          PHX_HOST: localhost
+          SPACE_NOVA_TLS_CERTFILE: ${{ runner.temp }}/space-nova-cert.pem
+          SPACE_NOVA_TLS_KEYFILE: ${{ runner.temp }}/space-nova-key.pem
+        shell: bash
+        run: |
+          export SECRET_KEY_BASE="$(openssl rand -hex 48)"
+          openssl req -x509 -nodes -newkey rsa:2048 -days 1 \
+            -keyout "$SPACE_NOVA_TLS_KEYFILE" -out "$SPACE_NOVA_TLS_CERTFILE" \
+            -subj '/CN=localhost' >/dev/null 2>&1
+          bin=_build/prod/rel/space_mmo/bin/space_mmo
+          "$bin" eval 'Darkorbit.Release.migrate()'
+          "$bin" start > "$RUNNER_TEMP/space-nova-server.log" 2>&1 &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true' EXIT
+          ready=0
+          for _ in $(seq 1 45); do
+            if curl -ksSf --max-time 2 https://127.0.0.1:4000/ -o /dev/null; then ready=1; break; fi
+            if ! kill -0 "$pid" 2>/dev/null; then break; fi
+            sleep 1
+          done
+          if [[ "$ready" != 1 ]]; then
+            cat "$RUNNER_TEMP/space-nova-server.log" >&2
+            exit 1
+          fi
+      - name: Archive and verify server
+        run: |
+          mkdir -p dist
+          tar -C _build/prod/rel -czf dist/space-nova-server-linux-x64.tar.gz space_mmo
+          tar -tzf dist/space-nova-server-linux-x64.tar.gz | grep -F 'space_mmo/bin/space_mmo' >/dev/null
+          tar -tzf dist/space-nova-server-linux-x64.tar.gz | grep -F 'cache_manifest.json' >/dev/null
+      - uses: actions/upload-artifact@v4
+        with:
+          name: space-nova-server
+          if-no-files-found: error
+          path: dist/space-nova-server-linux-x64.tar.gz
+
+  server-proxy-smoke:
+    needs: server
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: space_nova_proxy_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: space-nova-server
+          path: dist
+      - name: Verify loopback-only Caddy proxy mode
+        shell: bash
+        env:
+          DATABASE_URL: ecto://postgres:postgres@127.0.0.1/space_nova_proxy_ci
+          PHX_HOST: spacenova.ddns.net
+          SPACE_NOVA_PROXY_MODE: 'true'
+        run: |
+          export SECRET_KEY_BASE="$(openssl rand -hex 48)"
+          mkdir -p "$RUNNER_TEMP/server"
+          tar -xzf dist/space-nova-server-linux-x64.tar.gz -C "$RUNNER_TEMP/server"
+          bin="$RUNNER_TEMP/server/space_mmo/bin/space_mmo"
+          "$bin" eval 'Darkorbit.Release.migrate()'
+          "$bin" start > "$RUNNER_TEMP/proxy-server.log" 2>&1 &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true' EXIT
+          ready=0
+          for _ in $(seq 1 45); do
+            if curl -sSf -H 'Host: spacenova.ddns.net' -H 'X-Forwarded-Proto: https' \
+              --max-time 2 http://127.0.0.1:4000/login -o /dev/null; then
+              ready=1
+              break
+            fi
+            if ! kill -0 "$pid" 2>/dev/null; then break; fi
+            sleep 1
+          done
+          if [[ "$ready" != 1 ]]; then
+            cat "$RUNNER_TEMP/proxy-server.log" >&2
+            exit 1
+          fi
+          curl -sSf -D "$RUNNER_TEMP/headers" \
+            -H 'Host: spacenova.ddns.net' -H 'X-Forwarded-Proto: https' \
+            http://127.0.0.1:4000/login -o /dev/null
+          grep -qi '^strict-transport-security:' "$RUNNER_TEMP/headers"
+          ss -lnt | grep -Eq '127\.0\.0\.1:4000\b'
+  windows:
+    needs: tests
+    if: github.ref == 'refs/heads/sbs'
+    runs-on: windows-latest
+    env:
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      RELEASE_VERSION: ${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Generate installer version from umbrella mix.exs
+        shell: pwsh
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          python scripts/space-nova-version.py check $env:RELEASE_VERSION
+          if ($LASTEXITCODE -ne 0) { throw 'Version mismatch' }
+          python scripts/space-nova-version.py sync $env:RELEASE_VERSION
+          if ($LASTEXITCODE -ne 0) { throw 'Version generation failed' }
+      - name: Validate signing configuration
+        shell: pwsh
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY) -or [string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD)) { throw "Required Tauri signing secrets are missing" }
+          $configured = (Get-Content clients/tauri/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
+          if ($configured -ne $env:RELEASE_VERSION) { throw "Requested version does not match tauri.conf.json" }
+      - name: Install client dependencies
+        working-directory: clients/tauri
+        run: npm ci
+      - name: Run launcher tests
+        working-directory: clients/tauri
+        run: npm test
+      - name: Prepare Windows ICO
+        working-directory: clients/tauri
+        run: npm exec -- tauri icon src-tauri/icons/128x128.png
+      - name: Build and sign Windows updater bundle
+        working-directory: clients/tauri
+        run: npm run build -- --config src-tauri/tauri.updater.conf.json
+      - name: Stage stable Windows installer filename and signature
+        shell: pwsh
+        run: |
+          $dir = 'clients/tauri/src-tauri/target/release/bundle/nsis'
+          $files = @(Get-ChildItem $dir -Filter '*-setup.exe' -File)
+          if ($files.Count -ne 1) { throw "Expected one Windows installer, found $($files.Count)" }
+          $sig = "$($files[0].FullName).sig"
+          if (-not (Test-Path $sig)) { throw 'Missing signed installer signature' }
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Copy-Item $files[0].FullName dist/space-nova-windows-x64-setup.exe
+          Copy-Item $sig dist/space-nova-windows-x64-setup.exe.sig
+      - uses: actions/upload-artifact@v4
+        with:
+          name: signed-space-nova-windows
+          if-no-files-found: error
+          path: |
+            dist/space-nova-windows-x64-setup.exe
+            dist/space-nova-windows-x64-setup.exe.sig
+
+  linux:
+    needs: tests
+    if: github.ref == 'refs/heads/sbs'
+    runs-on: ubuntu-24.04
+    env:
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      RELEASE_VERSION: ${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install WebKitGTK build prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file \
+            libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Generate installer version from umbrella mix.exs
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          python3 scripts/space-nova-version.py check "$RELEASE_VERSION"
+          python3 scripts/space-nova-version.py sync "$RELEASE_VERSION"
+      - name: Validate signing configuration
+        shell: bash
+        run: |
+          test -n "$TAURI_SIGNING_PRIVATE_KEY" || { echo "Missing signing key"; exit 1; }
+          test -n "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" || { echo "Missing signing password"; exit 1; }
+          python3 -c 'import json,os; v=json.load(open("clients/tauri/src-tauri/tauri.conf.json"))["version"]; assert v==os.environ["RELEASE_VERSION"], "Version mismatch"'
+      - name: Install client dependencies
+        working-directory: clients/tauri
+        run: npm ci
+      - name: Run launcher tests
+        working-directory: clients/tauri
+        run: npm test
+      - name: Build and sign Linux AppImage
+        working-directory: clients/tauri
+        run: npm run build -- --config src-tauri/tauri.updater.conf.json
+      - name: Stage stable Linux installer filenames and signature
+        shell: bash
+        run: |
+          mapfile -t images < <(find clients/tauri/src-tauri/target/release/bundle/appimage -maxdepth 1 -name '*.AppImage' -type f)
+          mapfile -t debs < <(find clients/tauri/src-tauri/target/release/bundle/deb -maxdepth 1 -name '*.deb' -type f)
+          [[ ${#images[@]} == 1 && ${#debs[@]} == 1 ]]
+          [[ -s "${images[0]}.sig" ]]
+          mkdir -p dist
+          cp "${images[0]}" dist/space-nova-linux-x64.AppImage
+          cp "${images[0]}.sig" dist/space-nova-linux-x64.AppImage.sig
+          cp "${debs[0]}" dist/space-nova-linux-x64.deb
+      - uses: actions/upload-artifact@v4
+        with:
+          name: signed-space-nova-linux
+          if-no-files-found: error
+          path: |
+            dist/space-nova-linux-x64.AppImage
+            dist/space-nova-linux-x64.AppImage.sig
+            dist/space-nova-linux-x64.deb
+
+  publish:
+    if: github.ref == 'refs/heads/sbs'
+    needs: [tests, server, server-proxy-smoke, windows, linux]
+    permissions:
+      contents: write
+    runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_VERSION: ${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: space-nova-server
+          path: dist/server
+      - uses: actions/download-artifact@v4
+        with:
+          name: signed-space-nova-windows
+          path: dist/windows
+      - uses: actions/download-artifact@v4
+        with:
+          name: signed-space-nova-linux
+          path: dist/linux
+      - name: Generate latest.json from both signed installers
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import datetime
+          import glob
+          import json
+          import os
+          from pathlib import Path
+          from urllib.parse import quote
+
+          version = os.environ["RELEASE_VERSION"]
+          if not version or not all(c.isdigit() for c in version.split(".")) or len(version.split(".")) != 3:
+              raise SystemExit("Expected a numeric semver such as 0.3.0")
+
+          def entry(pattern):
+              matches = glob.glob(pattern)
+              if len(matches) != 1:
+                  raise SystemExit(f"Expected exactly one installer matching {pattern}; found {len(matches)}")
+              package = Path(matches[0])
+              sig_file = Path(str(package) + ".sig")
+              if not sig_file.is_file():
+                  raise SystemExit(f"Missing signed bundle signature for {package.name}")
+              signature = sig_file.read_text(encoding="utf-8").strip()
+              if not signature:
+                  raise SystemExit(f"Empty signature file: {sig_file}")
+              return {
+                  "signature": signature,
+                  "url": f"https://github.com/bushman77/darkorbit_umbrella/releases/download/v{version}/{quote(package.name, safe='')}"
+              }
+
+          platforms = {
+              "windows-x86_64": entry("dist/windows/*.exe"),
+              "linux-x86_64": entry("dist/linux/*.AppImage")
+          }
+          manifest = {
+              "version": version,
+              "pub_date": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
+              "notes": f"Space Nova desktop client v{version}",
+              "platforms": platforms
+          }
+          Path("dist/latest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+          print(f"Prepared signed updates for {', '.join(platforms)}")
+          PY
+      - name: Validate all packages and produce SHA-256 checksums
+        shell: bash
+        run: |
+          python3 scripts/space-nova-version.py check "$RELEASE_VERSION"
+          files=(
+            dist/server/space-nova-server-linux-x64.tar.gz
+            dist/windows/space-nova-windows-x64-setup.exe
+            dist/windows/space-nova-windows-x64-setup.exe.sig
+            dist/linux/space-nova-linux-x64.AppImage
+            dist/linux/space-nova-linux-x64.AppImage.sig
+            dist/linux/space-nova-linux-x64.deb
+            dist/latest.json
+          )
+          for file in "${files[@]}"; do test -s "$file"; done
+          (cd dist; find server windows linux -type f -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS; sha256sum latest.json >> SHA256SUMS)
+          (cd dist; sha256sum --check SHA256SUMS)
+      - name: Publish complete server and desktop release
+        shell: bash
+        run: |
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v$RELEASE_VERSION" >/dev/null 2>&1; then
+            echo "Release tag created while builds ran; refusing overwrite" >&2
+            exit 1
+          fi
+          gh release create "v$RELEASE_VERSION" \
+            dist/server/space-nova-server-linux-x64.tar.gz \
+            dist/windows/space-nova-windows-x64-setup.exe dist/windows/space-nova-windows-x64-setup.exe.sig \
+            dist/linux/space-nova-linux-x64.AppImage dist/linux/space-nova-linux-x64.AppImage.sig \
+            dist/linux/space-nova-linux-x64.deb \
+            dist/latest.json dist/SHA256SUMS \
+            --target "$GITHUB_SHA" --draft \
+            --title "Space Nova v$RELEASE_VERSION" \
+            --notes "Ubuntu dedicated server plus signed Windows and Linux desktop clients, built from $GITHUB_SHA. EC2 deployment is separate."
+          gh release edit "v$RELEASE_VERSION" --draft=false --latest

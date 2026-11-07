@@ -30,12 +30,13 @@ defmodule Core.NPC.Entity do
     :next_attack_tick,
     :patrol_step
   ]
-  defstruct @enforce_keys ++ [:destination, :target_id]
+  defstruct @enforce_keys ++ [:destination, :target_id, :course, :strategic_vessel_id]
 
-  @type state :: :idle | :patrol | :pursue | :attack | :destroyed
+  @type state :: :idle | :patrol | :pursue | :attack | :cruise | :evade | :surrendered | :destroyed
 
   @type t :: %__MODULE__{
           id: String.t(),
+          strategic_vessel_id: String.t() | nil,
           kind: :npc,
           npc_type_id: String.t(),
           display_name: String.t(),
@@ -43,6 +44,7 @@ defmodule Core.NPC.Entity do
           position: Position.t(),
           home_position: Position.t(),
           destination: Position.t() | nil,
+          course: map() | nil,
           speed: number(),
           hull: non_neg_integer(),
           max_hull: pos_integer(),
@@ -76,6 +78,7 @@ defmodule Core.NPC.Entity do
       position: position,
       home_position: position,
       destination: nil,
+      course: nil,
       speed: definition.movement_speed,
       hull: definition.max_hull,
       max_hull: definition.max_hull,

@@ -8,6 +8,8 @@ defmodule Core.World.Supervisor do
   alias Core.World.NoopEventSink
   alias Core.World.SessionManager
   alias Core.NPC.Catalog, as: NPCCatalog
+  alias Core.Universe.Navigation, as: SolarNavigation
+  alias Core.Universe.OrbitalEntry
 
   def start_link(opts) do
     Supervisor.start_link(__MODULE__, opts, name: Keyword.get(opts, :name, __MODULE__))
@@ -20,24 +22,47 @@ defmodule Core.World.Supervisor do
     tick_ms = Keyword.get(opts, :tick_ms, 100)
     event_sink = Keyword.get(opts, :event_sink, NoopEventSink)
     auto_tick? = Keyword.get(opts, :auto_tick, true)
-    maps = Keyword.get(opts, :maps, [MapDefinition.starting_map()])
+    maps = Keyword.get(opts, :maps,
+      [MapDefinition.starting_map() | OrbitalEntry.planet_maps()])
     npc_catalog = Keyword.get(opts, :npc_catalog, NPCCatalog.all())
+    initial_npcs? = Keyword.get(opts, :initial_npcs?, false)
+    auto_respawn? = Keyword.get(opts, :auto_respawn?, false)
+    solar_navigation_server =
+      Keyword.get(opts, :solar_navigation_server, Module.concat(sessions, SolarNavigation))
+    free_flight_maps =
+      Keyword.get(opts, :free_flight_maps, Module.concat(sessions, FreeFlightMaps))
 
     map_children =
       Enum.map(maps, fn definition ->
-        {MapServer,
-         definition: MapDefinition.new(definition),
-         registry: registry,
-         tick_ms: tick_ms,
-         event_sink: event_sink,
-         npc_catalog: npc_catalog,
-         auto_tick: auto_tick?}
+        definition = MapDefinition.new(definition)
+        Supervisor.child_spec(
+          {MapServer,
+           definition: definition,
+           registry: registry,
+           tick_ms: tick_ms,
+           event_sink: event_sink,
+           npc_catalog: npc_catalog,
+           initial_npcs?: initial_npcs?,
+           auto_respawn?: auto_respawn?,
+           solar_navigation_server: solar_navigation_server,
+           auto_tick: auto_tick?},
+          id: {:world_map, definition.id}
+        )
       end)
 
     children =
       [
         {Registry, keys: :unique, name: registry},
-        {SessionManager, name: sessions}
+        {SessionManager, name: sessions},
+        {SolarNavigation, name: solar_navigation_server, event_sink: event_sink,
+         auto_tick: auto_tick?, tick_ms: 1_000,
+         # Shared traffic departs on the SOL clock even without connected pilots.
+         # Course clicks (including named planets) never mint special ships.
+         scheduled_trader_interval_ms: Keyword.get(opts,
+           :scheduled_trader_interval_ms, 45_000),
+         # Older converging contacts remain opt-in for isolated regression tests.
+         procedural_contact_chance: Keyword.get(opts, :procedural_contact_chance, 0.0)},
+        {DynamicSupervisor, strategy: :one_for_one, name: free_flight_maps}
       ] ++ map_children
 
     # Sessions and map entities form one ephemeral consistency boundary. If a

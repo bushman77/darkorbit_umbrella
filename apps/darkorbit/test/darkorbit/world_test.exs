@@ -43,4 +43,71 @@ defmodule Darkorbit.WorldTest do
 
     assert {:error, :already_connected} = World.connect(account.id)
   end
+
+  test "reconnecting loads the same physical ship with its previous combat damage" do
+    account = player_account_fixture()
+    {:ok, owned_ship} = Darkorbit.Fleet.get_active_ship(account.id)
+    assert {:ok, session} = World.connect(account.id)
+
+    [{map_server, _}] = Registry.lookup(Core.World.Registry, {:world_map, "1-1"})
+    {initial_hull, initial_shields} =
+      :sys.get_state(map_server).entities
+      |> Map.fetch!(account.id)
+      |> then(fn entity -> {entity.hull, entity.shields} end)
+
+    :sys.replace_state(map_server, fn state ->
+      ship = Map.fetch!(state.entities, account.id)
+      damaged = %{ship | hull: initial_hull - 1, shields: 0}
+      %{state | entities: Map.put(state.entities, account.id, damaged)}
+    end)
+
+    assert :ok = World.disconnect(session.id)
+    assert {:ok, replacement} = World.connect(account.id)
+    on_exit(fn -> World.disconnect(replacement.id) end)
+
+    {:ok, snapshot} = World.snapshot()
+    rejoined = Enum.find(snapshot.entities, &(&1.id == account.id and &1.kind == :player))
+    assert rejoined.ship_instance_id == owned_ship.id
+    assert rejoined.hull == initial_hull - 1
+    assert rejoined.shields == 0
+    assert rejoined.max_shields >= initial_shields
+  end
+
+  test "a destroyed physical hull cannot reconnect fully repaired" do
+    account = player_account_fixture()
+    {:ok, ship} = Darkorbit.Fleet.get_active_ship(account.id)
+    {:ok, stats} = Darkorbit.ShipStats.calculate(account.id, ship.id, 1)
+    {:ok, condition} = Darkorbit.ShipCondition.load_or_initialize(account.id, ship.id, stats)
+    assert :ok = Darkorbit.ShipCondition.save_verified(account.id, ship.id,
+      %{condition | hull: 0, shields: 0, status: :destroyed})
+
+    assert {:ok, session} = World.connect(account.id)
+    on_exit(fn -> World.disconnect(session.id) end)
+
+    {:ok, snapshot} = World.snapshot()
+    ship_entity = Enum.find(snapshot.entities, &(&1.id == account.id and &1.kind == :player))
+    assert ship_entity.ship_instance_id == ship.id
+    assert ship_entity.status == :destroyed
+    assert ship_entity.hull == 0
+    assert {:error, :attacker_destroyed} = World.attack(session.id)
+  end
+
+
+
+  test "an interrupted prepared departure is recovered on the next authenticated connect" do
+    account = player_account_fixture()
+    assert {:ok, first} = World.connect(account.id)
+
+    assert {:ok, %{player_id: player_id}} = Core.World.prepare_disconnect(first.id)
+    assert player_id == account.id
+    assert {:ok, true} = Core.World.pending_disconnect?(first.id)
+
+    assert {:ok, second} = World.connect(account.id)
+    on_exit(fn -> World.disconnect(second.id) end)
+    assert second.id != first.id
+    assert {:error, :session_not_found} = Core.World.ship_condition(first.id)
+    assert {:ok, false} = Core.World.pending_disconnect?(second.id)
+  end
+
+
 end

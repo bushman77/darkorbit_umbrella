@@ -7,7 +7,9 @@ defmodule Core.Combat do
   values.
   """
 
-  @player_attack_range 720.0
+  # 3,600 world units = 216 scene units at WORLD_SCALE 0.06.
+  # This is server-enforced for both manual twin beams and locked autofire.
+  @player_attack_range 3_600.0
   @type damage_result :: %{
           requested_damage: non_neg_integer(),
           shield_damage: non_neg_integer(),
@@ -63,6 +65,10 @@ defmodule Core.Combat do
   end
 
   @spec valid_target?(map(), map()) :: boolean()
+  # A surrendered civilian is no longer a valid weapons target. Re-enabling
+  # attacks on surrendered ships, if desired for piracy consequences, must
+  # be an explicit server-owned action rather than accidental autofire.
+  def valid_target?(%{kind: :player}, %{kind: :npc, state: :surrendered}), do: false
   def valid_target?(%{kind: :player}, %{kind: :npc} = target), do: alive?(target)
   def valid_target?(%{kind: :npc}, %{kind: :player} = target), do: alive?(target)
   def valid_target?(_attacker, _target), do: false
@@ -83,7 +89,12 @@ defmodule Core.Combat do
          true <- finite_number?(target_x) and finite_number?(target_y) do
       delta_x = target_x - attacker_x
       delta_y = target_y - attacker_y
-      delta_x * delta_x + delta_y * delta_y <= range * range
+      attacker_z = Map.get(attacker.position, :z, 0.0)
+      target_z = Map.get(target.position, :z, 0.0)
+      delta_z = target_z - attacker_z
+
+      finite_number?(attacker_z) and finite_number?(target_z) and
+        delta_x * delta_x + delta_y * delta_y + delta_z * delta_z <= range * range
     else
       _invalid_position -> false
     end

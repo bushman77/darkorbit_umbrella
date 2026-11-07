@@ -1,21 +1,43 @@
 import {Socket} from "phoenix"
-import {GraphicsAssets} from "./asset_catalog"
 import {
   applyAuthoritativeDamage,
   entityKey,
-  findNpcAtScreenPoint,
   healthPercent,
   nearestNpc,
 } from "./combat_client.mjs"
 import {
   combatKeyIntent,
+  gameplayTypingTarget,
+  manualLaserPointerIntent,
   desiredEntityAngle,
   hotbarActionActive,
   smoothAngle,
 } from "./combat_controls.mjs"
 import {CockpitWindowManager} from "./cockpit_window_manager.mjs"
-import {MinimapRenderer, minimapWorldPoint} from "./minimap_renderer.mjs"
+import {MinimapRenderer} from "./minimap_renderer.mjs"
 import {PointerNavigation} from "./pointer_navigation.mjs"
+import {StereoSpaceView} from "./stereo_view.js"
+import {HelmetControl} from "./helmet_control.mjs"
+import {HelmetAlignmentKeyGate} from "./helmet_alignment_keys.mjs"
+import {NavigationComputer} from "./navigation_computer.mjs"
+import {FlightControls} from "./flight_controls.mjs"
+import {WorldStreamDelta} from "./world_stream_delta.mjs"
+import {
+  MouseSteering, validMouseSensitivity, MOUSE_STEERING_IDLE_MS,
+} from "./mouse_steering.mjs"
+import {smoothAttitude} from "./attitude_interpolation.mjs"
+import {smoothOrientation, orientationTelemetry} from "./orientation_interpolation.mjs"
+import {SpaceLaserTrigger} from "./space_laser_trigger.mjs"
+import {applyLaserBurstDamage, visualLaserRays} from "./laser_burst.mjs"
+import {laserFeedback, LASER_FEEDBACK_MS} from "./laser_feedback.mjs"
+import {nextFlightMode, validFlightMode} from "./display_modes.mjs"
+import {cameraSettleSeconds} from "./camera_response.mjs"
+import {planetaryImpactMessage} from "./planetary_impact.mjs"
+import {
+  ownPlanetaryWarning, proximityEventWarning, planetaryWarningView,
+} from "./planetary_warning.mjs"
+import {validOrbitalMapId, shouldEnterOrbitalRegion} from "./orbital_regions.mjs"
+import {tacticalEncounterAction} from "./solar_encounter_actions.mjs"
 
 const clamp = (value, minimum, maximum) => Math.min(Math.max(value, minimum), maximum)
 const validDestination = (destination, boundaries) =>
@@ -27,52 +49,60 @@ const validDestination = (destination, boundaries) =>
   destination.y >= 0 &&
   destination.y <= boundaries.height
 const number = value => new Intl.NumberFormat("en-US", {maximumFractionDigits: 0}).format(value || 0)
-const titleize = value => String(value || "hostile npc")
-  .split(/[_-]+/)
-  .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-  .join(" ")
-
-const seededRandom = seed => {
-  let value = seed >>> 0
-  return () => {
-    value += 0x6D2B79F5
-    let result = value
-    result = Math.imul(result ^ (result >>> 15), result | 1)
-    result ^= result + Math.imul(result ^ (result >>> 7), result | 61)
-    return ((result ^ (result >>> 14)) >>> 0) / 4294967296
-  }
-}
 
 class SpaceClient {
   constructor(root) {
     this.root = root
+    // Transparent DOM hit surface. Three.js owns the only flight renderer.
     this.canvas = root.querySelector("#space-viewport")
-    this.context = this.canvas.getContext("2d", {alpha: false})
+    this.stereoView = null
+    this.displayMode = "3d"
     this.mapId = root.dataset.mapId
     this.token = root.dataset.socketToken
+    // Per-pilot browser preference, not an authority-bearing network setting.
+    this.mouseSteeringKey = "darkorbit:mouse-steering:" + root.dataset.layoutPlayerId
+    this.mouseSensitivityKey = "darkorbit:mouse-sensitivity:" + root.dataset.layoutPlayerId
+    this.mouseSteeringEnabled = localStorage.getItem(this.mouseSteeringKey) === "1"
+    const savedSensitivity = Number(localStorage.getItem(this.mouseSensitivityKey))
+    this.mouseSteeringSensitivity = validMouseSensitivity(savedSensitivity)
+      ? savedSensitivity : 1
+    this.mouseSteering = new MouseSteering({sensitivity: this.mouseSteeringSensitivity})
+    this.mouseIdleTimer = null
+    this.mouseCaptureLost = false
+    this.helmetAlignmentKeys = new HelmetAlignmentKeyGate()
     this.entities = new Map()
     this.pilots = new Map()
     this.boundaries = {width: 20000, height: 12000}
-    this.camera = {x: 1000, y: 1000}
-    this.viewport = {width: 1, height: 1, dpr: 1}
+    this.volume = {altitude_min: -3000, altitude_max: 3000}
     this.selfId = null
+    this.planetaryWarningLevel = "clear"
+    this.planetaryWarningPlanet = null
+    this.solarEncounter = null
+    this.encounterDisplayedId = null
+    this.encounterResolving = false
+    this.tacticalRetreating = false
     this.player = null
     this.commandDestination = null
     this.selectedTargetId = null
     this.selectedHotbarSlot = 1
     this.worldTick = 0
     this.tickMs = 100
+    this.worldStream = null
+    this.worldResyncInFlight = false
     this.beams = []
-    this.impacts = []
-    this.explosions = []
+    this.lastLaserFeedback = null
     this.lastFrame = performance.now()
-    this.assets = new GraphicsAssets()
-    this.stars = this.createStars()
+  }
+
+  inSystemCruise() {
+    const navigation = this.navComputer?.solarNavigation
+    return navigation?.status === "traveling" && !navigation?.tactical_encounter &&
+      !navigation?.free_flight
   }
 
   start() {
-    if (!this.context) {
-      this.showError("Canvas 2D is unavailable in this browser.")
+    if (!this.canvas || !this.root.querySelector("#space-viewport-3d")) {
+      this.showError("The 3D flight viewport is missing.")
       return
     }
 
@@ -87,42 +117,233 @@ class SpaceClient {
       getSelfId: () => this.selfId,
       getDestination: () => this.commandDestination,
     }).start()
-    const minimapCanvas = this.root.querySelector("#cockpit-minimap-canvas")
-    const canNavigateMinimap = () =>
-      this.cockpit?.windowContentInteractive("minimap") === true &&
-      Boolean(this.selfId) &&
-      this.channel?.state === "joined"
+    this.flightControls = new FlightControls({
+      active: () => !this.navComputer?.isOpen && !this.inSystemCruise() &&
+        this.channel?.state === "joined" &&
+        this.entities.get(this.selfId)?.status !== "destroyed",
+      send: input => this.sendFlightControls(input),
+    })
+    this.setupMouseSteering()
+    window.addEventListener("keydown", event => this.flightControls.keyDown(event))
+    window.addEventListener("keyup", event => {
+      this.flightControls.keyUp(event)
+      this.helmetAlignmentKeys.keyUp(event)
+    })
+    // Only the cockpit hit canvas owns flight input; menus/Atlas retain
+    // ordinary scrolling and right-click behavior.
+    this.canvas.addEventListener("wheel", event => this.flightControls.wheel(event),
+      {passive: false})
+    window.addEventListener("blur", () => {
+      this.helmetAlignmentKeys.release()
+      this.exitMouseSteering()
+      this.flightControls.release()
+      this.spaceLaser?.release()
+    })
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) {
+        this.helmetAlignmentKeys.release()
+        this.exitMouseSteering()
+        this.flightControls.release()
+        this.spaceLaser?.release()
+      }
+    })
+    const encounterPanel = this.root.querySelector("#solar-encounter-panel")
+    encounterPanel?.addEventListener("click", event => {
+      const choice = event.target?.closest?.("[data-encounter-action]")?.dataset.encounterAction
+      const encounter = this.solarEncounter
+      if (!choice || !encounter || this.encounterResolving) return
 
-    this.minimapNavigation = new PointerNavigation({
-      canvas: minimapCanvas,
-      destinationForPointer: pointer =>
-        minimapWorldPoint(pointer, minimapCanvas, this.boundaries),
-      shipPosition: () => null,
-      sendDestination: destination =>
-        canNavigateMinimap() && this.sendDestination(destination),
-      interceptPointerDown: pointer =>
-        !canNavigateMinimap() ||
-        !minimapWorldPoint(pointer, minimapCanvas, this.boundaries),
-    }).attach()
-    this.assets.preload()
-    this.resize()
+      if (choice === "hail") {
+        this.encounterMessage("Opening communications…")
+        this.solarHail(encounter.contact_id, (ok, communication, reason) => {
+          if (this.solarEncounter?.id !== encounter.id) return
+          if (!ok) {
+            this.encounterMessage("Hail unavailable: " + (reason || "contact out of range") +
+              ". You can still resume your course.")
+            return
+          }
+          const manifest = Object.entries(communication.cargo || {})
+            .map(([item, count]) => item.replaceAll("_", " ") + ": " + count)
+            .join(", ")
+          this.encounterMessage(String(communication.message || "Communications established.") +
+            (manifest ? "\nManifest: " + manifest : ""))
+        })
+      } else if (choice === "engage") {
+        this.encounterResolving = true
+        this.encounterMessage(encounter.classification === "neutral_flyby"
+          ? "Intercepting neutral vessel… Your attack may provoke retaliation."
+          : "Entering tactical interception…")
+        this.showSolarEncounter()
+        this.solarEnterEncounter(encounter.id, (ok, result, reason) => {
+          this.encounterResolving = false
+          if (ok && result?.navigation) {
+            this.applySolarNavigation(result.navigation)
+            this.navComputer?.close()
+            this.setCombatMessage("Intercept engaged. " +
+              (result.enemy?.display_name || "Vessel") +
+              " is now in tactical range.")
+          } else if (this.solarEncounter?.id === encounter.id) {
+            this.encounterMessage("Unable to enter combat: " +
+              (reason || "intercept unavailable"))
+            this.showSolarEncounter()
+          }
+        })
+      } else if (choice === "continue") {
+        this.encounterResolving = true
+        this.encounterMessage("Requesting course resumption…")
+        this.showSolarEncounter()
+        this.solarResolveEncounter(encounter.id, (ok, navigation, reason) => {
+          this.encounterResolving = false
+          if (ok && navigation) {
+            this.applySolarNavigation(navigation)
+          } else if (this.solarEncounter?.id === encounter.id) {
+            this.encounterMessage("Unable to resume: " + (reason || "relay unavailable"))
+            this.showSolarEncounter()
+          }
+        })
+      }
+    })
+    const tacticalPanel = this.root.querySelector("#solar-tactical-panel")
+    tacticalPanel?.addEventListener("click", event => {
+      const accept = event.target?.closest?.("[data-solar-tactical-surrender]")
+      const seize = event.target?.closest?.("[data-solar-tactical-seize]")
+      const retreat = event.target?.closest?.("[data-solar-tactical-retreat]")
+      if ((!accept && !seize && !retreat) || this.tacticalRetreating) return
+      const tactical = this.navComputer?.solarNavigation?.tactical_encounter
+      if (!tactical?.id) return
+      this.tacticalRetreating = true
+      const message = tacticalPanel.querySelector("[data-solar-tactical-message]")
+      if (message) message.textContent = seize
+        ? "Seizing permitted cargo under inventory lock…"
+        : accept ? "Releasing the surrendered captain…"
+        : "Withdrawing from interception…"
+      const handler = seize ? this.solarSeizeCargo.bind(this)
+        : accept ? this.solarAcceptSurrender.bind(this)
+        : this.solarRetreatEncounter.bind(this)
+      handler(tactical.id, (ok, navigation, reason, claim) => {
+        this.tacticalRetreating = false
+        if (ok && navigation) {
+          this.applySolarNavigation(navigation)
+          this.navComputer?.open()
+          const cargo = claim?.cargo || {}
+          const contents = Object.entries(cargo)
+            .map(([id, count]) => count + "t " + id.replaceAll("_", " "))
+            .join(", ")
+          this.setCombatMessage(seize
+            ? "Cargo seized: " + (contents || "none") +
+              " · " + claim.faction_id + " standing " + claim.standing
+            : accept ? "Merchant released. SOL voyage resumed."
+            : "Interception ended. SOL voyage resumed.")
+        } else if (message) {
+          message.textContent = "Decision unavailable: " + (reason || "relay error")
+        }
+        this.showSolarTactical()
+      })
+      this.showSolarTactical()
+    })
+    // Modal decisions own keyboard focus. Escape and Atlas toggle cannot
+    // dismiss a server-held encounter without a choice.
+    window.addEventListener("keydown", event => {
+      if (!this.solarEncounter) return
+      if (event.key === "Tab") {
+        const actions = [...encounterPanel.querySelectorAll(
+          '.solar-encounter-eye:first-child [data-encounter-action]')]
+          .filter(button => !button.hidden && !button.disabled)
+        const index = actions.indexOf(document.activeElement)
+        const next = event.shiftKey
+          ? actions[(index + actions.length - 1) % actions.length]
+          : actions[(index + 1) % actions.length]
+        if (next) next.focus({preventScroll: true})
+        event.preventDefault()
+      } else if (event.key === "Escape" || event.key.toLowerCase() === "m") {
+        event.preventDefault()
+      }
+      event.stopImmediatePropagation()
+    }, true)
+
+    this.navComputer = new NavigationComputer({
+      root: this.root.querySelector("#navigation-computer"),
+      getEntities: () => this.entities,
+      getSelfId: () => this.selfId,
+      getBoundaries: () => ({...this.boundaries, ...this.volume}),
+      isConnected: () => this.channel?.state === "joined" && Boolean(this.selfId),
+      engage: (waypoints, done) => this.plotCourse(waypoints, done),
+      halt: done => this.stopNavigation(done),
+      solarSetCourse: (bodyId, done) => this.solarSetCourse(bodyId, done),
+      solarCancelCourse: done => this.solarCancelCourse(done),
+      solarEnterFreeFlight: done => this.solarEnterFreeFlight(done),
+      solarResumeCruise: done => this.solarResumeCruise(done),
+      solarHail: (contactId, done) => this.solarHail(contactId, done),
+      onOpen: () => {
+        this.exitMouseSteering({silent: true})
+        this.helmet?.setCombat(false)
+        this.navigation?.cancel()
+        this.flightControls.release({silent: true})
+        this.spaceLaser?.release()
+      },
+      onClose: () => {
+        this.updateMouseSteeringStatus()
+        this.helmet?.closePanel()
+        this.helmet?.setCombat(true)
+        this.canvas.focus({preventScroll: true})
+      },
+    }).start()
+    this.root.querySelector("#nav-open")?.addEventListener("click", () => this.navComputer.open())
+    window.addEventListener("keydown", event => this.navComputer.handleKey(event))
+    this.root.querySelector("#display-mode")?.addEventListener("change", event => this.setDisplayMode(event.target.value))
+    window.addEventListener("keydown", event => this.handleDisplayModeKey(event))
+    // Capture before ordinary gameplay handlers or browser reload behavior.
+    window.addEventListener("keydown", event => this.handleHelmetAlignmentKey(event), true)
+    if (!this.setDisplayMode("3d")) return
     this.canvas.addEventListener("pointerdown", () => this.canvas.focus({preventScroll: true}))
     window.addEventListener("resize", () => this.resize())
     this.navigation = new PointerNavigation({
       canvas: this.canvas,
-      destinationForPointer: pointer => this.destinationForPointer(pointer),
+      destinationForPointer: () => null,
       shipPosition: () => this.entities.get(this.selfId)?.target,
       sendDestination: destination => this.sendDestination(destination),
-      interceptPointerDown: pointer => this.selectTargetAtPointer(pointer),
+      // In cockpit mode click selects targets; travel is plotted on the atlas.
+      interceptPointerDown: pointer => {
+        // While pointer-locked, the mouse coordinates are frozen: left-click
+        // targets what the ship is pointing at in the center of the cockpit.
+        if (document.pointerLockElement === this.canvas) {
+          const rect = this.canvas.getBoundingClientRect()
+          this.selectTargetAtPointer({
+            clientX: rect.left + rect.width / 2,
+            clientY: rect.top + rect.height / 2,
+          })
+        } else {
+          this.selectTargetAtPointer(pointer)
+        }
+        return true
+      },
     }).attach()
-    this.canvas.addEventListener("contextmenu", event => this.handleTargetPointer(event))
-    this.root.querySelector("#combat-target-nearest")?.addEventListener("click", () => this.selectNearestTarget())
-    this.root.querySelector("#combat-clear-target")?.addEventListener("click", () => this.disengageCombat())
-    this.root.querySelector("#combat-fire")?.addEventListener("click", () => this.toggleLaserFire())
+    this.canvas.addEventListener("pointerdown", event => this.handleLaserPointerDown(event))
+    this.canvas.addEventListener("contextmenu", event => {
+      if (!this.navComputer?.isOpen) event.preventDefault()
+    })
+    this.spaceLaser = new SpaceLaserTrigger({
+      active: () => !this.navComputer?.isOpen && !this.inSystemCruise() &&
+        this.channel?.state === "joined" &&
+        this.entities.get(this.selfId)?.status !== "destroyed",
+      worldTick: () => this.worldTick,
+      nextAttackTick: () => Number(this.entities.get(this.selfId)?.nextAttackTick) || 0,
+      fire: done => this.fireReadyWeapon(done),
+    })
+    window.addEventListener("pointerup", event => {
+      if (event.button === 2) this.spaceLaser.release()
+    })
+    window.addEventListener("pointercancel", () => this.spaceLaser.release())
     for (const slot of this.root.querySelectorAll("[data-hotbar-slot]")) {
       slot.addEventListener("click", () => this.activateHotbarSlot(Number(slot.dataset.hotbarSlot)))
     }
-    window.addEventListener("keydown", event => this.handleCombatKey(event))
+    window.addEventListener("keydown", event => this.handleCombatKey(event), true)
+
+    // New sessions begin in the SOL system Atlas, not in the combat
+    // cockpit. Initialize all flight/weapon input guards first so the
+    // Atlas can safely own focus even before the world socket joins.
+    // Closing it hands focus back to the existing 3D / SBS cockpit.
+    this.navComputer.open()
     this.connect()
     requestAnimationFrame(time => this.frame(time))
   }
@@ -133,28 +354,122 @@ class SpaceClient {
     this.socket.onError(() => this.setConnection("Relay interrupted", "error"))
     this.socket.onClose(() => this.setConnection("Relay offline", "error"))
     this.socket.connect()
+    this.helmet = new HelmetControl({
+      root: this.root,
+      socket: this.socket,
+      playerId: this.root.dataset.layoutPlayerId,
+      combatActive: !this.navComputer.isOpen,
+    }).start()
 
-    this.channel = this.socket.channel(`world:${this.mapId}`, {})
-    this.channel.on("world_state", state => this.applyWorldState(state))
-    this.channel.on("movement_started", entity => this.upsertEntity(entity))
-    this.channel.on("entity_joined", entity => this.entityJoined(entity))
-    this.channel.on("entity_left", entity => this.removeEntity(entity.id))
-    this.channel.on("npc_spawned", entity => this.upsertEntity(entity, true))
-    this.channel.on("npc_movement_started", entity => this.upsertEntity(entity))
-    this.channel.on("npc_state_changed", entity => this.upsertEntity(entity))
-    this.channel.on("target_selected", selection => this.targetSelected(selection))
-    this.channel.on("target_cleared", selection => this.targetCleared(selection))
-    this.channel.on("combat_engaged", engagement => this.combatEngaged(engagement))
-    this.channel.on("combat_disengaged", engagement => this.combatDisengaged(engagement))
-    this.channel.on("laser_fired", attack => this.laserFired(attack))
-    this.channel.on("entity_destroyed", destruction => this.entityDestroyed(destruction))
-    this.channel.onError(() => this.setConnection("Sector channel lost", "error"))
-    this.channel.onClose(() => this.setConnection("Sector channel closed", "error"))
+    this.joinSector(this.mapId)
+  }
 
-    this.channel
-      .join()
-      .receive("ok", response => this.joined(response))
+  joinSector(mapId, retry = 0) {
+    // Map identity comes from an authenticated region redirect/arrival event,
+    // never from browser-provided world coordinates.
+    if (!validOrbitalMapId(mapId)) {
+      this.showError("Invalid orbital destination map.")
+      return
+    }
+
+    this.mapId = mapId
+    const channel = this.socket.channel(`world:${mapId}`, {stream: "delta_v1"})
+    this.channel = channel
+    channel.on("world_state", state => {
+      if (this.channel !== channel) return
+      if (this.worldStream) this.worldStream.reset(state)
+      this.applyWorldState(state)
+    })
+    channel.on("world_delta", delta => {
+      if (this.channel !== channel || this.worldResyncInFlight) return
+      const map = this.worldStream?.apply(delta)
+      if (map) this.applyWorldState(map)
+      else this.requestWorldResync()
+    })
+    channel.on("movement_delta", patch => {
+      if (this.channel !== channel || this.worldResyncInFlight) return
+      const entity = this.worldStream?.previewEntity(patch)
+      if (entity) this.upsertEntity(entity)
+    })
+    channel.on("solar_navigation_updated", payload => {
+      if (String(payload.player_id) === String(this.selfId) && payload.navigation) {
+        this.applySolarNavigation(payload.navigation)
+      }
+    })
+    channel.on("world_region_changed", payload => this.switchOrbitalRegion(payload?.map_id))
+    // Open the pilot's decision at first contact, without waiting for another
+    // navigation tick. The authoritative snapshot also restores it on reconnect.
+    channel.on("solar_encounter_started", payload => {
+      if (String(payload.player_id) === String(this.selfId) && payload.encounter?.id) {
+        this.setSolarEncounter(payload.encounter)
+      }
+    })
+    channel.on("movement_started", entity => this.upsertEntity(entity))
+    channel.on("entity_joined", entity => this.entityJoined(entity))
+    channel.on("entity_left", entity => this.removeEntity(entity.id))
+    channel.on("npc_spawned", entity => this.upsertEntity(entity, true))
+    channel.on("npc_movement_started", entity => this.upsertEntity(entity))
+    channel.on("npc_state_changed", entity => this.upsertEntity(entity))
+    channel.on("target_selected", selection => this.targetSelected(selection))
+    channel.on("target_cleared", selection => this.targetCleared(selection))
+    channel.on("combat_engaged", engagement => this.combatEngaged(engagement))
+    channel.on("combat_disengaged", engagement => this.combatDisengaged(engagement))
+    channel.on("laser_fired", attack => this.laserFired(attack))
+    channel.on("solar_faction_hit", event => {
+      const current = this.navComputer?.solarNavigation?.tactical_encounter?.id
+      // A delayed message from the previous encounter cannot be mistaken
+      // for an offense against the pilot's newly claimed vessel.
+      if (current && event.encounter_id && event.encounter_id !== current) return
+      const label = this.root.querySelector("#solar-faction-impact")
+      const delta = Number(event.delta)
+      const contactName = String(event.call_sign || event.contact_id || "Unknown contact")
+      if (label) {
+        label.hidden = false
+        label.textContent = "FACTION HIT · " + contactName + " · " +
+          event.faction_id + " · " + (delta > 0 ? "+" : "") + delta +
+          " · STANDING " + event.standing
+      }
+      this.setCombatMessage("Faction penalty for " + contactName +
+        " (" + event.faction_id + "): " + event.delta +
+        " · STANDING " + event.standing)
+    })
+    channel.on("entity_destroyed", destruction => this.entityDestroyed(destruction))
+    channel.on("planetary_proximity_changed", event => this.planetaryProximityChanged(event))
+    channel.onError(() => {
+      if (this.channel === channel) this.setConnection("Sector channel lost", "error")
+    })
+    channel.onClose(() => {
+      if (this.channel === channel && !this.switchingRegion) {
+        this.setConnection("Sector channel closed", "error")
+      }
+    })
+
+    channel.join()
+      .receive("ok", response => {
+        this.switchingRegion = false
+        this.joined(response)
+      })
       .receive("error", response => {
+        if (this.channel !== channel) return
+        if (response.reason === "region_redirect" &&
+            response.map_id !== mapId && retry < 2) {
+          channel.leave()
+          this.joinSector(response.map_id, retry + 1)
+          return
+        }
+        if (response.reason === "already_connected" && this.switchingRegion &&
+            retry < 5) {
+          // Phoenix may acknowledge leaving before the old session's
+          // terminate callback has removed its server-owned registration.
+          setTimeout(() => {
+            if (this.channel === channel) {
+              channel.leave()
+              this.joinSector(mapId, retry + 1)
+            }
+          }, 250)
+          return
+        }
+        this.switchingRegion = false
         const reason = response.reason === "already_connected"
           ? "This pilot already has an active sector connection."
           : `Unable to join sector: ${response.reason || "unknown error"}`
@@ -162,31 +477,95 @@ class SpaceClient {
         this.setConnection("Join rejected", "error")
       })
       .receive("timeout", () => {
-        this.showError("The sector relay did not answer in time.")
-        this.setConnection("Join timeout", "error")
+        if (this.channel === channel) {
+          this.switchingRegion = false
+          this.showError("The orbital relay did not answer in time.")
+          this.setConnection("Join timeout", "error")
+        }
       })
   }
 
+  switchOrbitalRegion(mapId) {
+    if (!shouldEnterOrbitalRegion(this.mapId, mapId, this.switchingRegion)) return
+    this.switchingRegion = true
+    this.setConnection("Entering " + (mapId.startsWith("sol:free_") ?
+      "deep-space flight" : mapId + " orbital region"), "online")
+    this.exitMouseSteering({silent: true})
+    this.flightControls?.release({silent: true})
+    this.spaceLaser?.release()
+    this.selectedTargetId = null
+    this.commandDestination = null
+    this.entities.clear()
+    this.worldStream = null
+    this.worldResyncInFlight = false
+    this.beams = []
+    this.setSolarEncounter(null)
+    this.applyPlanetaryWarning(null, {announce: false})
+    this.stereoView?.planetaryBody?.dispose()
+    const previous = this.channel
+    const enter = () => {
+      if (this.channel === previous) this.joinSector(mapId)
+    }
+    previous.leave().receive("ok", enter).receive("timeout", enter)
+  }
+
   joined(response) {
+    this.mapId = response.map.map_id
+    this.worldStream = response.stream === "delta_v1"
+      ? new WorldStreamDelta(response.map) : null
+    this.worldResyncInFlight = false
+    this.root.dataset.mapId = this.mapId
+    this.entities.clear()
     this.player = response.player
     this.selfId = entityKey(response.player.pilot.id)
     this.boundaries = response.map.boundaries
+    this.volume = response.map.volume || this.volume
     this.worldTick = response.map.tick
     this.tickMs = response.map.tick_ms
+    this.navComputer?.setRegion(response.map.region_name, response.map.map_id)
+    const minimap = this.root.querySelector("#minimap-title")
+    if (minimap) minimap.textContent = response.map.region_name || "Sector Minimap"
     this.pilots = new Map(Object.entries(response.pilots || {}))
 
+    if(response.solar_navigation)this.applySolarNavigation(response.solar_navigation)
     for (const entity of response.map.entities) this.upsertEntity(entity, true)
+    this.applyPlanetaryWarning(ownPlanetaryWarning(response.map, this.selfId))
     this.syncOwnCombatState()
 
-    const ownShip = this.entities.get(this.selfId)
-    if (ownShip) this.camera = {...ownShip.render}
-
+    this.flightControls.resetThrottle()
+    this.flightControls.mode = "cruise"
     this.populateHud()
     this.setConnection("Authoritative sync", "online")
   }
 
+  requestWorldResync() {
+    if (this.worldResyncInFlight || this.channel?.state !== "joined") return
+    this.worldResyncInFlight = true
+    const channel = this.channel
+    const failed = () => {
+      if (this.channel !== channel) return
+      this.worldResyncInFlight = false
+      this.setConnection("World resync failed; reconnecting", "error")
+      this.socket.disconnect()
+      this.socket.connect()
+    }
+    channel.push("world_resync", {}, 5000)
+      .receive("ok", response => {
+        if (this.channel !== channel) return
+        this.worldResyncInFlight = false
+        if (response.map && this.worldStream) {
+          this.worldStream.reset(response.map)
+          this.applyWorldState(response.map)
+        }
+      })
+      .receive("error", failed)
+      .receive("timeout", failed)
+  }
+
   applyWorldState(state) {
+    this.orbitalBase = state.orbital_base || null
     this.boundaries = state.boundaries || this.boundaries
+    this.volume = state.volume || this.volume
     this.worldTick = state.tick
     this.tickMs = state.tick_ms || this.tickMs
     const activeIds = new Set()
@@ -200,8 +579,10 @@ class SpaceClient {
       if (!activeIds.has(id)) this.removeEntity(id)
     }
 
+    this.applyPlanetaryWarning(ownPlanetaryWarning(state, this.selfId))
     this.syncOwnCombatState()
     this.updateCombatHud()
+    this.showSolarTactical()
   }
 
   entityJoined(entity) {
@@ -212,16 +593,40 @@ class SpaceClient {
   upsertEntity(entity, snap = false) {
     const id = entityKey(entity.id)
     const existing = this.entities.get(id)
-    const target = {x: entity.position.x, y: entity.position.y}
-    const destination = entity.destination
+    const p3 = entity.position_3d || entity.position
+    const target = {x: p3.x, y: p3.y, z: p3.z ?? 0}
+    const d3 = entity.destination_3d || entity.destination
+    const destination = d3 ? {x: d3.x, y: d3.y, z: d3.z ?? 0} : null
+    const route3d = entity.route_waypoints_3d || entity.route_waypoints || []
+    const attitude = entity.attitude || {yaw: 0, pitch: 0, roll: 0}
+    const orientation = entity.orientation || null
+    const velocity = entity.velocity || {x: 0, y: 0, z: 0}
 
     if (existing) {
       existing.target = target
       existing.destination = destination
+      existing.navigationMode = entity.navigation_mode || "manual"
+      existing.routeWaypoints = route3d
+      existing.attitude = attitude
+      existing.orientation = orientation
+      if (orientation && (!existing.renderOrientation || snap)) {
+        existing.renderOrientation = {...orientation}
+      }
+      // Render orientation is independent from server state; never feed the
+      // interpolated angles back into the authoritative simulation.
+      if (!existing.renderAttitude || snap) existing.renderAttitude = {...attitude}
+      existing.angularVelocity = entity.angular_velocity || existing.angularVelocity ||
+        {yaw: 0, pitch: 0, roll: 0}
+      existing.velocity = velocity
+      existing.throttle = entity.throttle ?? 0
+      existing.flightMode = entity.flight_mode || "cruise"
       existing.speed = entity.speed
       existing.kind = entity.kind || existing.kind
       existing.playerId = entity.player_id == null ? existing.playerId : entityKey(entity.player_id)
       existing.npcTypeId = entity.npc_type_id || existing.npcTypeId
+      existing.shipClass = entity.ship_class || existing.shipClass
+      if (Number.isFinite(entity.angle)) existing.angle = entity.angle
+      existing.course = entity.course || existing.course
       existing.displayName = entity.display_name || existing.displayName
       existing.hull = entity.hull
       existing.maxHull = entity.max_hull
@@ -251,10 +656,27 @@ class SpaceClient {
         kind: entity.kind || "player",
         playerId: entity.player_id == null ? null : entityKey(entity.player_id),
         npcTypeId: entity.npc_type_id,
+        shipClass: entity.ship_class || null,
+        // Trust the server's actual heading where present. Otherwise use
+        // a route-derived initial bearing as a visual-only fallback.
+        angle: Number.isFinite(entity.angle) ? entity.angle : destination
+          ? Math.atan2(destination.y - target.y, destination.x - target.x)
+          : -Math.PI / 2,
+        course: entity.course || null,
         displayName: entity.display_name,
         render: {...target},
         target,
         destination,
+        navigationMode: entity.navigation_mode || "manual",
+        routeWaypoints: route3d,
+        attitude,
+        renderAttitude: {...attitude},
+        orientation,
+        renderOrientation: orientation ? {...orientation} : null,
+        angularVelocity: entity.angular_velocity || {yaw: 0, pitch: 0, roll: 0},
+        velocity,
+        throttle: entity.throttle ?? 0,
+        flightMode: entity.flight_mode || "cruise",
         speed: entity.speed,
         hull: entity.hull,
         maxHull: entity.max_hull,
@@ -274,9 +696,6 @@ class SpaceClient {
         navigationAngle: destination
           ? Math.atan2(destination.y - target.y, destination.x - target.x)
           : -Math.PI / 2,
-        angle: destination
-          ? Math.atan2(destination.y - target.y, destination.x - target.x)
-          : -Math.PI / 2,
       })
     }
 
@@ -288,15 +707,286 @@ class SpaceClient {
     }
   }
 
-  destinationForPointer(pointer) {
-    const rect = this.canvas.getBoundingClientRect()
-    return {
-      x: clamp(pointer.clientX - rect.left + this.camera.x - this.viewport.width / 2, 0, this.boundaries.width),
-      y: clamp(pointer.clientY - rect.top + this.camera.y - this.viewport.height / 2, 0, this.boundaries.height),
+  sendFlightControls(input) {
+    if (this.channel?.state !== "joined") return
+    this.channel.push("flight_controls", input, 3000)
+      .receive("ok", response => {
+        if (response.entity) this.upsertEntity(response.entity)
+      })
+      .receive("error", response => this.showError(`Flight controls rejected: ${response.reason}`))
+      .receive("timeout", () => this.showError("Flight control link timed out."))
+  }
+
+  applySolarNavigation(navigation) {
+    const priorEncounterId = this.navComputer?.solarNavigation?.tactical_encounter?.id
+    const nextEncounterId = navigation?.tactical_encounter?.id
+    const previouslyTactical = Boolean(priorEncounterId)
+    // Each penalty belongs to one strategic contact. Never carry a
+    // previous vessel's faction banner into a different tactical fight.
+    if (priorEncounterId !== nextEncounterId) {
+      const impact = this.root.querySelector("#solar-faction-impact")
+      if (impact) {
+        impact.hidden = true
+        impact.textContent = ""
+      }
+    }
+    this.navComputer.setSolarNavigation(navigation)
+    this.setSolarEncounter(navigation?.tactical_encounter
+      ? null : navigation?.pending_encounter || null)
+    this.showSolarTactical()
+    if (previouslyTactical && !navigation?.tactical_encounter &&
+        navigation?.status === "traveling") {
+      this.setCombatMessage("Interception complete. Original SOL course resumed.")
+      this.navComputer?.open()
+    }
+    const body = navigation?.planetary_view
+    const planetaryStatus = this.root.querySelector("#planetary-view-status")
+    if (planetaryStatus) {
+      const valid = body?.visual_only === true &&
+        typeof body.body_id === "string" && Number.isFinite(body.angular_diameter_deg)
+      planetaryStatus.hidden = !valid
+      if (valid) {
+        const approach = body.stage === "approach_preview"
+        const detail = approach
+          ? `APPROACH · ${body.angular_diameter_deg.toFixed(1)}° APPARENT · PREVIEW`
+          : "ORBITAL REGION · REAL-RADIUS VIEW · STAGING PHYSICS"
+        planetaryStatus.textContent = `SOL · ${body.body_id.toUpperCase()} · ${detail}`
+      }
+    }
+    const active=this.inSystemCruise()
+    this.root.dataset.propulsionMode=active?"interplanetary_cruise":"conventional"
+    const label=this.root.querySelector("#propulsion-status")
+    if(label)label.textContent=navigation?.free_flight?"DEEP SPACE / MANUAL FLIGHT":
+      navigation?.pending_encounter?"ENCOUNTER HOLD / CRUISE PAUSED":
+      active?"SUBLIGHT CRUISE / FLIGHT LOCKED":"CONVENTIONAL FLIGHT"
+    if(active){
+      this.exitMouseSteering({silent: true})
+      this.flightControls?.release({silent:true})
+      this.spaceLaser?.release()
+      this.navigation?.cancel()
     }
   }
 
+  encounterMessage(message) {
+    for (const output of this.root.querySelectorAll("[data-encounter-message]")) {
+      output.textContent = message
+    }
+  }
+
+  setSolarEncounter(encounter) {
+    const nextId = typeof encounter?.id === "string" ? encounter.id : null
+    if (nextId !== this.encounterDisplayedId) {
+      this.encounterDisplayedId = nextId
+      this.encounterResolving = false
+      if (nextId) {
+        const description = encounter.classification === "hostile_contact"
+          ? "Hostile vessel detected. Your course is on hold until you choose to proceed."
+          : encounter.classification === "patrol_attention"
+            ? "Faction patrol attention. Decide whether to hail or continue."
+            : "Neutral traffic detected. Hail, attack, or ignore. The vessel may retaliate if hit."
+        this.encounterMessage(description)
+      }
+    }
+    this.solarEncounter = nextId ? encounter : null
+    this.showSolarEncounter()
+  }
+
+  showSolarEncounter() {
+    const panel = this.root.querySelector("#solar-encounter-panel")
+    if (!panel) return
+    const wasHidden = panel.hidden
+    panel.hidden = !this.solarEncounter
+    if (this.navComputer?.root) this.navComputer.root.inert = Boolean(this.solarEncounter)
+    if (!this.solarEncounter) {
+      if (!wasHidden) {
+        const focus = this.navComputer?.isOpen
+          ? this.navComputer.root.querySelector("#nav-close")
+          : this.canvas
+        focus?.focus?.({preventScroll: true})
+      }
+      return
+    }
+
+    const encounter = this.solarEncounter
+    const status = encounter.classification === "hostile_contact"
+      ? "HOSTILE CONTACT"
+      : encounter.classification === "patrol_attention"
+        ? "PATROL ATTENTION"
+        : "NEUTRAL CONTACT"
+    for (const title of panel.querySelectorAll("[data-encounter-title]")) {
+      title.textContent = String(encounter.call_sign || "Unidentified vessel") +
+        " · " + String(encounter.kind || "vessel").replaceAll("_", " ")
+    }
+    for (const faction of panel.querySelectorAll("[data-encounter-faction]")) {
+      faction.textContent = "FACTION / " +
+        String(encounter.faction_name || "Unregistered Organization")
+    }
+    for (const distance of panel.querySelectorAll("[data-encounter-distance]")) {
+      distance.textContent = Math.round(encounter.distance_km || 0).toLocaleString("en-US") +
+        " game km at detection · " + status + " · " +
+        String(encounter.origin_id || "?") + " → " +
+        String(encounter.destination_id || "?")
+    }
+    const tacticalAction = tacticalEncounterAction(encounter.classification)
+    for (const button of panel.querySelectorAll("[data-encounter-action]")) {
+      if (button.dataset.encounterAction === "engage") {
+        button.hidden = !tacticalAction.visible
+        button.textContent = tacticalAction.label
+      }
+      button.disabled = this.encounterResolving
+    }
+    if (wasHidden) {
+      this.exitMouseSteering({silent: true})
+      this.flightControls?.release({silent: true})
+      this.spaceLaser?.release()
+      panel.querySelector('.solar-encounter-eye:first-child [data-encounter-action="hail"]')
+        ?.focus({preventScroll: true})
+    }
+  }
+
+  showSolarTactical() {
+    const panel = this.root.querySelector("#solar-tactical-panel")
+    if (!panel) return
+    const tactical = this.navComputer?.solarNavigation?.tactical_encounter
+    panel.hidden = !tactical
+    if (!tactical) {
+      this.tacticalRetreating = false
+      return
+    }
+    const label = panel.querySelector("[data-solar-tactical-name]")
+    if (label) label.textContent = (tactical.call_sign || "Hostile interception") +
+      " · " + (tactical.faction_name || tactical.faction_id || "Unregistered faction")
+    const button = panel.querySelector("[data-solar-tactical-retreat]")
+    if (button) button.disabled = this.tacticalRetreating
+
+    const surrendered = [...this.entities.values()].some(entity =>
+      entity.kind === "npc" &&
+      entity.state === "surrendered" &&
+      entity.npcTypeId === "solar-scow-" + this.player?.pilot?.id)
+    const accept = panel.querySelector("[data-solar-tactical-surrender]")
+    const seize = panel.querySelector("[data-solar-tactical-seize]")
+    for (const button of [accept, seize]) {
+      if (button) {
+        button.hidden = !surrendered
+        button.disabled = this.tacticalRetreating
+      }
+    }
+    const message = panel.querySelector("[data-solar-tactical-message]")
+    if (message && !this.tacticalRetreating) {
+      message.textContent = surrendered
+        ? "Captain offers surrender. Release them or seize cargo (4-tonne hold limits apply)."
+        : "Defeat the opposing vessel, accept surrender if offered, or retreat."
+    }
+  }
+
+  solarEnterEncounter(encounterId, done) {
+    if (this.channel?.state !== "joined") return done(false, null, "relay offline")
+    this.channel.push("solar_enter_encounter", {encounter_id: encounterId}, 5000)
+      .receive("ok", response => done(true, response))
+      .receive("error", response => done(false, null, response.reason))
+      .receive("timeout", () => done(false, null, "timeout"))
+  }
+
+  solarAcceptSurrender(encounterId, done) {
+    if (this.channel?.state !== "joined") return done(false, null, "relay offline")
+    this.channel.push("solar_accept_surrender", {encounter_id: encounterId}, 5000)
+      .receive("ok", response => done(true, response.navigation))
+      .receive("error", response => done(false, null, response.reason))
+      .receive("timeout", () => done(false, null, "timeout"))
+  }
+
+  solarSeizeCargo(encounterId, done) {
+    if (this.channel?.state !== "joined") return done(false, null, "relay offline")
+    this.channel.push("solar_seize_cargo", {encounter_id: encounterId}, 5000)
+      .receive("ok", response => done(true, response.navigation, null, response.claim))
+      .receive("error", response => done(false, null, response.reason))
+      .receive("timeout", () => done(false, null, "timeout"))
+  }
+
+  solarRetreatEncounter(encounterId, done) {
+    if (this.channel?.state !== "joined") return done(false, null, "relay offline")
+    this.channel.push("solar_retreat_encounter", {encounter_id: encounterId}, 5000)
+      .receive("ok", response => done(true, response.navigation))
+      .receive("error", response => done(false, null, response.reason))
+      .receive("timeout", () => done(false, null, "timeout"))
+  }
+
+  solarSetCourse(target, done) {
+    if(this.channel?.state!=="joined")return done(false,null,"relay offline")
+    const payload=typeof target==="string" ? {body_id:target} : {point:target}
+    this.channel.push("solar_set_course",payload,5000)
+      .receive("ok",response=>done(true,response.navigation))
+      .receive("error",response=>done(false,null,response.reason))
+      .receive("timeout",()=>done(false,null,"timeout"))
+  }
+
+  solarEnterFreeFlight(done) {
+    if(this.channel?.state!=="joined")return done(false,null,"relay offline")
+    this.channel.push("solar_enter_free_flight",{},5000)
+      .receive("ok",response=>done(true,response.navigation))
+      .receive("error",response=>done(false,null,response.reason))
+      .receive("timeout",()=>done(false,null,"timeout"))
+  }
+
+  solarResumeCruise(done) {
+    if(this.channel?.state!=="joined")return done(false,null,"relay offline")
+    this.channel.push("solar_resume_cruise",{},5000)
+      .receive("ok",response=>done(true,response.navigation))
+      .receive("error",response=>done(false,null,response.reason))
+      .receive("timeout",()=>done(false,null,"timeout"))
+  }
+
+  solarCancelCourse(done) {
+    if(this.channel?.state!=="joined")return done(false,null,"relay offline")
+    this.channel.push("solar_cancel_course",{},5000)
+      .receive("ok",response=>done(true,response.navigation))
+      .receive("error",response=>done(false,null,response.reason))
+      .receive("timeout",()=>done(false,null,"timeout"))
+  }
+
+  solarResolveEncounter(encounterId, done) {
+    if (this.channel?.state !== "joined") return done(false, null, "relay offline")
+    this.channel.push("solar_resolve_encounter", {
+      encounter_id: encounterId, choice: "continue",
+    }, 5000)
+      .receive("ok", response => done(true, response.navigation))
+      .receive("error", response => done(false, null, response.reason))
+      .receive("timeout", () => done(false, null, "timeout"))
+  }
+
+  solarHail(contactId, done) {
+    if (this.channel?.state !== "joined") return done(false, null, "relay offline")
+    this.channel.push("solar_hail", {contact_id: contactId}, 3000)
+      .receive("ok", response => done(true, response.communication))
+      .receive("error", response => done(false, null, response.reason))
+      .receive("timeout", () => done(false, null, "timeout"))
+  }
+
+  plotCourse(waypoints, done) {
+    if (this.channel?.state !== "joined") return done(false, "relay offline")
+    this.channel.push("plot_course", {waypoints}, 5000)
+      .receive("ok", response => {
+        if (response.entity) this.upsertEntity(response.entity)
+        this.flightControls.resetThrottle()
+        done(true)
+      })
+      .receive("error", response => done(false, response.reason))
+      .receive("timeout", () => done(false, "timeout"))
+  }
+
+  stopNavigation(done) {
+    if (this.channel?.state !== "joined") return done(false, "relay offline")
+    this.channel.push("stop_navigation", {}, 5000)
+      .receive("ok", response => {
+        if (response.entity) this.upsertEntity(response.entity)
+        done(true)
+      })
+      .receive("error", response => done(false, response.reason))
+      .receive("timeout", () => done(false, "timeout"))
+  }
+
   sendDestination(destination) {
+    if (this.inSystemCruise()) return false
     if (!validDestination(destination, this.boundaries)) return false
     if (!this.channel || !this.selfId || this.channel.state !== "joined") {
       this.showError("Navigation is unavailable while the sector relay reconnects.")
@@ -317,31 +1007,30 @@ class SpaceClient {
     return true
   }
 
-  handleTargetPointer(event) {
+  handleLaserPointerDown(event) {
+    const active = !this.navComputer?.isOpen && !this.inSystemCruise() &&
+      this.channel?.state === "joined" &&
+      this.entities.get(this.selfId)?.status !== "destroyed"
+    if (!manualLaserPointerIntent(event, active)) return
+
     event.preventDefault()
-    this.selectTargetAtPointer({clientX: event.clientX, clientY: event.clientY})
+    this.canvas.focus({preventScroll: true})
+    this.spaceLaser?.press()
   }
 
   selectTargetAtPointer(pointer) {
+    if (this.inSystemCruise()) return false
     const rect = this.canvas.getBoundingClientRect()
-    const target = findNpcAtScreenPoint(
-      this.entities.values(),
-      {x: pointer.clientX - rect.left, y: pointer.clientY - rect.top},
-      position => this.worldToScreen(position),
-      () => this.npcRenderDimensions()
-    )
-
-    if (!target) return false
-    this.selectTarget(target.id)
+    const targetId = this.stereoView?.selectNpc(pointer, rect)
+    if (!targetId) return false
+    this.selectTarget(targetId)
     return true
   }
 
-  npcRenderDimensions() {
-    const {definition} = this.assets.get("npcs", "sentinel")
-    return {width: definition?.width || 60, height: definition?.height || 60}
-  }
-
   handleCombatKey(event) {
+    if (this.navComputer?.isOpen) return
+    if (this.inSystemCruise()) return
+    if (event.defaultPrevented) return
     const intent = combatKeyIntent(event)
     if (!intent) return
 
@@ -349,9 +1038,7 @@ class SpaceClient {
     if (intent.type === "toggle_laser") this.toggleLaserFire()
     if (intent.type === "disengage") this.disengageCombat()
     if (intent.type === "activate_slot") this.activateHotbarSlot(intent.slot)
-    if (intent.type === "rocket_unavailable") {
-      this.setCombatMessage("Rocket action unavailable. Space is reserved for future single-shot rockets.")
-    }
+    if (intent.type === "target_nearest") this.selectNearestTarget()
   }
 
   selectNearestTarget() {
@@ -362,6 +1049,7 @@ class SpaceClient {
   }
 
   selectTarget(targetId) {
+    if (this.inSystemCruise()) return
     if (!this.channel || !this.selfId) return
 
     this.channel
@@ -397,6 +1085,30 @@ class SpaceClient {
       .receive("timeout", () => this.setCombatMessage("Engagement command timed out."))
   }
 
+  fireReadyWeapon(done) {
+    if (this.channel?.state !== "joined" || !this.selfId) {
+      done(false, "disconnected")
+      return
+    }
+
+    this.channel
+      .push("fire_ready_weapon", {}, 3000)
+      .receive("ok", shot => {
+        const own = this.entities.get(this.selfId)
+        if (own) own.nextAttackTick = shot.next_attack_tick
+        this.worldTick = Math.max(this.worldTick, Number(shot.tick) || 0)
+        done(true)
+      })
+      .receive("error", response => {
+        this.setCombatMessage(this.attackError(response.reason))
+        done(false, response.reason)
+      })
+      .receive("timeout", () => {
+        this.setCombatMessage("Manual laser command timed out.")
+        done(false, "timeout")
+      })
+  }
+
   toggleLaserFire() {
     if (!this.channel || !this.selfId) return
 
@@ -408,6 +1120,7 @@ class SpaceClient {
   }
 
   activateHotbarSlot(slot) {
+    if (this.inSystemCruise()) return
     if (!this.channel || !this.selfId || !Number.isInteger(slot)) return
 
     this.selectedHotbarSlot = slot
@@ -491,52 +1204,90 @@ class SpaceClient {
   laserFired(attack) {
     const attacker = this.entities.get(entityKey(attack.attacker_id))
     const target = this.entities.get(entityKey(attack.target_id))
-    if (target) applyAuthoritativeDamage(target, attack.target)
+    applyLaserBurstDamage(this.entities, attack)
     if (attacker) attacker.nextAttackTick = attack.next_attack_tick
     this.worldTick = Math.max(this.worldTick, Number(attack.tick) || 0)
 
     const startedAt = performance.now()
-    if (attacker && target) {
+    for (const ray of visualLaserRays(attack, attacker, target)) {
       this.beams.push({
-        from: {...attacker.render},
-        to: {...target.render},
-        hostile: attacker.kind === "npc",
+        ...ray,
+        hostile: attacker?.kind === "npc",
+        shooterId: entityKey(attack.attacker_id),
         startedAt,
-        expiresAt: startedAt + 230,
-      })
-      this.impacts.push({
-        position: {...target.render},
-        shield: Number(attack.shield_damage) > 0,
-        startedAt,
-        expiresAt: startedAt + 420,
+        expiresAt: startedAt + 550,
       })
     }
 
     if (entityKey(attack.attacker_id) === this.selfId) {
-      this.setCombatMessage(
-        `${number(attack.shield_damage)} shield · ${number(attack.hull_damage)} hull damage`
-      )
+      this.lastLaserFeedback = laserFeedback(attack, this.entities, startedAt)
+      const feedback = this.lastLaserFeedback
+      this.setCombatMessage(feedback.label + "  " + feedback.detail)
     }
 
     this.updateCombatHud()
   }
 
-  entityDestroyed(destruction) {
-    const id = entityKey(destruction.entity.id)
-    const entity = this.entities.get(id)
-    const position = entity?.render || destruction.entity.position
-    const startedAt = performance.now()
+  planetaryProximityChanged(event) {
+    const warning = proximityEventWarning(event, this.selfId)
+    if (warning !== undefined) this.applyPlanetaryWarning(warning)
+  }
 
-    if (position) {
-      this.explosions.push({position: {...position}, startedAt, expiresAt: startedAt + 850})
+  applyPlanetaryWarning(warning, {announce = true} = {}) {
+    const view = planetaryWarningView(warning)
+    this.planetaryWarningDisplay = view
+    const nextLevel = view?.level || "clear"
+    const nextPlanet = warning?.planet_id || null
+    const changed = nextLevel !== this.planetaryWarningLevel ||
+      nextPlanet !== this.planetaryWarningPlanet
+    const banner = this.root.querySelector("#planetary-proximity-warning")
+    const announcement = this.root.querySelector("#planetary-proximity-announcement")
+
+    if (banner) {
+      banner.hidden = !view
+      banner.dataset.level = nextLevel
+      banner.classList.toggle("border-rose-400/80", nextLevel === "critical")
+      banner.classList.toggle("bg-rose-950/95", nextLevel === "critical")
+      banner.classList.toggle("border-amber-400/60", nextLevel === "caution")
+      banner.classList.toggle("bg-amber-950/85", nextLevel === "caution")
+    }
+    if (view) {
+      const title = this.root.querySelector("#planetary-proximity-level")
+      const detail = this.root.querySelector("#planetary-proximity-detail")
+      if (title) {
+        title.textContent = view.label
+        title.classList.toggle("text-rose-100", view.level === "critical")
+        title.classList.toggle("text-amber-100", view.level === "caution")
+      }
+      if (detail) detail.textContent = view.detail
     }
 
-    if (destruction.entity.kind === "npc") this.removeEntity(id)
+    if (announce && changed && announcement) {
+      announcement.textContent = view?.announcement || "Planetary collision clearance restored."
+    }
+
+    this.planetaryWarningLevel = nextLevel
+    this.planetaryWarningPlanet = nextPlanet
+  }
+
+  entityDestroyed(destruction) {
+    const id = entityKey(destruction.entity.id)
+    const isNpc = destruction.entity.kind === "npc"
+    const impact = planetaryImpactMessage(destruction)
+    if (isNpc) this.removeEntity(id)
+    else this.upsertEntity(destruction.entity, true)
     if (this.selectedTargetId === id) this.selectedTargetId = null
 
-    this.setCombatMessage(
-      destruction.entity.kind === "npc" ? "Hostile destroyed. Respawn telemetry queued." : "Ship destroyed."
-    )
+    const label = impact ||
+      (isNpc ? "Hostile destroyed. Respawn telemetry queued." : "Ship destroyed.")
+    this.setCombatMessage(label)
+    if (id === this.selfId) {
+      // Server-confirmed destruction: the tactical SOL hold is canceled on
+      // defeat. A fresh session recreates a ship at the departure region.
+      this.exitMouseSteering({silent: true})
+      this.applyPlanetaryWarning(null, {announce: false})
+      this.showError(impact || "Ship destroyed. Reconnect to respawn at your departure region.")
+    }
     this.updateCombatHud()
   }
 
@@ -565,9 +1316,18 @@ class SpaceClient {
   frame(time) {
     const deltaSeconds = Math.min((time - this.lastFrame) / 1000, 0.1)
     this.lastFrame = time
+    // Expire mouse commands before advancing the visible cockpit. The
+    // independent idle timer can stop them between rendered frames as well.
+    if (this.mouseSteeringEnabled && document.pointerLockElement === this.canvas) {
+      const expired = this.mouseSteering.expire(time)
+      if (expired) this.flightControls?.setMouseSteering(expired)
+    }
     this.interpolate(deltaSeconds)
+    this.flightControls?.heartbeat(time)
+    this.spaceLaser?.update(time)
     this.draw(time)
     this.minimap?.draw(time)
+    this.navComputer?.draw(time)
     this.updateCoordinates()
     this.updateCombatHud()
     requestAnimationFrame(nextTime => this.frame(nextTime))
@@ -575,10 +1335,35 @@ class SpaceClient {
 
   interpolate(deltaSeconds) {
     const positionBlend = 1 - Math.exp(-deltaSeconds / 0.085)
+    const pointerLocked = this.mouseSteeringEnabled &&
+      document.pointerLockElement === this.canvas
 
     for (const entity of this.entities.values()) {
+      // The local pointer-lock camera should not trail far behind the last
+      // server orientation when the user releases the mouse. Remote players
+      // and keyboard-only flight retain the original 85ms smoothing.
+      const cameraSettle = cameraSettleSeconds({
+        ownShip: entity.id === this.selfId,
+        pointerLocked,
+      })
       entity.render.x += (entity.target.x - entity.render.x) * positionBlend
       entity.render.y += (entity.target.y - entity.render.y) * positionBlend
+      entity.render.z = (entity.render.z ?? 0) +
+        ((entity.target.z ?? 0) - (entity.render.z ?? 0)) * positionBlend
+      if (entity.attitude) {
+        entity.renderAttitude = smoothAttitude(
+          entity.renderAttitude || entity.attitude,
+          entity.attitude,
+          deltaSeconds,
+          cameraSettle
+        )
+      }
+      if (entity.orientation) {
+        entity.renderOrientation = smoothOrientation(
+          entity.renderOrientation || entity.orientation,
+          entity.orientation, deltaSeconds, cameraSettle
+        )
+      }
     }
 
     const rotationBlend = 1 - Math.exp(-deltaSeconds / 0.075)
@@ -590,345 +1375,26 @@ class SpaceClient {
       )
     }
 
-    const ownShip = this.entities.get(this.selfId)
-    if (!ownShip) return
-
-    const cameraTarget = this.clampedCamera(ownShip.render)
-    const cameraBlend = 1 - Math.exp(-deltaSeconds / 0.14)
-    this.camera.x += (cameraTarget.x - this.camera.x) * cameraBlend
-    this.camera.y += (cameraTarget.y - this.camera.y) * cameraBlend
-  }
-
-  clampedCamera(position) {
-    const halfWidth = this.viewport.width / 2
-    const halfHeight = this.viewport.height / 2
-    const x = this.boundaries.width <= this.viewport.width
-      ? this.boundaries.width / 2
-      : clamp(position.x, halfWidth, this.boundaries.width - halfWidth)
-    const y = this.boundaries.height <= this.viewport.height
-      ? this.boundaries.height / 2
-      : clamp(position.y, halfHeight, this.boundaries.height - halfHeight)
-    return {x, y}
   }
 
   draw(time) {
-    const context = this.context
-    context.setTransform(this.viewport.dpr, 0, 0, this.viewport.dpr, 0, 0)
-    const gradient = context.createRadialGradient(
-      this.viewport.width * 0.52,
-      this.viewport.height * 0.42,
-      20,
-      this.viewport.width * 0.52,
-      this.viewport.height * 0.42,
-      Math.max(this.viewport.width, this.viewport.height)
-    )
-    gradient.addColorStop(0, "#071426")
-    gradient.addColorStop(0.55, "#030a16")
-    gradient.addColorStop(1, "#01040a")
-    context.fillStyle = gradient
-    context.fillRect(0, 0, this.viewport.width, this.viewport.height)
+    // A missing WebGL renderer must never silently bring back Classic 2D.
+    if (!this.stereoView) return
 
-    this.drawStars(time)
-    this.drawGrid()
-    this.drawBoundary()
-    this.drawDestination(time)
-
-    const orderedEntities = [...this.entities.values()].sort((left, right) => {
-      const kindOrder = (left.kind === "player" ? 0 : 1) - (right.kind === "player" ? 0 : 1)
-      return kindOrder || left.id.localeCompare(right.id)
-    })
-    for (const entity of orderedEntities) this.drawEntity(entity, time)
-
-    this.drawCombatEffects(time)
-  }
-
-  drawStars(time) {
-    const context = this.context
-    for (const star of this.stars) {
-      const width = this.viewport.width + 120
-      const height = this.viewport.height + 120
-      const x = ((star.x * width - this.camera.x * star.depth * 0.11) % width + width) % width - 60
-      const y = ((star.y * height - this.camera.y * star.depth * 0.11) % height + height) % height - 60
-      const shimmer = 0.72 + Math.sin(time * 0.0018 + star.phase) * 0.28
-      context.globalAlpha = star.alpha * shimmer
-      context.fillStyle = star.tint
-      context.beginPath()
-      context.arc(x, y, star.radius, 0, Math.PI * 2)
-      context.fill()
-    }
-    context.globalAlpha = 1
-  }
-
-  drawGrid() {
-    const context = this.context
-    const spacing = 500
-    const left = this.camera.x - this.viewport.width / 2
-    const top = this.camera.y - this.viewport.height / 2
-    const right = left + this.viewport.width
-    const bottom = top + this.viewport.height
-    context.lineWidth = 1
-    context.strokeStyle = "rgba(103, 232, 249, 0.035)"
-    context.beginPath()
-
-    for (let x = Math.floor(left / spacing) * spacing; x <= right; x += spacing) {
-      const screen = this.worldToScreen({x, y: 0})
-      context.moveTo(Math.round(screen.x) + 0.5, 0)
-      context.lineTo(Math.round(screen.x) + 0.5, this.viewport.height)
-    }
-    for (let y = Math.floor(top / spacing) * spacing; y <= bottom; y += spacing) {
-      const screen = this.worldToScreen({x: 0, y})
-      context.moveTo(0, Math.round(screen.y) + 0.5)
-      context.lineTo(this.viewport.width, Math.round(screen.y) + 0.5)
-    }
-    context.stroke()
-  }
-
-  drawBoundary() {
-    const context = this.context
-    const origin = this.worldToScreen({x: 0, y: 0})
-    context.save()
-    context.strokeStyle = "rgba(103, 232, 249, 0.65)"
-    context.lineWidth = 2
-    context.setLineDash([10, 8])
-    context.shadowColor = "rgba(34, 211, 238, 0.4)"
-    context.shadowBlur = 12
-    context.strokeRect(origin.x, origin.y, this.boundaries.width, this.boundaries.height)
-    context.restore()
-  }
-
-  drawDestination(time) {
-    if (!this.commandDestination) return
-    const context = this.context
-    const screen = this.worldToScreen(this.commandDestination)
-    const pulse = 12 + Math.sin(time * 0.006) * 3
-    context.save()
-    context.strokeStyle = "rgba(103, 232, 249, 0.8)"
-    context.lineWidth = 1.5
-    context.beginPath()
-    context.arc(screen.x, screen.y, pulse, 0, Math.PI * 2)
-    context.moveTo(screen.x - 18, screen.y)
-    context.lineTo(screen.x + 18, screen.y)
-    context.moveTo(screen.x, screen.y - 18)
-    context.lineTo(screen.x, screen.y + 18)
-    context.stroke()
-    context.restore()
-  }
-
-  drawEntity(entity, time) {
-    if (entity.kind === "npc") this.drawNpc(entity, time)
-    else this.drawShip(entity, time)
-  }
-
-  drawShip(entity, time) {
-    const context = this.context
-    const screen = this.worldToScreen(entity.render)
-    const isSelf = entity.id === this.selfId
-    const assetName = isSelf ? "localScout" : "remoteScout"
-    const {definition, image} = this.assets.get("ships", assetName)
-    const width = definition?.width || 68
-    const height = definition?.height || 52
-
-    context.save()
-    context.translate(screen.x, screen.y)
-    context.rotate(entity.angle + Math.PI / 2)
-
-    if (entity.destination) {
-      const exhaust = 12 + Math.sin(time * 0.018 + Number(entity.id)) * 4
-      const exhaustGradient = context.createLinearGradient(0, height / 4, 0, height / 2 + exhaust)
-      exhaustGradient.addColorStop(0, isSelf ? "rgba(103,232,249,0.85)" : "rgba(196,181,253,0.8)")
-      exhaustGradient.addColorStop(1, "rgba(37,99,235,0)")
-      context.fillStyle = exhaustGradient
-      context.beginPath()
-      context.moveTo(-7, height * 0.28)
-      context.lineTo(0, height * 0.5 + exhaust)
-      context.lineTo(7, height * 0.28)
-      context.closePath()
-      context.fill()
-    }
-
-    context.shadowColor = isSelf ? "rgba(34,211,238,0.6)" : "rgba(167,139,250,0.5)"
-    context.shadowBlur = isSelf ? 18 : 12
-    if (image) {
-      context.drawImage(image, -width / 2, -height / 2, width, height)
-    } else {
-      this.drawFallbackShip(context, isSelf, width, height)
-    }
-    context.restore()
-
-    const pilot = this.pilots.get(entity.playerId)
-    context.textAlign = "center"
-    context.font = isSelf ? "600 12px ui-sans-serif" : "500 11px ui-sans-serif"
-    context.fillStyle = isSelf ? "#a5f3fc" : "#ddd6fe"
-    context.fillText(pilot?.pilot_name || `Pilot ${entity.playerId}`, screen.x, screen.y + height / 2 + 17)
-  }
-
-  drawNpc(entity, time) {
-    const context = this.context
-    const screen = this.worldToScreen(entity.render)
-    const {definition, image} = this.assets.get("npcs", "sentinel")
-    const width = definition?.width || 60
-    const height = definition?.height || 60
-    const selected = entity.id === this.selectedTargetId
-
-    context.save()
-    context.translate(screen.x, screen.y)
-
-    if (selected) {
-      const pulse = 39 + Math.sin(time * 0.009) * 4
-      context.strokeStyle = "rgba(251, 146, 60, 0.95)"
-      context.lineWidth = 2
-      context.setLineDash([7, 5])
-      context.beginPath()
-      context.arc(0, 0, pulse, 0, Math.PI * 2)
-      context.stroke()
-      context.setLineDash([])
-    }
-
-    context.rotate(entity.angle + Math.PI / 2)
-    context.shadowColor = selected ? "rgba(251,146,60,0.9)" : "rgba(249,115,22,0.48)"
-    context.shadowBlur = selected ? 22 : 12
-    if (image) {
-      context.drawImage(image, -width / 2, -height / 2, width, height)
-    } else {
-      this.drawFallbackNpc(context, width, height)
-    }
-    context.restore()
-
-    this.drawEntityBars(entity, screen, width)
-    context.textAlign = "center"
-    context.font = selected ? "700 12px ui-sans-serif" : "600 11px ui-sans-serif"
-    context.fillStyle = selected ? "#fed7aa" : "#fdba74"
-    context.fillText(entity.displayName || "Hostile", screen.x, screen.y + height / 2 + 28)
-    context.font = "600 8px ui-sans-serif"
-    context.fillStyle = "rgba(251,146,60,0.68)"
-    context.fillText((entity.state || "idle").toUpperCase(), screen.x, screen.y + height / 2 + 40)
-  }
-
-  drawFallbackNpc(context, width, height) {
-    context.fillStyle = "#431407"
-    context.strokeStyle = "#fb923c"
-    context.lineWidth = 2
-    context.beginPath()
-    context.moveTo(0, -height / 2)
-    context.lineTo(width / 2, 0)
-    context.lineTo(0, height / 2)
-    context.lineTo(-width / 2, 0)
-    context.closePath()
-    context.fill()
-    context.stroke()
-  }
-
-  drawEntityBars(entity, screen, width) {
-    const context = this.context
-    const barWidth = Math.max(46, width)
-    const left = screen.x - barWidth / 2
-    const top = screen.y - width / 2 - 14
-    context.fillStyle = "rgba(2,6,23,0.82)"
-    context.fillRect(left, top, barWidth, 7)
-    context.fillStyle = "#38bdf8"
-    context.fillRect(left, top, barWidth * healthPercent(entity.shields, entity.maxShields) / 100, 2)
-    context.fillStyle = "#34d399"
-    context.fillRect(left, top + 4, barWidth * healthPercent(entity.hull, entity.maxHull) / 100, 3)
-  }
-
-  drawCombatEffects(time) {
+    this.stereoView.render(this, time)
     this.beams = this.beams.filter(beam => beam.expiresAt > time)
-    this.impacts = this.impacts.filter(impact => impact.expiresAt > time)
-    this.explosions = this.explosions.filter(explosion => explosion.expiresAt > time)
-
-    for (const beam of this.beams) this.drawBeam(beam, time)
-    for (const impact of this.impacts) this.drawImpact(impact, time)
-    for (const explosion of this.explosions) this.drawExplosion(explosion, time)
-  }
-
-  drawBeam(beam, time) {
-    const context = this.context
-    const from = this.worldToScreen(beam.from)
-    const to = this.worldToScreen(beam.to)
-    const deltaX = to.x - from.x
-    const deltaY = to.y - from.y
-    const length = Math.hypot(deltaX, deltaY)
-    const progress = clamp((time - beam.startedAt) / (beam.expiresAt - beam.startedAt), 0, 1)
-    const {definition, image} = this.assets.get("lasers", "pulse")
-
-    context.save()
-    context.translate(from.x, from.y)
-    context.rotate(Math.atan2(deltaY, deltaX))
-    context.globalAlpha = 1 - progress * 0.72
-    context.shadowColor = beam.hostile ? "#fb923c" : "#22d3ee"
-    context.shadowBlur = 16 + Math.sin(progress * Math.PI) * 12
-
-    if (image) {
-      context.drawImage(image, 0, -(definition?.height || 8) / 2, length, definition?.height || 8)
-    } else {
-      context.strokeStyle = beam.hostile ? "#fdba74" : "#a5f3fc"
-      context.lineWidth = 3 + Math.sin(progress * Math.PI) * 2
-      context.beginPath()
-      context.moveTo(0, 0)
-      context.lineTo(length, 0)
-      context.stroke()
-    }
-    context.restore()
-  }
-
-  drawImpact(impact, time) {
-    const context = this.context
-    const screen = this.worldToScreen(impact.position)
-    const progress = clamp((time - impact.startedAt) / (impact.expiresAt - impact.startedAt), 0, 1)
-    context.save()
-    context.globalAlpha = 1 - progress
-    context.strokeStyle = impact.shield ? "#67e8f9" : "#fb923c"
-    context.lineWidth = 4 - progress * 2
-    context.shadowColor = context.strokeStyle
-    context.shadowBlur = 18
-    context.beginPath()
-    context.arc(screen.x, screen.y, 18 + progress * 30, 0, Math.PI * 2)
-    context.stroke()
-    context.restore()
-  }
-
-  drawExplosion(explosion, time) {
-    const context = this.context
-    const screen = this.worldToScreen(explosion.position)
-    const progress = clamp((time - explosion.startedAt) / (explosion.expiresAt - explosion.startedAt), 0, 1)
-    const {definition, image} = this.assets.get("explosions", "plasma")
-    const size = (definition?.width || 96) * (0.45 + progress * 1.25)
-    context.save()
-    context.translate(screen.x, screen.y)
-    context.rotate(progress * 1.8)
-    context.globalAlpha = 1 - progress
-    context.shadowColor = "#f97316"
-    context.shadowBlur = 28
-    if (image) context.drawImage(image, -size / 2, -size / 2, size, size)
-    else {
-      context.fillStyle = "#fb923c"
-      context.beginPath()
-      context.arc(0, 0, size / 3, 0, Math.PI * 2)
-      context.fill()
-    }
-    context.restore()
-  }
-
-  drawFallbackShip(context, isSelf, width, height) {
-    context.fillStyle = isSelf ? "#102b3b" : "#211939"
-    context.strokeStyle = isSelf ? "#67e8f9" : "#c4b5fd"
-    context.lineWidth = 2
-    context.beginPath()
-    context.moveTo(0, -height / 2)
-    context.lineTo(width / 2, height / 3)
-    context.lineTo(10, height / 5)
-    context.lineTo(0, height / 2)
-    context.lineTo(-10, height / 5)
-    context.lineTo(-width / 2, height / 3)
-    context.closePath()
-    context.fill()
-    context.stroke()
-  }
-
-  worldToScreen(position) {
-    return {
-      x: position.x - this.camera.x + this.viewport.width / 2,
-      y: position.y - this.camera.y + this.viewport.height / 2,
+    const feedback = this.lastLaserFeedback
+    const element = this.root.querySelector("#laser-hit-confirmation")
+    if (element) {
+      const active = feedback && time - feedback.at < LASER_FEEDBACK_MS
+      element.classList.toggle("hidden", !active)
+      if (active) {
+        element.textContent = feedback.label
+        element.classList.toggle("text-emerald-200", feedback.hit)
+        element.classList.toggle("text-rose-200", !feedback.hit)
+        element.classList.toggle("border-emerald-400/50", feedback.hit)
+        element.classList.toggle("border-rose-400/50", !feedback.hit)
+      }
     }
   }
 
@@ -948,14 +1414,30 @@ class SpaceClient {
     const equipment = [...configuration.lasers, ...configuration.generators, ...configuration.drones]
     this.text(
       "#hud-equipment",
-      equipment.length ? equipment.map(item => item.name).join(" · ") : "Phoenix pulse emitter · Base ship systems"
+      equipment.length ? equipment.map(item => item.name).join(" · ") : "Garnet laser (10) · Forward-1 shield · Standard missile tube"
     )
   }
 
   updateCoordinates() {
     const ownShip = this.entities.get(this.selfId)
     if (!ownShip) return
-    this.text("#hud-coordinates", `${number(ownShip.render.x)} / ${number(ownShip.render.y)}`)
+    this.text("#hud-coordinates", `${number(ownShip.render.x)} / ${number(ownShip.render.y)} / ${number(ownShip.render.z)}`)
+    this.text("#hud-flight-mode", (ownShip.flightMode || "cruise").toUpperCase())
+    this.text("#hud-throttle", `${Math.round((ownShip.throttle || 0) * 100)}%`)
+    const v = ownShip.velocity || {x: 0, y: 0, z: 0}
+    this.text("#hud-actual-speed", `${Math.round(Math.hypot(v.x, v.y, v.z))} u/s`)
+    const a = orientationTelemetry(
+      ownShip.orientation, ownShip.attitude || {yaw: 0, pitch: 0, roll: 0}
+    )
+    const deg = radians => Math.round(radians * 180 / Math.PI)
+    this.text("#hud-heading", `${(deg(a.yaw) + 360) % 360}°`)
+    this.text("#hud-pitch", `${deg(a.pitch)}°`)
+    this.text("#hud-roll", `${deg(a.roll)}°`)
+    const r = ownShip.angularVelocity || {yaw: 0, pitch: 0, roll: 0}
+    this.text("#hud-turn-rates",
+      `${Math.round(Math.abs(deg(r.pitch)))} / ${Math.round(Math.abs(deg(r.yaw)))} / ${Math.round(Math.abs(deg(r.roll)))} °/s`)
+    const input = this.flightControls?.axes().pitch || 0
+    this.text("#hud-pitch-input", input < 0 ? "DOWN" : input > 0 ? "UP" : "—")
   }
 
   updateNavigationStatus() {
@@ -965,9 +1447,9 @@ class SpaceClient {
     if (ownShip?.status === "destroyed") {
       status = "Navigation unavailable"
     } else if (this.commandDestination) {
-      status = `Course locked · ${number(this.commandDestination.x)} / ${number(this.commandDestination.y)}`
+      status = `Course locked · ${number(this.commandDestination.x)} / ${number(this.commandDestination.y)} / ${number(this.commandDestination.z)}`
     } else if (ownShip) {
-      status = "Click sector to set course"
+      status = "Press M for atlas navigation"
     }
 
     this.text("#minimap-navigation-status", status)
@@ -985,32 +1467,6 @@ class SpaceClient {
     }
 
     this.updateHotbar()
-
-    const target = this.entities.get(this.selectedTargetId)
-    const panel = this.root.querySelector("#combat-target-panel")
-    const empty = this.root.querySelector("#combat-target-empty")
-    if (!panel) return
-
-    if (target?.kind === "npc") {
-      panel.classList.remove("hidden")
-      empty?.classList.add("hidden")
-      this.text("#combat-target-name", target.displayName || "Hostile")
-      const engagement = ownShip?.engagedTargetId === target.id ? "ENGAGED" : "SELECTED"
-      this.text("#combat-target-summary", `${target.displayName || "Hostile"} · ${engagement}`)
-      this.text("#combat-target-type", `Hostile NPC · ${titleize(target.npcTypeId)}`)
-      this.text(
-        "#combat-target-state",
-        `${engagement} · ${(target.state || "idle").toUpperCase()} · ${number(target.attackRange)}u weapons`
-      )
-      this.text("#combat-target-hull", `${number(target.hull)} / ${number(target.maxHull)}`)
-      this.text("#combat-target-shields", `${number(target.shields)} / ${number(target.maxShields)}`)
-      this.setWidth("#combat-target-hull-bar", healthPercent(target.hull, target.maxHull))
-      this.setWidth("#combat-target-shield-bar", healthPercent(target.shields, target.maxShields))
-    } else {
-      panel.classList.add("hidden")
-      empty?.classList.remove("hidden")
-      this.text("#combat-target-summary", "No target")
-    }
   }
 
   updateHotbar() {
@@ -1054,23 +1510,205 @@ class SpaceClient {
   resize() {
     const rect = this.canvas.getBoundingClientRect()
     const dpr = Math.min(window.devicePixelRatio || 1, 2)
-    this.viewport = {width: rect.width, height: rect.height, dpr}
-    this.canvas.width = Math.max(1, Math.floor(rect.width * dpr))
-    this.canvas.height = Math.max(1, Math.floor(rect.height * dpr))
+    this.stereoView?.resize(rect.width, rect.height, dpr)
   }
 
-  createStars() {
-    const random = seededRandom(0x0B17)
-    const tints = ["#ffffff", "#bae6fd", "#c7d2fe", "#a5f3fc"]
-    return Array.from({length: 260}, () => ({
-      x: random(),
-      y: random(),
-      depth: 0.18 + random() * 0.82,
-      radius: 0.35 + random() * 1.25,
-      alpha: 0.28 + random() * 0.62,
-      phase: random() * Math.PI * 2,
-      tint: tints[Math.floor(random() * tints.length)],
-    }))
+  scheduleMouseStop() {
+    window.clearTimeout(this.mouseIdleTimer)
+    // Mouse movement cannot emit its own "stopped" event. An independent
+    // timer sends neutral without waiting for the next animation frame.
+    this.mouseIdleTimer = window.setTimeout(() => {
+      this.mouseIdleTimer = null
+      if (!this.mouseSteeringEnabled ||
+          document.pointerLockElement !== this.canvas ||
+          !this.flightControls?.active()) return
+      const expired = this.mouseSteering.expire(performance.now())
+      if (expired) this.flightControls.setMouseSteering(expired)
+    }, MOUSE_STEERING_IDLE_MS)
+  }
+
+  setupMouseSteering() {
+    const toggle = this.root.querySelector("#nav-mouse-steering")
+    const slider = this.root.querySelector("#nav-mouse-sensitivity")
+    const output = this.root.querySelector("#nav-mouse-sensitivity-value")
+    if (toggle) toggle.checked = this.mouseSteeringEnabled
+    if (slider) slider.value = String(Math.round(this.mouseSteeringSensitivity * 100))
+    if (output) output.textContent = this.mouseSteeringSensitivity.toFixed(1) + "×"
+    slider?.addEventListener("input", () => {
+      const sensitivity = Number(slider.value) / 100
+      if (!validMouseSensitivity(sensitivity)) return
+      this.mouseSteeringSensitivity = sensitivity
+      this.mouseSteering.sensitivity = sensitivity
+      localStorage.setItem(this.mouseSensitivityKey, String(sensitivity))
+      if (output) output.textContent = sensitivity.toFixed(1) + "×"
+    })
+    toggle?.addEventListener("change", () => {
+      this.mouseSteeringEnabled = toggle.checked
+      localStorage.setItem(this.mouseSteeringKey, toggle.checked ? "1" : "0")
+      if (!toggle.checked) this.exitMouseSteering({silent: this.navComputer?.isOpen})
+      this.updateMouseSteeringStatus()
+    })
+
+    this.canvas.addEventListener("pointerdown", event => {
+      if (!this.mouseSteeringEnabled || event.button !== 0 ||
+          document.pointerLockElement === this.canvas ||
+          this.navComputer?.isOpen || this.inSystemCruise() ||
+          !this.flightControls.active()) return
+
+      // A direct cockpit click is required by the browser for pointer lock.
+      // Consume this FIRST click so it never selects a target accidentally.
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      this.canvas.focus({preventScroll: true})
+      if (!this.canvas.requestPointerLock) {
+        this.mouseSteeringMessage("Pointer lock unavailable; keyboard steering remains active.")
+        return
+      }
+      try {
+        this.mouseCaptureLost = false
+        const request = this.canvas.requestPointerLock()
+        request?.catch?.(() =>
+          this.mouseSteeringMessage("Mouse capture was denied. Click the cockpit to retry."))
+      } catch (_error) {
+        this.mouseSteeringMessage("Mouse capture unavailable; keyboard steering remains active.")
+      }
+    }, true)
+
+    document.addEventListener("mousemove", event => {
+      if (!this.mouseSteeringEnabled || document.pointerLockElement !== this.canvas ||
+          this.navComputer?.isOpen || this.inSystemCruise() ||
+          !this.flightControls.active()) return
+      // Zero-delta browser events must not extend steering beyond the
+      // last physical movement. In particular, do not restart the timer.
+      if (!Number.isFinite(event.movementX) ||
+          !Number.isFinite(event.movementY) ||
+          (event.movementX === 0 && event.movementY === 0)) return
+      const axes = this.mouseSteering.move(event.movementX, event.movementY)
+      this.flightControls.setMouseSteering(axes)
+      this.scheduleMouseStop()
+    })
+    document.addEventListener("pointerlockchange", () => {
+      window.clearTimeout(this.mouseIdleTimer)
+      this.mouseIdleTimer = null
+      const captured = this.mouseSteeringEnabled &&
+        document.pointerLockElement === this.canvas
+      if (captured) {
+        this.mouseCaptureLost = false
+      } else if (this.mouseSteeringEnabled && !this.navComputer?.isOpen &&
+                 !this.inSystemCruise()) {
+        // A lost pointer lock is an actual input pause, not a lost setting.
+        // The browser requires another physical click before recapturing.
+        this.mouseCaptureLost = true
+      }
+      // Use the faster mouse-only angular rate profile on the server ONLY
+      // during pointer capture, reverting when the cursor is released.
+      if (!captured) {
+        this.mouseSteering.release()
+        this.flightControls.clearMouseSteering({silent: true})
+      }
+      this.flightControls.setMouseMode(captured, {
+        silent: Boolean(this.navComputer?.isOpen || this.inSystemCruise()),
+      })
+      this.updateMouseSteeringStatus()
+    })
+    document.addEventListener("pointerlockerror", () =>
+      this.mouseSteeringMessage("Mouse capture failed. Try clicking the cockpit again."))
+
+    // Escape first releases the cursor rather than accidentally disengaging
+    // combat; M still opens Atlas, which releases the mouse automatically.
+    window.addEventListener("keydown", event => {
+      if (event.code !== "Escape" || document.pointerLockElement !== this.canvas) return
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      this.exitMouseSteering()
+    }, true)
+    this.updateMouseSteeringStatus()
+  }
+
+  mouseSteeringMessage(message) {
+    const node = this.root.querySelector("#cockpit-mouse-steering-status")
+    if (!node || !this.mouseSteeringEnabled) return
+    node.hidden = false
+    node.textContent = message
+  }
+
+  updateMouseSteeringStatus() {
+    const node = this.root.querySelector("#cockpit-mouse-steering-status")
+    if (!node) return
+    node.hidden = !this.mouseSteeringEnabled || Boolean(this.navComputer?.isOpen)
+    if (node.hidden) return
+    const captured = document.pointerLockElement === this.canvas
+    node.textContent = captured
+      ? "MOUSE STEERING ACTIVE · MOVE TO PITCH/YAW · ESC RELEASES"
+      : this.mouseCaptureLost
+        ? "MOUSE STEERING PAUSED · CLICK COCKPIT TO RESUME"
+        : "MOUSE STEERING ENABLED · CLICK COCKPIT TO CAPTURE"
+  }
+
+  exitMouseSteering({silent = false} = {}) {
+    window.clearTimeout(this.mouseIdleTimer)
+    this.mouseIdleTimer = null
+    this.mouseSteering.release()
+    this.flightControls?.clearMouseSteering({silent: true})
+    this.flightControls?.setMouseMode(false, {silent})
+    if (document.pointerLockElement === this.canvas) document.exitPointerLock?.()
+    this.updateMouseSteeringStatus()
+  }
+
+  handleHelmetAlignmentKey(event) {
+    // Reserve calibration shortcuts in cockpit mode, whether or not the
+    // headset is already rendering. Arrow keys must never scroll the DOM.
+    // No change is emitted for OS key-repeat, duplicates, text fields,
+    // Atlas input, or a suspended/closed cockpit.
+    const action = this.helmetAlignmentKeys.keyDown(event, {
+      active: !this.navComputer?.isOpen && !this.solarEncounter,
+      typing: gameplayTypingTarget(event.target),
+    })
+    if (!action.reserved) return
+    event.preventDefault()
+    event.stopPropagation()
+
+    if (action.intent && this.helmet?.canAdjustAlignment())
+      this.helmet.adjustAlignment(action.intent.axis, action.intent.direction)
+  }
+
+  handleDisplayModeKey(event) {
+    // When the mouse owns flight steering, ignore accidental V presses that
+    // would switch the cockpit view mid-maneuver. The header view selector and
+    // V shortcut still work once the mouse is released with Escape.
+    if (this.mouseSteeringEnabled && document.pointerLockElement === this.canvas &&
+        (event.code === "KeyV" || event.key?.toLowerCase() === "v")) {
+      event.preventDefault()
+      return
+    }
+    if (event.defaultPrevented || this.navComputer?.isOpen) return
+    if (event.repeat || event.ctrlKey || event.altKey || event.metaKey || event.key.toLowerCase() !== "v") return
+    const element = event.target
+    if (element?.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(element?.tagName)) return
+    event.preventDefault()
+    this.setDisplayMode(nextFlightMode(this.displayMode))
+  }
+
+  setDisplayMode(mode) {
+    if (!validFlightMode(mode)) return false
+    if (!this.stereoView) {
+      try {
+        this.stereoView = new StereoSpaceView(this.root.querySelector("#space-viewport-3d"))
+      } catch (_error) {
+        this.showError("WebGL is required for the 3D cockpit. Check browser GPU support.")
+        const select = this.root.querySelector("#display-mode")
+        if (select) select.value = "3d"
+        return false
+      }
+    }
+    this.navigation?.cancel()
+    this.displayMode = mode
+    this.root.dataset.displayMode = mode
+    const select = this.root.querySelector("#display-mode")
+    if (select) select.value = mode
+    this.stereoView.setMode(mode)
+    this.resize()
+    return true
   }
 
   setConnection(label, state) {

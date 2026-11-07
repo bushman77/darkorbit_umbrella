@@ -2,6 +2,91 @@
 
 ## Unreleased
 
+### Repository-generated artifact cleanup (2026-11-06)
+
+#### Removed
+
+- Removed five accidental zero-byte command-token files from the Phoenix asset
+  project: `FETCH_HEAD`, `core`, `darkorbit`, `node`, and `test`.
+- Removed the empty root `package-lock.json`; the umbrella root has no
+  `package.json`, while the Phoenix asset and Tauri npm lockfiles remain at
+  their actual package roots.
+- Removed 31 tracked `phx.digest` outputs: 11 fingerprinted copies and 20 gzip
+  copies. The 11 undigested static inputs, including every original game SVG,
+  remain tracked.
+- Added precise ignore rules for the removed root/asset-token files and for
+  Phoenix gzip and 32-hex fingerprint output. Existing compiled asset-directory
+  and cache-manifest rules remain in force.
+
+#### Verification
+
+- Before removal, `mix assets.deploy` regenerated all 31 tracked digest files
+  byte-for-byte; SHA-256 checks passed for every file.
+- `MIX_ENV=test mix compile --warnings-as-errors` and `mix assets.build` pass.
+- `mix test` passes 358 tests: 238 Core, 48 persistence, and 72 web tests. It
+  reports only the existing signed-zero pattern warnings in `sol_test.exs` and
+  `world_channel_test.exs`.
+- The Phoenix browser suite passes 253 JavaScript tests; the Tauri launcher
+  suite passes 12 JavaScript tests. The browser suite retains its existing
+  Node module-type warning.
+- The local unsigned Tauri Linux release build passes and produces the Debian
+  and AppImage bundles only under the ignored `src-tauri/target/` tree.
+- `git diff --check` passes. No automated tests were added because this change
+  alters repository hygiene only.
+- `mix precommit` passes strict compilation and the unused-dependency check,
+  then stops at `mix format --check-formatted` on existing repository-wide
+  Elixir 1.20 RC formatter drift. No formatter output was applied, and its
+  embedded test step was not reached; the full suite was run separately.
+
+#### Manual verification and limitations
+
+- No browser, headset, installer-launch, or signed-release manual verification
+  was performed. The signed release workflow requires publishing secrets and
+  explicit operator authorization and was not invoked.
+- The audited Tauri workflows keep Node, generated bindings, Rust targets, and
+  packaged output ignored, but still use `npm install` rather than the stricter
+  lockfile-only `npm ci`; changing release dependency policy remains separate.
+
+### Scow defensive combat repair (2026-11-06)
+
+#### Fixed
+
+- Preserved the server-owned NPC firing origin selected by `Core.NPC.AI`
+  through `Core.World.MapServer` attack resolution. Merchant cruise or evasive
+  movement later in the same tick can no longer move an otherwise valid
+  Garnet shot out of range and cause `resolve_npc_attack/2` to discard it.
+- Kept the resolution-time checks for current alive state, legal target,
+  cooldown, damage, and range. The correction does not extend the Scow's
+  380-unit weapon reach or let a merchant pursue a pilot.
+- Changed Scow tactical placement to prefer a direction-aware 340-unit
+  separation, inside the defensive turret envelope, while retaining the
+  existing 520-unit front/side/rear candidates as safe fallbacks when map or
+  planetary collision exclusions reject the preferred positions.
+
+#### Tests
+
+- Added a failing-before-fix full-MapServer regression in which a confirmed
+  hit provokes an evasive Scow at valid range; its same-tick movement
+  previously left the player at 300 hull instead of applying 10 damage.
+- Extended world coverage for neutral non-aggression, confirmed provocation,
+  authoritative `:laser_fired` publication, exact player damage, Scow
+  cooldown cadence, out-of-range rejection, cruise/evasive movement,
+  surrendered/destroyed actors, and two-pilot tactical target isolation.
+- `mix test apps/core/test/core/npc/ai_test.exs` passes 4 tests and
+  `mix test apps/core/test/core/world/world_test.exs` passes 45 tests.
+- `mix test` passes 358 tests: 238 Core, 48 persistence, and 72 web tests.
+  It reports only the existing signed-zero pattern warnings in `sol_test.exs`
+  and `world_channel_test.exs`.
+- `mix compile --warnings-as-errors` passes. The modified-file formatting
+  check and `mix precommit` stop at `mix format --check-formatted` because the
+  installed Elixir 1.20 RC formatter rewrites these pre-existing files and many
+  untouched repository files. The unrelated formatter output was not applied;
+  `mix precommit` therefore did not reach its embedded test step.
+
+#### Manual verification
+
+- Manual browser and SBS/headset combat verification was not performed.
+
 ### Milestone A — Persistent player domains
 
 - Added account registration, authentication, inventory, fleet, two ship loadouts, preferences, titles, and starter-state provisioning.
@@ -180,3 +265,564 @@
 
 - Slots 2 through 0 remain empty. Space reserves a future single-shot rocket but does not create a rocket attack.
 - X1 is currently a non-inventory action identity; configurable ammunition selection, quantities, consumption, X2/X3/X4, rockets, and other hotbar assignments remain future work.
+
+
+## 2026-11-01 — Experimental SBS branch
+- Added optional 3D cockpit and stereoscopic dual-eye renderer with Three.js.
+- Kept the original Canvas 2D mode and existing Phoenix combat/navigation contracts.
+- Added render-only world coordinate and per-eye pointer projection utilities/tests.
+- Added a display selector, keyboard fallback, setup dependency and design notes.
+- Build and real browser/headset verification pending; server is still XY only.
+
+
+### SBS cockpit visibility follow-up
+- Shrunk/repositioned 3D cockpit readouts and made eye-aspect fitting adaptive.
+- Thinned and repositioned canopy beams toward peripheral eye views.
+- Hid the desktop controls hint in stereo mode; added viewport-fit tests.
+- First in-browser SBS rendering observed in user screenshot, but revised
+  geometry and headset compatibility still require manual verification.
+
+
+### 2026-11-01 — Navigation Computer V1 (`sbs`)
+- Added an SVG sector overview with coordinate input, eight-point course drafts,
+  route preview, and server-reported helm/position telemetry.
+- Implemented `plot_course` with full server-side validation and deterministic
+  ordered waypoint progression, plus session-bound `stop_navigation`.
+- Manual `move` cancels autopilot; destruction also clears a course.
+- Preserved Classic 2D, single-view Three.js, and dual-eye SBS render modes.
+- Added Core, channel, and pure JavaScript tests. Static JS checks and partial
+  geometry checks passed; full automated suites and manual browser verification
+  remain outstanding.
+
+
+### SBS branch — XYZ world and sector atlas transition (2026-11-01)
+- Made XYZ authoritative on the server with bounded altitude and full 3D
+  Euclidean navigation and combat range.
+- Added backwards-compatible `position_3d`, `destination_3d`, `route_waypoints_3d`
+  and sector `volume` fields to the wire snapshots.
+- Retired Classic 2D from the gameplay view selector: Three.js single-view
+  and true dual-eye SBS are the only presented cockpit views.
+- Recast the top-down SVG chart as the sector atlas with Z altitude selection
+  and real XYZ route distances; legacy minimap is telemetry-only.
+- Added spatial visualization, height interpolation and regression tests.
+- Full suite, asset compilation and in-browser verification remain pending.
+
+### SBS branch — remove legacy 2D flight fallback (2026-11-01)
+
+- Removed the legacy 2D ship/grid/stars rendering pipeline from `client.js`.
+- Replaced its Canvas 2D input canvas with a transparent DOM pointer target.
+- Restricted `V` and the selector to 3D/SBS; added display-mode tests.
+- Missing WebGL now reports an error rather than activating an obsolete view.
+- The flat navigation atlas and 3D cockpit CanvasTexture readouts remain.
+
+
+### SBS branch — Manual Cruise/Newtonian flight (2026-11-01)
+- Added `Core.World.FlightDynamics`: server-owned signed thrust, velocity,
+  attitude, sector bounds and two flight physics modes.
+- Added authenticated `flight_controls` commands and 3D/SBS keyboard piloting.
+- Flight keys follow the original Space Rogue layout with a modern reverse
+  throttle extension; `Ctrl+E` toggles flight physics.
+- Added HUD readouts and Core/Channel/browser regressions.
+- Browser flight-control tests passed in isolation; run full local suites and
+  evaluate flight handling in Firefox before treating it as production ready.
+
+### SBS branch — corrected flight axes and throttle (2026-11-01)
+
+- Reassigned W/S to forward/reverse throttle ramp while held.
+- Mapped arrows to pitch, A/D to yaw, Z/C to roll, and F to release steering.
+- Corrected 3D camera orientation using an explicit forward vector and
+  roll-adjusted camera up vector, matching server-positive yaw/pitch.
+- Added live heading, pitch, roll indicators and deterministic input/basis tests.
+- Atlas input release is now silent, avoiding cancellation of an active route.
+
+### SBS branch — finalized player flight keymap (2026-11-01)
+
+- W/S pitch up/down; A/D yaw left/right; Q/E roll left/right.
+- = accelerates and - decelerates signed throttle, including reverse.
+- Throttle keys are hold-to-ramp in normalized 10% steps every 120 ms,
+  independent of OS key repeat; numeric keypad +/- are supported.
+- Preserved Ctrl+E for Cruise/Newtonian switching and F to release steering.
+- Updated UI instructions and automated mapping/modifier tests.
+
+### SBS branch — pitch-down responsiveness fix (2026-11-01)
+
+- S can pitch continuously down through vertical, no +/-89-degree cutoff.
+- Most recently pressed pitch key takes precedence during W/S overlap.
+- Flight HUD shows whether UP/DOWN pitch input is currently registered.
+- Regression tests cover key reversal, +/- pitch symmetry and inverted camera basis.
+
+### SBS branch — make web asset rebuild reliable from umbrella root (2026-11-01)
+
+- Added root-level Mix `assets.setup`, `assets.build`, and
+  `assets.deploy` aliases that explicitly execute the web child's aliases.
+- Prevents repeated testing of outdated cockpit JavaScript after source pulls.
+- Documented checking the built `app.js` for the latest `lastPitchKey` code
+  before diagnosing the W/S and obsolete X key mapping.
+
+### SBS branch — smooth, capped pitch/yaw/roll (2026-11-01)
+
+- Added server-owned angular velocity, per-axis turn acceleration/braking
+  and capped angular rates, with smooth opposite-key reversals.
+- Changed pitch/yaw/roll integration to trapezoidal angular displacement.
+- Added shortest-path wrapped-angle rendering interpolation for 3D and SBS.
+- Added turn-rate telemetry on cockpit and stereoscopic HUD.
+- Added browser interpolation tests, server angular-dynamics tests and
+  socket telemetry assertion; full Mix suite must run on the laptop.
+
+### SBS branch — thrust follows current nose (2026-11-01)
+
+- Corrected Cruise Flight to integrate a signed forward-speed scalar and
+  project world-space velocity along the ship's live heading every tick,
+  removing unintended prior-course drift after turning.
+- Newtonian thrust continues to use the live nose while retaining
+  momentum; switching to Cruise converts forward momentum and removes
+  sideways drift.
+- Added regression tests for turn-before-thrust, turn-while-moving,
+  pitched climbs, negative throttle, and Cruise/Newtonian transitions.
+- Reset cruise speed on legacy movement, atlas route and navigation stop.
+
+### SBS branch — Space Rogue manual red laser firing (2026-11-01)
+
+- Added Space hold-to-fire, server-authoritative nose-aimed 3D raycasts
+  against living NPCs, including misses consuming real weapon cooldown.
+- Separate red manual laser beams with glowing streaks in 3D and SBS;
+  damage and beam endpoints are replicated by authoritative events.
+- Left existing Ctrl/slot-1 automatic fire intact; added L as an original-
+  style shortcut for automatic X1 fire and T for nearest-hostile targeting.
+- Added ray collision, no-lock fire, session anti-spoofing, cooldown and
+  keyboard regressions. R weapon cycling remains deferred.
+
+### SBS branch — simplify combat interface and protect Space input (2026-11-01)
+
+- Removed large right-hand target information panel and its toggle button,
+  while preserving 3D/SBS target display and minimal hit/miss messages.
+- Removed panel from saved-layout definitions and visibility menu.
+- Captures Space keydown/keyup to stop button focus from consuming the
+  laser trigger or inadvertently toggling autofire.
+- Added layout persistence and keyboard-focus regression tests.
+
+### SBS branch — body-relative quaternion orientation (2026-11-01)
+
+- Replaced fixed-world Euler attitude for simulation and aiming with a
+  normalized body-relative quaternion, retaining old Euler telemetry.
+- Updated cruise and Newtonian thrust, manual laser ray, 3D/SBS camera
+  and other player meshes to share authoritative orientation.
+- Added shortest-path quaternion slerp and actual nose-based HUD heading,
+  pitch and bank readouts plus body-relative regression coverage.
+
+### SBS branch — dual wing-mounted laser hits (2026-11-01)
+
+- Replaced single visual-offset shot with two server-positioned,
+  body-relative laser rays from symmetric cockpit/wing emitters.
+- Traced independent ray/target intersections using authoritative
+  orientation, 3D NPC collision spheres, and the existing weapon range.
+- Combined concurrent hits in one authorized burst and single cooldown;
+  damage is not doubled if both rays connect with the same target.
+- Broadcast per-wing endpoints, collision flags and impacted NPC states;
+  client applies all damage states and draws two red beams and hit flashes.
+- Aligned NPC render positions with collision geometry and included
+  twin wing beams on existing targeted automatic fire.
+- Added paired-hit, miss, yaw/roll, multi-target and world damage tests.
+
+### SBS branch — 5× pulse emitter range and explicit laser hits (2026-11-01)
+
+- Increased server-enforced player pulse laser range from 720 to 3,600 units
+  for wing-mounted manual fire and automatic X1 engagements.
+- Added 3,200-unit positive hit/actual NPC damage regression and out-of-range
+  negative tests while preserving existing cooldown and total damage.
+- Added HIT N/2 and MISS confirmation with server-reported shield/hull damage
+  in mono and stereo cockpits; reticle changes color for 1.6 seconds.
+- Added selected-target range in world units with IN RANGE/OUT OF RANGE and
+  shield/hull readings directly on the stereoscopic cockpit HUD.
+- Extended dual red beam rendering to 550ms, increased thickness and impact
+  flash visibility; existing server-owned beam/impact geometry is unchanged.
+
+### Sector 1-1 demo — one original-inspired Dart fighter (2026-11-02)
+
+- Replaced the three `rift_skirmisher` demo spawns with one deterministic
+  `dart` pirate fighter at (1480,1000), preserving the existing
+  authoritative AI and spawn/destruction/respawn event lifecycles.
+- Mapped the original Space Rogue Dart's documented 245 armor to
+  245 hull; shield and laser values remain explicit provisional
+  balance values pending faithful directional-shield/weapon systems.
+- Added lightweight procedural Three.js Dart geometry in orange with
+  sweeping delta wings, pointed nose, small dark canopy, vertical
+  dorsal fin, exhaust ports and the existing target-selection ring.
+- Added Dart orientation, ship-model and NPC target-facing tests;
+  rewrote the multi-NPC-dependent simulation and channel tests for
+  the single-Dart demo, including destruction and delayed respawn.
+- Left the current cockpit, player flight, twin laser hit logic,
+  damage authorization and bounded AI control unchanged.
+
+### Solar System Atlas V1 — Sun through Pluto (2026-11-02)
+
+- Replaced the tactical sector map as the initial Atlas screen with a
+  custom SOL overview displaying the Sun, eight planets and Pluto.
+- Added mean astronomical distances in AU, orbital periods, selectable
+  body details, differentiated colors, orbital rings, compressed radius
+  projection and an inner-planets magnification.
+- Preserved the working Sector 1-1 XY/Z route planner under its own tab.
+  Planet selections are display-only and cannot send map coordinates.
+- Added regression tests for ordering, Pluto's dwarf-planet category,
+  scaling, SVG object rendering, view changes and isolation of
+  existing tactical waypoint drafts.
+- Documented that planet positions are schematic: no live ephemerides,
+  interplanetary flight or encounter simulation has been added yet.
+
+### Default Atlas launch instead of cockpit (2026-11-02)
+
+- Launch `/play` with the Solar System Atlas visible from the first
+  HTML paint, and call `NavigationComputer.open()` during JS boot
+  after flight and laser input handlers are ready but before socket
+  connection. Prevent immediate cockpit interaction while Atlas is open.
+- Retain the existing `M`, `Esc` and Return to cockpit controls,
+  3D/SBS renderer, world socket, server-side Sector 1-1 Dart and
+  tactical route planner.
+- Add regression coverage for initial open, idempotent repeated opens,
+  closing the Atlas, and restoring cockpit readiness.
+
+### Peaceful entry and SOL navigation prototype (2026-11-02)
+
+- Disabled startup Dart spawning in the production authoritative map:
+  Sector 1-1 now begins free of encounters and players cannot take NPC
+  damage while examining the initial Atlas.
+- Added explicit server-only NPC encounter spawn/clear APIs. Production
+  encounters now end on destruction rather than restarting endlessly.
+- Added `Core.Universe.Sol` and independent supervised
+  `Core.Universe.Navigation`, keyed by authenticated player identity,
+  with bounded game-scaled interplanetary transit, arrival and abort.
+- Integrated SOL course requests and broadcasts in the Phoenix
+  WorldChannel; no client-controlled player ID or AU-to-sector coordinate
+  translation is accepted.
+- Added Solar Atlas route controls and schematic moving transit marker,
+  separate from the still-functional Sector 1-1 XYZ tactical planner.
+- Updated combat fixtures and added Elixir and JS tests for peaceful
+  entry, explicit encounters, Sol catalogue, route validation, progress,
+  abort and server/client state isolation.
+
+### Two real-time propulsion modes and sublight SOL cruise (2026-11-02)
+
+- Superseded 12–120-second game-timer voyages with constant-speed
+  interplanetary sublight cruise through deliberately compressed SOL
+  gameplay coordinates. Accurate AU references remain separate.
+- Added authoritative per-pilot SOL coordinates, distance travelled,
+  fixed cruise drive speed and independent voyage state, advanced on the
+  same one-second clock as all players. No clock fast-forwarding.
+- Added server API guards preventing cockpit flight, target/combat and
+  weapon operations while a pilot is in sublight transit.
+- Engaging cruise cancels old local autopilot movement and combat lock.
+- Atlas displays sublight drive speed, route progress and minute:second
+  ETA; cockpit indicates that flight controls are locked during transit.
+- Added V2 regression tests for sample travel times, concurrent voyages,
+  sublight position interpolation and propulsion-mode exclusivity.
+ 
+### EncounterDirector classification without tactical handoff (2026-11-03)
+
+- Added `Core.Universe.EncounterDirector` for classification of genuine
+  sensor-derived SOL close passes using NPC disposition, owning faction,
+  Zone of Control and server-provided faction standing.
+- Identified Sentinel-07 as a Venus patrol; preserved all six existing
+  routes, schedules, cargo and player-independent movement.
+- Returned encounter classification in private per-pilot navigation
+  snapshots and one-time events; retained existing strategic flyby mode
+  and continuous interplanetary cruise.
+- Updated ordinary cockpit encounter text for neutral flyby, patrol
+  attention and hostile contact; no combat/inspection promise.
+- Added deterministic director tests and a hostile navigation regression.
+- Test execution: not run here (Elixir/Mix unavailable); live browser
+  verification remains outstanding. No faction reputation persistence,
+  tactical instances, interception, random spawns or NPC combat added.
+
+
+### Strategic encounter modal and pilot cruise hold (2026-11-03)
+
+- Changed real SOL close passes from passing notifications to a
+  server-authoritative, pilot-scoped travel hold with a pending decision.
+- The pilot's location, voyage progress and ETA freeze during the hold.
+  NPC vessel traffic and all other pilots continue independently.
+- Added authenticated `solar_resolve_encounter` with strict encounter ID
+  and action validation. Hail remains read-only and sensor-range checked;
+  Continue resumes the original route without a position reset.
+- Added centered modal encounter decisions to normal cockpit/Atlas and
+  duplicated per-eye panels for SBS. Updated Atlas and helm status.
+- Added regression cases for hold/reconnect state, isolation, travel
+  completion after resolution, and invalid client decisions.
+- No physical tactical encounter/combat or restart durability yet.
+  Mix, npm, asset build and browser/HMD verification are still pending.
+
+### Encounter regression correction (2026-11-03)
+
+- Updated the two-pilot hold test to account for independent Mars-route traffic:
+  pilot 732 can also encounter a vessel, so attempting to resolve pilot 731's
+  courier ID correctly yields `:encounter_mismatch`, not `:no_pending_encounter`.
+- Verify pilot 732 can resolve its own contact and continue moving while pilot
+  731 remains paused. No runtime encounter behavior was changed.
+- User-reported initial run: 11/12 core navigation tests, 18/18 Phoenix
+  channel tests, and asset build succeeded. Revised test awaits execution.
+
+### LAN-accessible development endpoint (2026-11-03)
+
+- Changed the default development Bandit interface from loopback
+  `127.0.0.1` to `0.0.0.0`, supporting an external SBS headset without
+  requiring the former `DARKORBIT_LAN_HMD=1` launch flag.
+- Added `DARKORBIT_LOOPBACK_ONLY=1` to opt into a restricted local-only
+  listener on untrusted networks. Production endpoint configuration is unchanged.
+- Not verified on physical headset; run from a trusted LAN and use the
+  laptop's IPv4 address for remote device connections.
+
+
+### Encounter popup delivery and HMD overlay (2026-11-03)
+
+- Restored the direct `solar_encounter_started` listener in the laptop
+  cockpit so its server-held encounter popup opens on first notification.
+- Preserved snapshot-based reconnect recovery and keyboard-modal behaviour;
+  the Atlas is inert while the popup is awaiting a decision.
+- Added a filtered, read-only SOL encounter subscription for the separate
+  phone headset and a per-eye alert; decisions still use the laptop's
+  authenticated WorldChannel.
+- Added headset view and channel privacy regression tests; no combat,
+  trade or tactical travel changes were introduced.
+- Tests and real headset/browser verification were not run in the
+  editing environment.
+
+### Procedural SOL encounters (2026-11-03)
+
+- Corrected the scarcity of close-pass events after an Earth–Venus departure:
+  a shared real-position traffic vessel is now launched on a converging
+  route for each departure in the current playtest configuration.
+- Randomized trader/patrol/raider type and meeting phase in the server.
+- Added 32-ship procedural limit and 15-minute expiry, preserving the
+  six scheduled ships and existing NPC independence.
+- Maintained an established radio channel for the exact pilot-held
+  pending contact; unrelated hails remain range-gated.
+- Added collision-of-trajectories and lifecycle regressions and extended
+  channel arrival test for multiple decisions. Tactical fights remain
+  unimplemented; no Mix execution available in the editing environment.
+
+
+
+### Enter real 3D combat from a hostile SOL encounter (2026-11-03)
+
+- Added a server-validated **Engage / Enter combat** action for hostile
+  and patrol-attention close passes. Neutral contacts remain unchanged.
+- Instantiated one Dart-class local opponent per pilot encounter, named
+  for the contacted vessel, with validated map-space spawn near the ship.
+- During tactical combat only, unlock conventional cockpit controls,
+  preserve frozen SOL travel progress, and keep the current real planet
+  visible to avoid concealing collision hazards.
+- Verified-map-victory and explicit retreat both resume the original
+  interplanetary route. Retreat cleans stale target locks.
+- Paired HMD now subscribes to pilot's real planetary map and remains
+  display-only.
+- Added core world and Phoenix channel tests. The tactical scene currently
+  reuses the existing orbital region (not isolated mid-space). Tests and
+  physical headset acceptance await running on the user's workstation.
+
+- On server-confirmed pilot defeat, canceled the held SOL voyage and
+  cleaned the NPC so the player can reconnect at their departure planet.
+  Added authorization regression tests for defeated ships.
+- Reused the original swept-wing Dart model for unique tactical NPC IDs
+  and limited an encounter NPC's auto-targeting to its owner.
+
+
+### Neutral trader tactical attacks (2026-11-03)
+
+- Added an explicit **Attack vessel** encounter action for peaceful traffic,
+  including procedural Harbor traders; retained existing Hail and Ignore.
+- Opened server-authorized tactical combat for pending neutral flybys
+  while keeping encounter ownership and held SOL cruise enforced.
+- Neutral NPCs now remain passive until hit, then can retaliate; raiders
+  and hostile patrol contacts still pursue immediately.
+- Updated UI copy and added JS, Core World and Phoenix channel regressions.
+- Trader-specific models, reputation/penalties, trade inventory outcomes
+  and actual loot remain future work. Tests still require local execution.
+
+
+### Scow trader hull (2026-11-03)
+
+- Introduced **Scow** as a separate Core NPC ship definition (210 hull,
+  10-damage laser, slower movement) rather than reusing Dart stats.
+- Annotated existing scheduled/procedural merchant and courier traffic
+  with a server-owned Scow class; surfaced it through encounter
+  snapshots and authenticated tactical entry.
+- Added a distinctive procedural blue, rounded-bow cargo vessel and
+  Scow model selection in the shared Three.js/SBS renderer.
+- Expanded Core World, traffic and Phoenix channel regression tests,
+  and added Node tests for the model's identity and dimensions.
+- Flight, surrender, jettison, reputation and loot behavior remain
+  future work; this commit does not claim these are implemented.
+- Elixir suites and physical browser/HMD verification still pending.
+
+
+### Scow graphics and damage-model audit (2026-11-03)
+
+- Corrected missing Scow graphics in the strategic close-pass preview:
+  type-aware view now selects the actual new blue cargo model and
+  preserves it for a pending paused encounter.
+- Added the authoritative tactical NPC `ship_class` to world snapshots,
+  consumed by laptop and SBS headset with a shared type resolver.
+- Display selected ship class in the cockpit target HUD.
+- Added end-to-end model identity, classification and preview tests;
+  the code is not yet verified on a running HMD.
+- Audited original Space Rogue mechanics: fore/aft shield hemispheres,
+  global hull armor and disableable ship systems. Current pooled
+  shield/hull damage is unchanged; detailed impact behavior is a
+  future combat milestone, not part of the rendering fix.
+
+
+### Course-driven Scow interception (2026-11-03)
+
+- Tactical Scows now inherit authenticated SOL origin and destination
+  instead of selecting the square `idle -> patrol` NPC pattern.
+- Added server-owned `Core.NPC.CruiseRoute` projection into a safe local
+  straight transit lane, avoiding planetary exclusion geometry.
+- Added distinct moving `:cruise` merchant behavior: neutral ships
+  do not chase; provoked ships can fire their turret while flying onward.
+- Serialized stable NPC bearing and course endpoints for both desktop
+  and paired SBS HMD renderers.
+- On crossing the lane's endpoint, automatically remove the Scow,
+  release target locks and resume the owner's held SOL voyage, including
+  disconnected viewers. Strategic SOL traffic continues independently.
+- Added route, AI, and end-to-end world regression tests. These tests
+  have not been executed in the editing environment.
+
+
+### Sunracer baseline, cargo hold and equipment locker (2026-11-03)
+
+- Changed catalog ship 1 from placeholder Phoenix to Sunracer, retaining
+  persisted account ship ID 1 and preserving future multi-ship ownership.
+- Base Sunracer now has 300 armor, a 10-point built-in Garnet, a four-tonne
+  cargo hold and original Forward-1/missile/drive system metadata.
+- Added Beryl (15) and Sapphire (20) named upgrades; single Sunracer
+  beams replace rather than stack damage, while existing DarkOrbit
+  multi-slot ships retain additive equipment calculations.
+- Added /equipment authenticated equipment/loadout screen, account-owned
+  equip/unequip forms, and persistent C-1/C-2 selection applied to the
+  next cockpit session.
+- Added fixed-catalog cargo commodity storage to the existing
+  inventory JSON with row-locked capacity-constrained transfers.
+- Added non-suicidal Scow survival transitions: evade at 80% hull and
+  surrender at 35%; accept surrender is ownership checked and resumes
+  the suspended course; surrendered ships are protected from shots.
+- Added unit and integration tests for baseline stats, owned inventory,
+  equipment transfers, configuration activation, surrender and security.
+- Directional shield physics, real cargo trading, surrender payout,
+  loot reconciliation and live-session refitting are not implemented.
+- Elixir/Mix tests and physical headset runs not executable in the
+  editing environment.
+
+
+### Active ship configuration join correction (2026-11-03)
+
+- Phoenix WorldChannel now reads the persisted active C-1/C-2 choice
+  before both player_status/2 and World.connect/3. Previously it always
+  supplied configuration 1 and ignored the shipyard's activated layout.
+- Updated legacy player-combat and ship-catalog assertions from
+  Phoenix 4,000 / 40 to Sunracer 300 / Garnet 10, including the Dart
+  shield/hull split on a successful starter laser hit.
+- Added channel regression for genuinely spawning with Beryl 15 in
+  configuration 2 after a server-owned activation.
+- Hotbar retains stable pulse_emitter and x1_laser identifiers, but its
+  visible label no longer falsely says Garnet when Beryl or Sapphire is
+  equipped.
+- Elixir/Mix tests remain unrun in the editing environment.
+
+
+### Sunracer post-test regression cleanup (2026-11-03)
+
+- Updated the two remaining Core.WorldTest Phoenix/40-damage expectations
+  to actual Sunracer Garnet 10-damage combat: 6 shield + 4 hull damage
+  per hit against the legacy Dart, and 108/237 after the second shot.
+- Fixed the client entity spawn object assigning `angle` twice.
+  Initial orientation now uses the server-provided numeric heading
+  with route bearing as a visual fallback, while keeping
+  `navigationAngle` as a separate presentation field.
+- The 2026-11-03 workstation log reported Core.WorldTest 35/37 passed,
+  204/204 Node tests passed, equipment controller 5/5 passed,
+  world channel 21/21 passed, and successful assets.build (with
+  duplicate-key warning). These changes target the two remaining
+  failures and that build warning; retesting is required.
+
+- Corrected SOL zone-boundary quadratic roots to divide scalar numerators
+  instead of single-element tuples; existing TerritoryTest crossing cases
+  exercise this real runtime-error path.
+- Grouped default-argument declarations in Factions.patrol_directive/2
+  and Security.assess/2; removed an unused collision binding and an
+  unused equipment-controller test variable. The MapServer handle_call/3
+  grouping warning remains and does not by itself imply a test failure.
+
+### Mix precommit callback grouping (2026-11-03)
+
+- Reordered only the two private laser-burst helper functions below the contiguous `handle_call/3` callback clauses in `Core.World.MapServer`. This removes Elixir's callback-clause grouping warning under `--warnings-as-errors` without changing gameplay, calculations, or routing. Mix verification remains required on the workstation.
+
+### Deterministic courier test and clean helmet test teardown (2026-11-03)
+
+- Fixed the Earth→Venus courier close-pass test's unit conversion:
+  `Traffic.advance/2` uses milliseconds, while SOL cruise speed is
+  in game-km/second. The test had accidentally multiplied its player's
+  journey distance by 1,000, causing the arrival guard to suppress the
+  encounter. The actual simulated ships pass about 2,708 game-km apart,
+  within the 650,000 game-km encounter radius; production traffic and
+  encounter behavior remain unchanged.
+- Replaced deprecated literal-charlist syntax in HelmetNetwork tests with
+  `~c""`, and avoided floating-point signed-zero pattern warnings in
+  the world volume test.
+- Synchronized HelmetChannel test socket shutdown/revocation before the
+  Ecto SQL sandbox owner exits. This addresses the observed intermittent
+  HelmetManager post-test database disconnect and uses the previously
+  unused remembered helmet channel reference.
+- No combat, merchant AI, shield, equipment, or flight behavior changed.
+  Mix verification still required on the workstation.
+
+### SOL vessel identity and combat state reconciliation (2026-11-03)
+
+- SOL Traffic now owns hull, shields, survival state and settlement history
+  for its physical, voyage-identified merchants and other encounter ships.
+- Navigation reserves a physical vessel for one tactical encounter at a
+  time and checks the strategic voyage identity before spawning a map NPC.
+- Tactical map actors inherit existing damage. Their server-verified exit
+  reports drive one-time Traffic settlement on victory, surrender, retreat,
+  defeat and autonomous lane escape.
+- Destroyed vessels remain non-travelling tombstones; surrendered vessels
+  are disabled and no cargo is granted or reset by finishing combat.
+- Procedural TTL and strategic voyage transitions are suspended at the
+  boundary for actively claimed vessels to avoid ghost/duplicate ships.
+- Added pure Traffic, Navigation and world integration regression cases.
+  Database durability and shared-instance multiplayer combat remain TODO.
+- Changes have not been executed with Mix in this editing environment.
+
+## 2026-11-06 — Unified GitHub releases (implementation; deployment unverified)
+
+- Aligned the umbrella release version to 0.3.1, the existing Tauri client version. Subsequent release bumps edit only root `mix.exs`.
+- Added a version-generation helper for Windows/Linux build-time Tauri, Cargo and npm metadata, with offline regression tests.
+- Extended the Linux `scripts/space-nova` menu with a unified server and signed desktop release command.
+- Expanded the signed GitHub Actions release to validate Elixir and JavaScript suites, build an Ubuntu OTP server archive, package stable-name Windows/Linux installers, generate checksums and publish a complete release after signing.
+- Added an OTP database-migration entry point, release validation CI and the release runbook. Publication, EC2 deployment and device smoke tests have not been performed.
+
+### Local server diagnostic packaging correction (2026-11-06)
+
+- Replaced the blanket refusal to build when workstation development TLS keys exist with an isolated `git archive HEAD` production build.
+- The archive uses only committed source, excludes ignored/untracked local credentials, validates Phoenix digested assets and the OTP bundle, and leaves workstation TLS files untouched.
+- Automated workflow syntax validation is provided; local production packaging still requires manual execution on Pop!_OS and has not been independently verified here.
+
+### Restore existing EC2 Caddy proxy topology (2026-11-06)
+
+- Reconciled the release's production runtime with the verified existing EC2 architecture: Caddy public TLS on 443 → loopback Phoenix HTTP on 4000; explicit `SPACE_NOVA_PROXY_MODE=true` opt-in retains optional direct Phoenix TLS.
+- Updated SSL forwarded-protocol handling for trusted Caddy connections and preserved HSTS; no direct internet listener is opened by the proxied Phoenix endpoint.
+- Fixed the Tauri launcher default to `https://spacenova.ddns.net`, migrated saved `:4000` production origin, retained local port-4000 development and optional direct-TLS mode, and expanded launcher regression coverage.
+- Replaced obsolete port-4000-only deployment guidance. No EC2 runtime or Caddy service was changed by the repository commit; production needs a newly built server archive.
+
+### Pilot registration verification recovery (2026-11-06)
+
+- New registration email tokens are securely random, SHA-256 digested at rest, expire after 24 hours and are single-use.
+- Opening a verification link no longer activates accounts. Activation requires CSRF-protected confirmation POST.
+- Added generic resend recovery page with 60-second/5-per-day per-account throttle; failing email sends no longer leave pilots without a recovery interface.
+- Existing verified accounts are unaffected. Old unverified verification links without expiry must be resent.
+- Added targeted GitHub Actions account/controller tests. Production email remains disabled until configured.
+
+### Optional production SMTP mail transport — 2026-11-06
+
+- Added gen_smtp as Swoosh's SMTP dependency, supporting authenticated TLS-only SMTP on ports 587/465/2525 with certificate and hostname validation.
+- Retained Resend API delivery as an alternative; missing or incomplete provider credentials fail closed.
+- Added independent SPACE_NOVA_REGISTRATION_OPEN flag to keep public signup disabled while testing delivery.
+- Added operator-only Darkorbit.Email.Probe.send_test/1 and tests; no email admin HTTP route or automatic production deployment.

@@ -1,33 +1,46 @@
-<div
-  id="login-page"
-  class="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#030711] px-6 py-12 text-slate-100"
->
-  <div class="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(31,175,255,0.15),transparent_34%),radial-gradient(circle_at_80%_70%,rgba(130,87,255,0.13),transparent_38%)]">
-  </div>
-  <div class="pointer-events-none absolute inset-0 opacity-30 [background-image:linear-gradient(rgba(93,215,255,0.08)_1px,transparent_1px),linear-gradient(90deg,rgba(93,215,255,0.08)_1px,transparent_1px)] [background-size:52px_52px]">
-  </div>
-
-  <main class="relative w-full max-w-md rounded-3xl border border-cyan-300/15 bg-slate-950/80 p-8 shadow-2xl shadow-cyan-950/40 backdrop-blur-xl sm:p-10">
-    <div class="mb-9 flex items-center gap-4">
+<div id="login-page" class="hud-screen hud-auth-screen">
+  <div class="hud-auth-ambient" aria-hidden="true"></div>
+  <div class="hud-auth-layout">
+    <aside class="hud-auth-story" aria-label="Space Nova mission briefing">
+      <div class="hud-auth-brand">
+        <.icon name="hero-rocket-launch" class="size-6" />
+        <span>SPACE NOVA</span>
+        <small>FLIGHT OPERATIONS / SOL</small>
+      </div>
+      <div class="hud-auth-orbit" aria-hidden="true">
+        <span class="hud-auth-orbit-core"></span>
+        <span class="hud-auth-orbit-ship"></span>
+      </div>
+      <p class="hud-kicker">PILOT UPLINK // SOL-01</p>
+      <h2>YOUR SHIP.<br />YOUR SOLAR SYSTEM.</h2>
+      <p class="hud-auth-story-copy">Chart interplanetary routes, take the helm in 3D, and fly alongside other pilots in Space Nova.</p>
+      <div class="hud-auth-specs">
+        <div><span>THEATRE</span><strong>SOLAR SYSTEM / SOL</strong></div>
+        <div><span>FLIGHT SYSTEMS</span><strong>ATLAS + 3D + SBS</strong></div>
+        <div><span>SIMULATION</span><strong>SERVER AUTHORITATIVE</strong></div>
+      </div>
+    </aside>
+  <main class="hud-auth-panel">
+    <div class="hud-auth-heading mb-9 flex items-center gap-4">
       <div class="grid size-12 place-items-center rounded-2xl border border-cyan-300/25 bg-cyan-300/10 text-cyan-200 shadow-lg shadow-cyan-400/10">
         <.icon name="hero-rocket-launch" class="size-6" />
       </div>
       <div>
         <p class="text-[0.65rem] font-semibold uppercase tracking-[0.34em] text-cyan-300/70">
-          Orion relay
+          Space Nova uplink
         </p>
         <h1 class="mt-1 text-2xl font-semibold tracking-tight">Pilot authorization</h1>
       </div>
     </div>
 
-    <.form for={@form} id="pilot-login-form" action={~p"/login"} method="post" class="space-y-5">
+    <.form for={@form} id="pilot-login-form" action={~p"/login"} method="post" class="hud-auth-form space-y-5">
       <.input
         field={@form[:username]}
         type="text"
         label="Pilot username"
         autocomplete="username"
         required
-        class="mt-2 w-full rounded-xl border border-slate-700 bg-slate-900/90 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-cyan-300/70 focus:ring-4 focus:ring-cyan-400/10"
+        class="hud-field mt-2 w-full rounded-xl border border-slate-700 bg-slate-900/90 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-cyan-300/70 focus:ring-4 focus:ring-cyan-400/10"
       />
       <.input
         field={@form[:password]}
@@ -35,12 +48,12 @@
         label="Access phrase"
         autocomplete="current-password"
         required
-        class="mt-2 w-full rounded-xl border border-slate-700 bg-slate-900/90 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-cyan-300/70 focus:ring-4 focus:ring-cyan-400/10"
+        class="hud-field mt-2 w-full rounded-xl border border-slate-700 bg-slate-900/90 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-cyan-300/70 focus:ring-4 focus:ring-cyan-400/10"
       />
       <button
         id="pilot-login-button"
         type="submit"
-        class="group mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-cyan-300 px-5 py-3.5 text-sm font-bold text-slate-950 shadow-lg shadow-cyan-400/15 transition duration-200 hover:-translate-y-0.5 hover:bg-cyan-200 hover:shadow-cyan-300/25 active:translate-y-0"
+        class="hud-cta group mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-cyan-300 px-5 py-3.5 text-sm font-bold text-slate-950 shadow-lg shadow-cyan-400/15 transition duration-200 hover:-translate-y-0.5 hover:bg-cyan-200 hover:shadow-cyan-300/25 active:translate-y-0"
       >
         Establish uplink
         <.icon
@@ -55,6 +68,10 @@
       <.link href={~p"/"} class="text-cyan-300/80 transition hover:text-cyan-200">
         Return home
       </.link>
+      <.link href={~p"/register"} id="login-register-link" class="text-cyan-300/80 transition hover:text-cyan-200">
+        Create pilot account
+      </.link>
     </div>
   </main>
+  </div>
 </div>

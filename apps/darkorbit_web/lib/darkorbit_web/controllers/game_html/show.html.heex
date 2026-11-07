@@ -2,17 +2,81 @@
   id="game-client"
   data-socket-token={@socket_token}
   data-map-id="1-1"
+  data-display-mode="3d"
   data-layout-player-id={@layout_player_id}
   class="relative h-screen min-h-[38rem] overflow-hidden bg-[#02050c] text-slate-100"
 >
-  <canvas
+  <%!-- Invisible pointer surface, not a 2D renderer. The atlas owns 2D navigation. --%>
+  <div
     id="space-viewport"
     class="absolute inset-0 size-full cursor-crosshair touch-none focus:outline-none"
     tabindex="0"
-    aria-label="Interactive sector 1-1 space viewport. Left-click an NPC to target it, or left-click and hold empty space to navigate."
+    aria-label="3D space cockpit targeting. Press M for the Solar System Atlas."
   >
-    Your browser needs Canvas 2D support to run the space client.
-  </canvas>
+  </div>
+
+  <canvas id="space-viewport-3d" class="pointer-events-none absolute inset-0 size-full" aria-hidden="true"></canvas>
+
+  <%!-- Encounter decisions are authoritative and survive reconnection.
+       SBS repeats each panel per eye to avoid an uncomfortable binocular overlay. --%>
+  <section id="solar-encounter-panel" hidden role="dialog" aria-modal="true"
+    aria-labelledby="solar-encounter-title" class="solar-encounter-modal">
+    <div class="solar-encounter-eye">
+      <div class="solar-encounter-card">
+        <p class="solar-encounter-kicker">SOL / ENCOUNTER DETECTED</p>
+        <p class="solar-encounter-hold">INTERPLANETARY CRUISE PAUSED</p>
+        <h2 id="solar-encounter-title" data-encounter-title>Unidentified vessel</h2>
+        <p data-encounter-faction class="solar-encounter-distance">FACTION / Unidentified</p>
+        <p data-encounter-distance class="solar-encounter-distance">Acquiring contact</p>
+        <p class="solar-encounter-description">Hail this contact, engage in combat, or continue your course.</p>
+        <p data-encounter-message role="status" aria-live="polite" class="solar-encounter-message">Choose how to proceed.</p>
+        <div class="solar-encounter-actions">
+          <button type="button" data-encounter-action="hail" class="nav-button nav-primary">Hail vessel</button>
+          <button type="button" data-encounter-action="engage" class="nav-button nav-danger" hidden>Engage / Enter combat</button>
+          <button type="button" data-encounter-action="continue" class="nav-button">Ignore / Resume course</button>
+        </div>
+        <p class="solar-encounter-note">Your SOL course is held while you decide. Entering combat launches a tactical opponent; retreat or victory resumes your original journey.</p>
+      </div>
+    </div>
+    <div class="solar-encounter-eye solar-encounter-eye-right" aria-hidden="true">
+      <div class="solar-encounter-card">
+        <p class="solar-encounter-kicker">SOL / ENCOUNTER DETECTED</p>
+        <p class="solar-encounter-hold">INTERPLANETARY CRUISE PAUSED</p>
+        <h2 data-encounter-title>Unidentified vessel</h2>
+        <p data-encounter-faction class="solar-encounter-distance">FACTION / Unidentified</p>
+        <p data-encounter-distance class="solar-encounter-distance">Acquiring contact</p>
+        <p class="solar-encounter-description">Hail this contact, engage in combat, or continue your course.</p>
+        <p data-encounter-message class="solar-encounter-message">Choose how to proceed.</p>
+        <div class="solar-encounter-actions">
+          <button type="button" data-encounter-action="hail" tabindex="-1" class="nav-button nav-primary">Hail vessel</button>
+          <button type="button" data-encounter-action="engage" tabindex="-1" class="nav-button nav-danger" hidden>Engage / Enter combat</button>
+          <button type="button" data-encounter-action="continue" tabindex="-1" class="nav-button">Ignore / Resume course</button>
+        </div>
+        <p class="solar-encounter-note">Your SOL course is held while you decide. Entering combat launches a tactical opponent; retreat or victory resumes your original journey.</p>
+      </div>
+    </div>
+  </section>
+
+  <%!-- Tactical combat uses the ordinary cockpit and server-owned map NPC;
+       only this pilot's SOL cruise is held while the fight continues. --%>
+  <section id="solar-tactical-panel" hidden class="solar-tactical-panel"
+    aria-label="Active tactical interception">
+    <p class="solar-encounter-kicker">TACTICAL INTERCEPTION ACTIVE</p>
+    <strong data-solar-tactical-name>Encounter vessel</strong>
+    <p data-solar-tactical-message>Defeat the opposing vessel, accept surrender if offered, or retreat.</p>
+    <button type="button" hidden class="nav-button nav-primary"
+      data-solar-tactical-seize>Seize cargo / Resume course</button>
+    <button type="button" hidden class="nav-button"
+      data-solar-tactical-surrender>Release captain / Resume course</button>
+    <p id="solar-faction-impact" hidden class="font-mono text-xs text-amber-200"></p>
+    <button type="button" class="nav-button nav-danger"
+      data-solar-tactical-retreat>Retreat / Resume course</button>
+  </section>
+
+  <p id="planetary-view-status" hidden
+     class="pointer-events-none absolute left-6 top-24 z-20 max-w-[min(22rem,80vw)] rounded-lg border border-amber-200/25 bg-slate-950/75 px-3 py-2 font-mono text-[0.68rem] tracking-wider text-amber-100 backdrop-blur-sm">
+    SOL / PLANETARY VIEW
+  </p>
 
   <header class="pointer-events-none absolute inset-x-0 top-0 z-40 flex items-start justify-between gap-4 p-4 sm:p-6">
     <div class="pointer-events-auto flex items-center gap-3 rounded-2xl border border-cyan-300/15 bg-slate-950/75 px-4 py-3 shadow-xl shadow-black/30 backdrop-blur-xl">
@@ -33,9 +97,31 @@
             Connecting
           </p>
         </div>
-        <p class="mt-1 text-sm font-semibold">Sector <span class="text-cyan-200">1-1</span></p>
+        <p class="mt-1 text-sm font-semibold" id="propulsion-status">CONVENTIONAL FLIGHT</p>
       </div>
     </div>
+
+    <div class="pointer-events-auto flex items-center gap-2 rounded-xl border border-cyan-300/15 bg-slate-950/85 px-3 py-2 backdrop-blur-xl">
+      <span id="cockpit-helmet-status" aria-live="polite"
+            class="text-[0.6rem] font-semibold tracking-wide text-cyan-200">HMD UNPAIRED</span>
+      <label for="display-mode" class="text-[0.6rem] font-bold tracking-widest text-cyan-200">VIEW</label>
+      <select id="display-mode" aria-label="Space display mode" class="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-100">
+        <option value="3d" selected>3D cockpit</option>
+        <option value="sbs">Stereo SBS</option>
+      </select>
+    </div>
+
+    <%!-- HMD lens tuning is laptop-keyboard only. Keep the cockpit
+         unobstructed; the existing HMD connection indicator above remains. --%>
+    <a id="equipment-open" href={~p"/equipment"}
+       class="pointer-events-auto rounded-xl border border-amber-400/40 bg-slate-950/85 px-3 py-3 text-xs font-bold tracking-widest text-amber-200 hover:border-amber-300"
+       title="Inventory and ship loadout (reconnects the cockpit)">
+      <.icon name="hero-wrench-screwdriver" class="mr-1 inline size-4" /> EQUIPMENT
+    </a>
+
+    <button id="nav-open" type="button" class="pointer-events-auto rounded-xl border border-cyan-300/30 bg-slate-950/85 px-4 py-3 text-xs font-bold tracking-widest text-cyan-100 hover:border-cyan-300" aria-keyshortcuts="M">
+      <.icon name="hero-map" class="mr-1 inline size-4" /> SOLAR ATLAS <span class="text-cyan-300/60">[M]</span>
+    </button>
 
     <.form
       for={@logout_form}
@@ -54,6 +140,264 @@
       </button>
     </.form>
   </header>
+
+
+  <section id="navigation-computer" class="navigation-computer" role="dialog" aria-modal="true" aria-labelledby="nav-title">
+    <div class="nav-shell atlas-hud-shell">
+      <%!-- The map is the viewport. All instruments overlay it rather than taking grid space. --%>
+      <section id="nav-solar-view" class="solar-atlas-layout" role="tabpanel"
+        aria-labelledby="nav-view-system">
+        <div class="solar-atlas-frame">
+          <svg id="nav-solar-chart" viewBox="0 0 1000 600"
+            aria-label="SOL system chart. Select a planet, or click empty space to plot a free coordinate."
+            role="group">
+            <g id="nav-solar-content"></g>
+          </svg>
+          <div id="nav-solar-context-menu" class="solar-context-menu" hidden aria-label="Solar map context actions">
+            <p id="nav-solar-context-target" class="solar-context-target">TARGET / EARTH</p>
+            <button type="button" data-solar-action="analyze">Analyze target</button>
+            <button type="button" data-solar-action="navigate">Navigate to target</button>
+          </div>
+          <div class="nav-map-caption">
+            <span>SOL // ORBITAL OVERVIEW</span>
+            <span>PLANETS SCHEMATIC / WAYPOINTS USE SOL GAME KM</span>
+          </div>
+          <div class="solar-chart-controls">
+            <div class="solar-zoom-group" aria-label="Solar map view">
+              <button class="solar-zoom-button is-active" data-solar-focus="system"
+                aria-pressed="true" type="button">Full system</button>
+              <button class="solar-zoom-button" data-solar-focus="inner"
+                aria-pressed="false" type="button">Inner planets</button>
+            </div>
+            <p>CLICK EMPTY SPACE TO PLOT A WAYPOINT · RIGHT-CLICK FOR ACTIONS</p>
+          </div>
+        </div>
+        <aside class="atlas-hud-right" aria-label="Navigation instrument overlays">
+          <section id="nav-flight-panel" class="hud-flight-widget" aria-label="Ship and cruise status">
+            <div id="nav-hud-drag" class="hud-widget-heading hud-widget-grip"
+              role="button" tabindex="0"
+              aria-label="Move instrument stack: drag or use arrow keys">
+              <span>FLIGHT COMPUTER // SOL-01</span>
+              <span aria-hidden="true">⠿</span>
+            </div>
+          <div class="solar-navigation-console">
+            <p class="nav-eyebrow">INTERPLANETARY NAVIGATION / SOL-01</p>
+            <div id="nav-solar-state" class="nav-state">CONNECTING</div>
+            <dl class="solar-body-metrics solar-primary-metrics">
+              <div><dt>CURRENT REGION</dt><dd id="nav-solar-location">—</dd></div>
+              <div><dt>FLIGHT PLAN</dt><dd id="nav-solar-route">NO ACTIVE TRANSIT</dd></div>
+            </dl>
+            <details class="solar-aux-details solar-transit-details">
+              <summary>Flight telemetry</summary>
+              <dl class="solar-body-metrics">
+                <div><dt>PROPULSION</dt><dd id="nav-solar-drive">CONVENTIONAL</dd></div>
+                <div><dt>TRADE TRAFFIC</dt><dd id="nav-solar-traffic-density">—</dd></div>
+                <div><dt>ORBITAL BASE</dt><dd id="nav-solar-space-base">—</dd></div>
+                <div><dt>FORWARD REFINERY</dt><dd id="nav-solar-refinery">—</dd></div>
+                <div><dt>DRIVE SPEED</dt><dd id="nav-solar-speed">Conventional thrusters</dd></div>
+                <div><dt>TRAVEL DISTANCE</dt><dd id="nav-solar-distance-travelled">No interplanetary course</dd></div>
+                <div><dt>ARRIVAL ETA</dt><dd id="nav-solar-eta">—</dd></div>
+              </dl>
+            </details>
+            <label for="nav-solar-progress" id="nav-solar-progress-label" class="solar-progress-label">
+              Ready to plot course
+            </label>
+            <progress id="nav-solar-progress" max="100" value="0"></progress>
+            <button id="nav-solar-engage" type="button" class="nav-button nav-primary">
+              Set course to Earth
+            </button>
+            <button id="nav-solar-cancel" type="button" class="nav-button nav-danger" disabled>
+              Abort transit at current position
+            </button>
+            <button id="nav-solar-manual" type="button" class="nav-button" disabled
+              title="Pause the active SOL cruise at the ship's current position for conventional cockpit flight">
+              Disengage cruise · manual flight
+            </button>
+            <button id="nav-solar-resume" type="button" class="nav-button" disabled>
+              Resume automated cruise
+            </button>
+            <p class="nav-subtitle">Atlas and cockpit display modes do not change propulsion.
+              Manual flight pauses the cruise at your current SOL position.</p>
+          </div>
+          </section>
+          <section id="nav-target-panel" class="solar-atlas-panel hud-target-widget"
+            aria-label="Selected SOL navigation target" hidden>
+            <div class="hud-widget-heading">
+              <span>TARGET / ANALYSIS</span>
+              <button id="nav-target-dismiss" type="button" class="hud-widget-dismiss"
+                aria-label="Close target analysis">×</button>
+            </div>
+          <div class="solar-selected-body">
+            <p class="nav-eyebrow">SELECTED BODY</p>
+            <div class="solar-selected-inline">
+              <h3 id="nav-solar-name">Earth</h3>
+              <p id="nav-solar-type">Planet</p>
+            </div>
+            <details id="nav-solar-analysis" class="solar-aux-details">
+              <summary>Analyze orbital data</summary>
+              <dl class="solar-body-metrics">
+                <div><dt>MEAN SOLAR DISTANCE</dt><dd id="nav-solar-distance">1 AU</dd></div>
+                <div><dt>ORBITAL PERIOD</dt><dd id="nav-solar-period">1 Earth year</dd></div>
+              </dl>
+            </details>
+          </div>
+
+            <details class="solar-aux-details hud-catalog-drawer">
+              <summary>Celestial catalog · 1 star / 8 planets / Pluto</summary>
+              <div id="nav-system-bodies" class="solar-body-list"
+                aria-label="Select a celestial body"></div>
+            </details>
+          </section>
+          <details class="solar-aux-details solar-contacts-drawer">
+            <summary>Sensor contacts</summary>
+            <section class="hud-traffic-panel solar-contacts-content"
+                   aria-label="Strategic traffic contacts">
+            <p class="nav-eyebrow">SENSOR TRAFFIC / LIVE CONTACTS</p>
+            <p class="my-2 text-xs text-slate-300">
+              Vessels follow their own routes. Contacts appear only within sensor range.
+            </p>
+            <div id="nav-traffic-contacts" class="space-y-2 text-xs text-cyan-100"
+                 aria-live="polite">No contacts in range.</div>
+            <p id="nav-traffic-comms" class="mt-3 whitespace-pre-line text-xs text-emerald-200"
+               role="status">Select Hail when a vessel is in range.</p>
+          </section>
+          </details>
+        </aside>
+      </section>
+      <section id="nav-sector-view" role="tabpanel" aria-labelledby="nav-view-sector" hidden>
+      <div class="nav-layout">
+        <div class="nav-map-frame">
+          <div class="nav-map-caption"><span>SECTOR ATLAS // XY PROJECTION</span><span>CLICK TO ADD WAYPOINT</span></div>
+          <svg id="nav-chart" viewBox="0 0 1000 600" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Sector overview map. Click to add a waypoint to a draft flight route.">
+            <defs>
+              <pattern id="nav-grid-pattern" x="0" y="0" width="50" height="50" patternUnits="userSpaceOnUse">
+                <path d="M 50 0 L 0 0 0 50" fill="none" stroke="#16384f" stroke-width="1"/>
+              </pattern>
+            </defs>
+            <rect x="0" y="0" width="1000" height="600" fill="#061321"/>
+            <rect x="0" y="0" width="1000" height="600" fill="url(#nav-grid-pattern)"/>
+            <g id="nav-chart-content"></g>
+          </svg>
+          <div class="nav-legend"><span><i class="nav-key-self"></i>YOUR SHIP</span><span><i class="nav-key-ally"></i>PILOTS</span><span><i class="nav-key-npc"></i>HOSTILES</span><span><i class="nav-key-route"></i>ROUTE</span></div>
+        </div>
+        <aside class="nav-console">
+          <p class="nav-eyebrow">FLIGHT COMPUTER / NAV-01</p>
+          <div id="nav-state" class="nav-state">HELM IDLE</div>
+          <dl class="nav-metrics">
+            <div><dt>SHIP POSITION</dt><dd id="nav-position">— / —</dd></div>
+            <div><dt>ROUTE LENGTH</dt><dd id="nav-distance">0 units</dd></div>
+          </dl>
+          <div class="nav-console-heading"><h3>COURSE WAYPOINTS</h3><span id="nav-waypoint-count">0 / 8</span></div>
+          <ol id="nav-waypoints" class="nav-waypoints" aria-label="Plotted waypoint coordinates"></ol>
+          <form id="nav-coordinate-form" class="nav-coordinate-form">
+            <label>X <input id="nav-x" type="number" min="0" max="20000" step="any" placeholder="X" required /></label>
+            <label>Y <input id="nav-y" type="number" min="0" max="12000" step="any" placeholder="Y" required /></label>
+            <label class="nav-altitude-label">Z ALTITUDE <input id="nav-z" type="number" min="-3000" max="3000" step="any" value="0" placeholder="Altitude" required /></label>
+            <button class="nav-button" type="submit">Add coordinates</button>
+          </form>
+          <div class="nav-console-actions">
+            <button id="nav-engage" class="nav-button nav-primary" type="button">Engage autopilot</button>
+            <button id="nav-stop" class="nav-button nav-danger" type="button">Stop / cancel course</button>
+            <div class="nav-secondary-actions">
+              <button id="nav-undo" class="nav-button" type="button">Undo point</button>
+              <button id="nav-clear" class="nav-button" type="button">Clear draft</button>
+            </div>
+          </div>
+          <p id="nav-message" class="nav-message" role="status" aria-live="polite">Awaiting navigation data.</p>
+          <p class="nav-subtitle">Atlas projects XY overhead; Z sets the waypoint altitude. M returns to your single 3D or SBS cockpit.</p>
+        </aside>
+      </div>
+      </section>
+
+      <header class="atlas-hud-top" aria-label="Space Nova navigation controls">
+        <span class="hud-brand"><.icon name="hero-rocket-launch" class="size-5" /> SPACE NOVA</span>
+        <h2 id="nav-title">Solar System Atlas</h2>
+        <p id="nav-subtitle" class="sr-only">One star system · choose a planet or chart waypoint; cockpit and propulsion are independent.</p>
+        <div class="atlas-view-tabs" role="tablist" aria-label="Atlas navigation level">
+          <button id="nav-view-system" class="atlas-view-tab is-active" type="button"
+            role="tab" aria-selected="true" aria-controls="nav-solar-view">
+            <.icon name="hero-globe-alt" class="inline size-4" /> Solar System
+          </button>
+          <button id="nav-view-sector" class="atlas-view-tab" type="button"
+            role="tab" aria-selected="false" aria-controls="nav-sector-view">
+            <.icon name="hero-map" class="inline size-4" /> Sector 1-1
+          </button>
+        </div>
+        <a class="hud-nav-link atlas-loadout-link" href={~p"/equipment"}>
+          <.icon name="hero-wrench-screwdriver" class="size-4" /> Loadout
+        </a>
+        <button id="nav-hud-reset" class="nav-button hud-mini-button hud-reset-button"
+          type="button" aria-label="Reset instrument positions" title="Reset HUD positions">↺</button>
+        <button id="nav-helmet-open" class="nav-button hud-mini-button" type="button"
+          aria-controls="helmet-panel">HMD: <span id="nav-helmet-status">NOT PAIRED</span></button>
+        <button id="nav-close" class="nav-button nav-close hud-mini-button" type="button"
+          aria-label="Enter cockpit">Cockpit <span class="text-cyan-300">[M]</span></button>
+      </header>
+      <section id="helmet-panel" hidden aria-label="Pilot HMD management"
+               class="mx-4 mb-4 rounded-xl border border-cyan-400/30 bg-slate-950 p-4 text-slate-100">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <h3 class="font-bold tracking-wider text-cyan-200">PILOT HMD / HEADSET LINK</h3>
+          <button id="nav-helmet-close" type="button" class="nav-button">Close panel</button>
+        </div>
+        <p id="helmet-device-status" class="my-3 text-sm text-slate-300">No helmet paired</p>
+        <div id="helmet-unpaired">
+          <div class="flex flex-wrap items-start gap-4">
+            <canvas id="helmet-qr" width="220" height="220" class="rounded-lg bg-white"></canvas>
+            <div class="max-w-md space-y-2 text-sm text-slate-300">
+              <p>Scan once with your phone. The ship automatically authorizes it as a read-only SBS helmet.</p>
+              <label for="helmet-host" class="block font-semibold text-cyan-100">Reachable laptop address</label>
+              <input id="helmet-host" type="text" list="helmet-host-candidates"
+                     class="w-full rounded border border-slate-600 bg-slate-900 p-2 text-white"
+                     placeholder="http://192.168.1.100:4000" />
+              <datalist id="helmet-host-candidates"></datalist>
+              <p>The laptop's LAN IP is detected automatically. If you have multiple network interfaces,
+                choose another suggested address or enter one manually. The phone must be able to reach this address.</p>
+              <p id="helmet-pairing-message" role="status">Open this panel to generate a pairing invitation.</p>
+            </div>
+          </div>
+        </div>
+        <div id="helmet-paired" hidden class="space-y-3">
+          <p class="text-sm text-cyan-100">This helmet is remembered across disconnects and server restarts.
+            The phone displays black in the Atlas and renders SBS only in the combat cockpit.</p>
+          <button id="helmet-forget" class="nav-button nav-danger" type="button">Forget headset</button>
+        </div>
+      </section>
+
+      <%!-- Control preferences are available on demand instead of reserving a footer. --%>
+      <details id="nav-control-drawer" class="hud-control-drawer">
+        <summary>Flight controls <span aria-hidden="true">⚙</span></summary>
+      <section aria-label="Cockpit control preferences"
+               class="hud-preferences mx-4 mb-4 rounded-xl border border-cyan-400/25 bg-slate-950/80 p-3 text-slate-200">
+        <div class="flex flex-wrap items-center gap-4">
+          <label class="flex cursor-pointer items-center gap-2 text-sm font-semibold text-cyan-100">
+            <input id="nav-mouse-steering" type="checkbox"
+                   class="size-4 accent-cyan-400" />
+            Enable mouse-look steering
+          </label>
+          <label for="nav-mouse-sensitivity" class="flex items-center gap-2 text-xs text-slate-300">
+            Sensitivity
+            <input id="nav-mouse-sensitivity" type="range" min="40" max="600"
+                   step="10" value="100" class="w-32 accent-cyan-400" />
+            <output id="nav-mouse-sensitivity-value" for="nav-mouse-sensitivity">1.0×</output>
+          </label>
+        </div>
+        <p class="mt-2 text-xs text-slate-400">
+          When enabled, return to the cockpit and click its background once to capture the mouse.
+          Move the mouse to pitch and yaw. Esc releases the cursor; M opens Atlas.
+          Keyboard steering, wheel throttle, Ctrl+wheel roll and right-click lasers remain available.
+        </p>
+      </section>
+
+      </details>
+      <div class="hud-keybar" aria-label="Navigation keyboard commands">
+        <span class="hud-keybar-title">SOL / NAV</span>
+        <span><kbd>M</kbd> COCKPIT</span>
+        <span><kbd>CLICK</kbd> SELECT</span>
+        <span><kbd>RMB</kbd> ANALYZE / NAVIGATE</span>
+        <span class="hud-keybar-end">AI NAVIGATION ONLINE · SOL</span>
+      </div>
+    </div>
+  </section>
 
   <div id="cockpit-interface" class="cockpit-interface" aria-label="Customizable cockpit HUD">
     <div id="cockpit-window-stage" class="cockpit-window-stage">
@@ -169,142 +513,6 @@
             <p id="hud-equipment" class="mt-1.5 truncate text-xs text-slate-300">
               Synchronizing configuration…
             </p>
-          </div>
-        </div>
-      </section>
-
-      <section
-        id="cockpit-window-target-info"
-        data-cockpit-window="target_info"
-        class="cockpit-window cockpit-window-target"
-        aria-labelledby="target-info-title"
-      >
-        <header
-          id="target-info-drag-handle"
-          data-cockpit-drag-handle
-          class="cockpit-window-header cockpit-window-header-hostile"
-          tabindex="0"
-          aria-label="Target information window drag handle. Use arrow keys while the HUD is unlocked to move this window."
-        >
-          <div class="flex min-w-0 items-center gap-2.5">
-            <span class="cockpit-window-mark cockpit-window-mark-hostile">
-              <.icon name="hero-viewfinder-circle" class="size-3.5" />
-            </span>
-            <div class="min-w-0">
-              <p class="cockpit-window-kicker text-orange-300/65">Combat relay</p>
-              <h2 id="target-info-title" class="cockpit-window-title">Target information</h2>
-            </div>
-          </div>
-          <div data-cockpit-collapsed-summary class="cockpit-collapsed-summary text-orange-200">
-            <span id="combat-target-summary">No target</span>
-          </div>
-          <div class="cockpit-window-actions">
-            <button
-              id="target-info-hide"
-              data-cockpit-hide
-              type="button"
-              class="cockpit-window-button cockpit-edit-control"
-              aria-label="Hide target information"
-            >
-              <.icon name="hero-eye-slash" class="size-3.5" />
-            </button>
-            <button
-              id="target-info-collapse"
-              data-cockpit-collapse
-              type="button"
-              class="cockpit-window-button"
-              aria-label="Collapse target information"
-              aria-expanded="true"
-            >
-              <.icon name="hero-chevron-up" class="cockpit-collapse-open size-3.5" />
-              <.icon name="hero-chevron-down" class="cockpit-collapse-closed size-3.5" />
-            </button>
-          </div>
-        </header>
-
-        <div data-cockpit-content class="cockpit-window-content">
-          <p
-            id="combat-status"
-            role="status"
-            class="min-h-8 text-xs leading-relaxed text-slate-400"
-          >
-            Select a hostile, then press Ctrl or 1 to toggle X1 laser fire.
-          </p>
-
-          <div id="combat-target-empty" class="cockpit-empty-state">
-            <.icon name="hero-signal" class="size-5 text-slate-600" />
-            <p>No hostile target selected</p>
-          </div>
-
-          <div id="combat-target-panel" class="mt-3 hidden border-t border-slate-800/90 pt-3">
-            <div class="flex items-start justify-between gap-3">
-              <div class="min-w-0">
-                <p class="text-[0.52rem] uppercase tracking-[0.2em] text-slate-500">
-                  Locked target
-                </p>
-                <h3
-                  id="combat-target-name"
-                  class="mt-1 truncate text-base font-semibold text-orange-100"
-                >
-                  —
-                </h3>
-                <p id="combat-target-type" class="mt-0.5 text-[0.6rem] text-slate-500">—</p>
-                <p
-                  id="combat-target-state"
-                  class="mt-1 text-[0.62rem] font-semibold tracking-wide text-orange-300/70"
-                >
-                  —
-                </p>
-              </div>
-              <span class="rounded-md border border-orange-300/20 bg-orange-300/5 px-2 py-1 text-[0.52rem] font-bold uppercase tracking-[0.16em] text-orange-300/70">
-                Hostile
-              </span>
-            </div>
-
-            <div class="mt-3 space-y-2.5">
-              <div>
-                <div class="mb-1 flex items-center justify-between text-[0.58rem] font-semibold uppercase tracking-[0.13em]">
-                  <span class="text-emerald-300">Hull</span>
-                  <span id="combat-target-hull" class="font-mono text-slate-300">—</span>
-                </div>
-                <div class="h-1.5 overflow-hidden rounded-full bg-slate-800">
-                  <div
-                    id="combat-target-hull-bar"
-                    class="cockpit-health-bar cockpit-health-bar-hull"
-                  >
-                  </div>
-                </div>
-              </div>
-              <div>
-                <div class="mb-1 flex items-center justify-between text-[0.58rem] font-semibold uppercase tracking-[0.13em]">
-                  <span class="text-sky-300">Shield</span>
-                  <span id="combat-target-shields" class="font-mono text-slate-300">—</span>
-                </div>
-                <div class="h-1.5 overflow-hidden rounded-full bg-slate-800">
-                  <div
-                    id="combat-target-shield-bar"
-                    class="cockpit-health-bar cockpit-health-bar-shield"
-                  >
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="mt-4 grid grid-cols-3 gap-2 border-t border-slate-800/90 pt-4">
-            <button id="combat-target-nearest" type="button" class="cockpit-action-button">
-              <.icon name="hero-viewfinder-circle" class="size-4" /> Nearest
-            </button>
-            <button id="combat-clear-target" type="button" class="cockpit-action-button">
-              <.icon name="hero-x-mark" class="size-4" /> Clear
-            </button>
-            <button
-              id="combat-fire"
-              type="button"
-              class="cockpit-action-button cockpit-action-button-primary"
-            >
-              <.icon name="hero-bolt" class="size-4" /> Toggle laser
-            </button>
           </div>
         </div>
       </section>
@@ -441,17 +649,6 @@
             <small data-cockpit-visibility-status>Visible</small>
           </button>
           <button
-            id="cockpit-visibility-target"
-            data-cockpit-visibility="target_info"
-            type="button"
-            class="cockpit-visibility-button"
-          >
-            <span>
-              <.icon name="hero-viewfinder-circle" class="size-3.5" /> Target information
-            </span>
-            <small data-cockpit-visibility-status>Visible</small>
-          </button>
-          <button
             id="cockpit-visibility-minimap"
             data-cockpit-visibility="minimap"
             type="button"
@@ -534,8 +731,52 @@
     </div>
   </nav>
 
-  <div class="pointer-events-none absolute bottom-28 left-1/2 z-10 hidden -translate-x-1/2 rounded-xl border border-slate-700/70 bg-slate-950/70 px-3 py-2 text-[0.65rem] text-slate-400 backdrop-blur xl:block">
-    Left-click hostile to target · Hold empty space to steer · Ctrl or 1 toggles laser · Esc clears
+  <%!-- A prominent but non-interactive 3D-only confirmation near the crosshair.
+       Stereo uses the in-world holographic HUD instead of a flat overlay. --%>
+  <div id="laser-hit-confirmation" aria-live="polite"
+    class="pointer-events-none absolute left-1/2 top-[39%] z-30 hidden -translate-x-1/2 rounded-lg border border-transparent bg-slate-950/85 px-4 py-2 text-center font-mono text-sm font-bold tracking-wider shadow-lg backdrop-blur-sm">
+  </div>
+
+  <%!-- Authoritative proximity status. Live text is announced only when the
+       warning level changes; clearance updates are visual to avoid speech spam. --%>
+  <div id="planetary-proximity-warning" hidden data-level="clear"
+       class="pointer-events-none absolute left-1/2 top-[18%] z-40 w-max max-w-[min(28rem,90vw)] -translate-x-1/2 rounded-xl border border-amber-400/60 bg-amber-950/85 px-4 py-3 text-center font-mono shadow-lg backdrop-blur-sm">
+    <p id="planetary-proximity-level" class="text-sm font-black tracking-widest text-amber-100">
+      CAUTION · PLANETARY PROXIMITY
+    </p>
+    <p id="planetary-proximity-detail" class="mt-1 text-xs font-semibold tracking-wider text-amber-200">
+      Maintain safe distance
+    </p>
+  </div>
+  <p id="planetary-proximity-announcement" role="status" aria-live="polite"
+     class="sr-only"></p>
+
+  <p id="combat-status" role="status" aria-live="polite"
+     class="pointer-events-none absolute bottom-24 left-4 z-30 max-w-[min(22rem,40vw)] font-mono text-xs text-rose-200 drop-shadow-md">
+    RMB red laser · T nearest target · L autofire
+  </p>
+
+  <div id="flight-indicators" class="pointer-events-none absolute bottom-32 right-3 z-30 hidden rounded-lg border border-cyan-400/20 bg-slate-950/80 px-3 py-2 font-mono text-xs text-cyan-100 backdrop-blur sm:block">
+    FLIGHT <span id="hud-flight-mode" class="text-cyan-300">CRUISE</span>
+    · THR <span id="hud-throttle">0%</span>
+    · SPEED <span id="hud-actual-speed">0 u/s</span>
+    <div class="mt-1 text-cyan-200/80">
+      HDG <span id="hud-heading">0°</span>
+      · PITCH <span id="hud-pitch">0°</span> (<span id="hud-pitch-input">—</span>)
+      · ROLL <span id="hud-roll">0°</span>
+    </div>
+    <div class="mt-1 text-cyan-200/80">
+      TURN RATE P/Y/R <span id="hud-turn-rates">0 / 0 / 0 °/s</span>
+    </div>
+  </div>
+
+  <p id="cockpit-mouse-steering-status" hidden aria-live="polite"
+     class="pointer-events-none absolute bottom-44 left-1/2 z-30 -translate-x-1/2 rounded-lg border border-cyan-400/30 bg-slate-950/85 px-3 py-2 text-center font-mono text-xs text-cyan-200">
+    MOUSE STEERING ENABLED · CLICK COCKPIT TO CAPTURE
+  </p>
+
+  <div id="game-controls-hint" class="pointer-events-none absolute bottom-28 left-1/2 z-10 hidden -translate-x-1/2 rounded-xl border border-slate-700/70 bg-slate-950/70 px-3 py-2 text-[0.65rem] text-slate-400 backdrop-blur xl:block">
+    W/S pitch · A/D yaw · optional mouse-look (Atlas setting) · Ctrl+wheel roll · wheel throttle · Q/E roll · RMB laser · T target · M atlas
   </div>
 
   <div

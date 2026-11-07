@@ -9,6 +9,7 @@ defmodule Darkorbit.Accounts do
   import Ecto.Query, warn: false
 
   alias Darkorbit.Accounts.PlayerAccount
+  alias Darkorbit.Accounts.Verification
   alias Darkorbit.Fleet
   alias Darkorbit.Inventory
   alias Darkorbit.Preferences
@@ -43,9 +44,11 @@ defmodule Darkorbit.Accounts do
   titles, starter ship, and both starter loadouts.
   """
   def register_account(attrs) when is_map(attrs) do
+    {verification, token} = Verification.issue()
+
     account = %PlayerAccount{
       session_id: random_token(32),
-      verification: %{"verified" => false, "hash" => random_token(16)}
+      verification: verification
     }
 
     Multi.new()
@@ -65,7 +68,7 @@ defmodule Darkorbit.Accounts do
     |> Repo.transaction()
     |> case do
       {:ok, %{player_account: player_account}} ->
-        {:ok, %{player_account | password: nil}}
+        {:ok, %{player_account | password: nil, verification_token: token}}
 
       {:error, :player_account, changeset, _changes_so_far} ->
         {:error, changeset}
@@ -96,14 +99,50 @@ defmodule Darkorbit.Accounts do
     end
   end
 
-  def verify_account(user_id, hash) when is_integer(user_id) and is_binary(hash) do
-    Repo.transaction(fn ->
-      account = lock_account(user_id)
+  @doc """
+  Rotates an unverified account's verification token under a row lock.
 
-      if account do
-        verify_locked_account(account, hash)
+  Resends are throttled per account. Unknown, verified or throttled addresses
+  return {:ok, :ignored} so the HTTP layer does not reveal account existence.
+  A successful result contains a transient token for one email delivery.
+  """
+  def request_verification_email(email) when is_binary(email) do
+    normalized_email = email |> String.trim() |> String.downcase()
+
+    Repo.transaction(fn ->
+      account =
+        from(player in PlayerAccount,
+          where: player.email == ^normalized_email,
+          lock: "FOR UPDATE"
+        )
+        |> Repo.one()
+
+      now = System.system_time(:second)
+
+      if account && Verification.resend_allowed?(account.verification || %{}, now) do
+        {verification, token} = Verification.issue(account.verification || %{}, now)
+        verification = Verification.mark_resend(verification, now)
+
+        account
+        |> PlayerAccount.system_changeset(%{"verification" => verification})
+        |> Repo.update()
+        |> case do
+          {:ok, updated} -> %{updated | verification_token: token}
+          {:error, _changeset} -> Repo.rollback(:verification_update_failed)
+        end
       else
-        Repo.rollback(:not_found)
+        :ignored
+      end
+    end)
+  end
+
+  def request_verification_email(_email), do: {:ok, :ignored}
+
+  def verify_account(user_id, token) when is_integer(user_id) and is_binary(token) do
+    Repo.transaction(fn ->
+      case lock_account(user_id) do
+        %PlayerAccount{} = account -> verify_locked_account(account, token)
+        nil -> Repo.rollback(:not_found)
       end
     end)
   end
@@ -130,6 +169,31 @@ defmodule Darkorbit.Accounts do
         {:error, :invalid_session}
     end
   end
+
+  @doc "Server-owned, account-persistent active ship configuration."
+  def activate_configuration(user_id, configuration)
+      when is_integer(user_id) and user_id > 0 and configuration in [1, 2] do
+    Repo.transaction(fn ->
+      case lock_account(user_id) do
+        nil ->
+          Repo.rollback(:account_not_found)
+
+        %PlayerAccount{} = account ->
+          account
+          |> PlayerAccount.system_changeset(%{
+            "data" => Map.put(account.data || %{}, "active_configuration", configuration)
+          })
+          |> Repo.update()
+          |> case do
+            {:ok, updated} -> updated
+            {:error, reason} -> Repo.rollback(reason)
+          end
+      end
+    end)
+  end
+
+  def activate_configuration(_user_id, _configuration),
+    do: {:error, :invalid_configuration}
 
   def select_company(user_id, company) when is_integer(user_id) and is_binary(company) do
     faction_id = Map.get(%{"mmo" => 1, "eic" => 2, "vru" => 3}, company)
@@ -158,20 +222,20 @@ defmodule Darkorbit.Accounts do
     end
   end
 
-  defp verify_locked_account(account, hash) do
+  defp verify_locked_account(account, token) do
     verification = account.verification || %{}
 
     cond do
       verification["verified"] == true ->
         Repo.rollback(:already_verified)
 
-      verification["hash"] != hash ->
-        Repo.rollback(:invalid_hash)
+      not Verification.valid?(verification, token) ->
+        Repo.rollback(:invalid_or_expired_token)
 
       true ->
         account
         |> PlayerAccount.system_changeset(%{
-          "verification" => Map.put(verification, "verified", true)
+          "verification" => Verification.verified(verification)
         })
         |> Repo.update()
         |> case do

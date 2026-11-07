@@ -11,8 +11,13 @@ defmodule Core.World.SessionManager do
 
   @spec open(GenServer.server(), term(), String.t()) ::
           {:ok, Session.t()} | {:error, :already_connected}
-  def open(server, player_id, map_id) when is_binary(map_id) do
-    GenServer.call(server, {:open, player_id, map_id})
+  def open(server, player_id, map_id, ship_instance_id \\ nil) when is_binary(map_id) do
+    if is_nil(ship_instance_id) or
+         (is_integer(ship_instance_id) and ship_instance_id > 0) do
+      GenServer.call(server, {:open, player_id, map_id, ship_instance_id})
+    else
+      {:error, :invalid_ship_instance}
+    end
   end
 
   @spec fetch(GenServer.server(), pos_integer()) :: {:ok, Session.t()} | :error
@@ -28,7 +33,7 @@ defmodule Core.World.SessionManager do
   def init(:ok), do: {:ok, %{by_id: %{}, by_player: %{}}}
 
   @impl true
-  def handle_call({:open, player_id, map_id}, _from, state) do
+  def handle_call({:open, player_id, map_id, ship_instance_id}, _from, state) do
     if Map.has_key?(state.by_player, player_id) do
       {:reply, {:error, :already_connected}, state}
     else
@@ -38,7 +43,8 @@ defmodule Core.World.SessionManager do
         id: session_id,
         player_id: player_id,
         map_id: map_id,
-        entity_id: player_id
+        entity_id: player_id,
+        ship_instance_id: ship_instance_id
       }
 
       new_state = %{

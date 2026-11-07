@@ -7,6 +7,7 @@ defmodule Darkorbit.Accounts.PlayerAccount do
     field :email, :string
     field :password_hash, :string
     field :password, :string, virtual: true, redact: true
+    field :verification_token, :string, virtual: true, redact: true
     field :pilot_name, :string
     field :faction_id, :integer, default: 0
     field :clan_id, :integer, default: 0
@@ -59,6 +60,9 @@ defmodule Darkorbit.Accounts.PlayerAccount do
   def registration_changeset(player_account, attrs) do
     player_account
     |> cast(attrs, @registration_fields)
+    |> update_change(:email, fn email ->
+      email |> String.trim() |> String.downcase()
+    end)
     |> validate_required(@registration_fields)
     |> validate_length(:username, min: 4, max: 20)
     |> validate_length(:pilot_name, min: 4, max: 20)
@@ -75,7 +79,7 @@ defmodule Darkorbit.Accounts.PlayerAccount do
   @doc false
   def system_changeset(player_account, attrs) do
     player_account
-    |> cast(attrs, [:session_id, :verification, :faction_id, :ship_id])
+    |> cast(attrs, [:session_id, :verification, :faction_id, :ship_id, :data])
     |> validate_required([:session_id, :verification, :faction_id, :ship_id])
     |> common_constraints()
   end

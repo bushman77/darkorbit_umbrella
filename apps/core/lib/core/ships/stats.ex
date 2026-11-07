@@ -30,7 +30,14 @@ defmodule Core.Ships.Stats do
     :damage,
     :cargo_capacity,
     :shield_absorption,
-    :shield_regeneration
+    :shield_regeneration,
+    :forward_shield_class,
+    :aft_shield_class,
+    :missile_tube,
+    :acceleration_g,
+    :turn_deg_s,
+    :cargo_pods,
+    :max_cargo_pods
   ]
 
   @type t :: %__MODULE__{
@@ -41,7 +48,14 @@ defmodule Core.Ships.Stats do
           damage: non_neg_integer(),
           cargo_capacity: non_neg_integer(),
           shield_absorption: float(),
-          shield_regeneration: non_neg_integer()
+          shield_regeneration: non_neg_integer(),
+          forward_shield_class: non_neg_integer(),
+          aft_shield_class: non_neg_integer(),
+          missile_tube: boolean(),
+          acceleration_g: number() | nil,
+          turn_deg_s: number() | nil,
+          cargo_pods: non_neg_integer(),
+          max_cargo_pods: non_neg_integer()
         }
 
   @spec calculate(pos_integer(), map(), keyword()) :: {:ok, t()} | {:error, term()}
@@ -158,7 +172,17 @@ defmodule Core.Ships.Stats do
         end) / total_shields
       end
 
-    raw_damage = ship.damage + Enum.reduce(items, 0, fn item, sum -> sum + item.damage end)
+    laser_items = Enum.filter(items, &(&1.category == :laser))
+
+    # Sunracer: one upgradeable beam hardpoint. An installed beam replaces
+    # the Garnet's 10-point rating rather than stacking on top of it.
+    # Later DarkOrbit-influenced hulls keep additive multi-laser slots.
+    raw_damage =
+      if ship.id == 1 and laser_items != [] do
+        laser_items |> Enum.map(& &1.damage) |> Enum.max()
+      else
+        ship.damage + Enum.reduce(laser_items, 0, fn item, sum -> sum + item.damage end)
+      end
 
     damage_multiplier =
       Enum.reduce(items, ship.damage_multiplier, fn item, multiplier ->
@@ -172,6 +196,13 @@ defmodule Core.Ships.Stats do
       speed: ship.speed + Enum.reduce(items, 0, fn item, sum -> sum + item.speed end),
       damage: round(raw_damage * damage_multiplier),
       cargo_capacity: ship.cargo_capacity,
+      forward_shield_class: ship.forward_shield_class,
+      aft_shield_class: ship.aft_shield_class,
+      missile_tube: ship.missile_tube,
+      acceleration_g: ship.acceleration_g,
+      turn_deg_s: ship.turn_deg_s,
+      cargo_pods: ship.cargo_pods,
+      max_cargo_pods: ship.max_cargo_pods,
       shield_absorption: weighted_absorption,
       shield_regeneration:
         ship.shield_regeneration +

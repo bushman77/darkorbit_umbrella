@@ -1,0 +1,225 @@
+defmodule DarkorbitWeb.RegistrationController do
+  @moduledoc """
+  Public pilot onboarding. New accounts cannot sign in until the email address
+  has been confirmed. Production signup is enabled only when an actual email
+  delivery provider has been configured.
+  """
+
+  use DarkorbitWeb, :controller
+
+  require Logger
+
+  alias Darkorbit.Accounts
+  alias Darkorbit.Accounts.PlayerAccount
+  alias Darkorbit.Mailer
+  alias DarkorbitWeb.RegistrationEmail
+
+  def new(conn, _params) do
+    if conn.assigns.current_player do
+      redirect(conn, to: ~p"/play")
+    else
+      render_registration(conn, %{})
+    end
+  end
+
+  def create(conn, %{"registration" => params}) when is_map(params) do
+    if registration_enabled?() do
+      case Accounts.register_account(params) do
+        {:ok, account} ->
+          conn =
+            if deliver_verification(account) == :ok do
+              conn
+            else
+              put_flash(conn, :error, "Confirmation delivery was unsuccessful. Request a new link using the resend form.")
+            end
+
+          redirect(conn, to: ~p"/register/success")
+
+        {:error, %Ecto.Changeset{} = changeset} ->
+          # Phoenix form fields may read values from changeset.params as well as
+          # changeset.changes. Remove both copies before rendering an error.
+          safe_params =
+            (changeset.params || %{})
+            |> Map.delete("password")
+            |> Map.delete(:password)
+
+          safe_changeset = %{
+            changeset
+            | changes: Map.delete(changeset.changes, :password),
+              params: safe_params
+          }
+
+          conn
+          |> put_status(:unprocessable_entity)
+          |> render(:new,
+            page_title: "Create pilot account",
+            registration_enabled: true,
+            form: Phoenix.Component.to_form(safe_changeset,
+              as: :registration, action: :insert)
+          )
+
+        {:error, _reason} ->
+          Logger.error("Space Nova registration provisioning failed")
+
+          conn
+          |> put_flash(:error, "We couldn't provision your starter ship. Please try again later.")
+          |> redirect(to: ~p"/register")
+      end
+    else
+      conn
+      |> put_status(:service_unavailable)
+      |> render(:new,
+        page_title: "Create pilot account",
+        registration_enabled: false,
+        form: Phoenix.Component.to_form(%{}, as: :registration)
+      )
+    end
+  end
+
+  def create(conn, _params) do
+    conn
+    |> put_status(:unprocessable_entity)
+    |> render(:new,
+      page_title: "Create pilot account",
+      registration_enabled: registration_enabled?(),
+      form: Phoenix.Component.to_form(%{}, as: :registration)
+    )
+  end
+
+  def success(conn, _params) do
+    render(conn, :success, page_title: "Check your inbox")
+  end
+
+  @doc "Render a confirmation action without consuming the bearer token on GET."
+  def verify(conn, %{"id" => id, "token" => token})
+      when is_binary(id) and is_binary(token) do
+    conn
+    |> private_token_response()
+    |> render(:verify,
+      page_title: "Confirm pilot email",
+      form:
+        Phoenix.Component.to_form(%{"id" => id, "token" => token},
+          as: :verification
+        )
+    )
+  end
+
+  def verify(conn, _params) do
+    conn
+    |> put_flash(:error, "This verification link is invalid.")
+    |> redirect(to: ~p"/login")
+  end
+
+  def confirm(conn, %{"verification" => %{"id" => id, "token" => token}})
+      when is_binary(id) and is_binary(token) do
+    result =
+      case Integer.parse(id) do
+        {account_id, ""} when account_id > 0 ->
+          Accounts.verify_account(account_id, token)
+
+        _ ->
+          {:error, :invalid_link}
+      end
+
+    conn = private_token_response(conn)
+
+    case result do
+      {:ok, _account} ->
+        conn
+        |> put_flash(:info, "Pilot account verified. You can now establish your uplink.")
+        |> redirect(to: ~p"/login")
+
+      _ ->
+        conn
+        |> put_flash(:error, "This verification link is invalid, expired or already used. You can request a new one.")
+        |> redirect(to: ~p"/register/resend")
+    end
+  end
+
+  def confirm(conn, _params) do
+    conn
+    |> put_flash(:error, "This verification link is invalid.")
+    |> redirect(to: ~p"/register/resend")
+  end
+
+  def resend_new(conn, _params) do
+    render(conn, :resend,
+      page_title: "Resend pilot confirmation",
+      registration_enabled: registration_enabled?(),
+      form: Phoenix.Component.to_form(%{}, as: :resend)
+    )
+  end
+
+  @doc "Non-enumerating, account-throttled verification delivery recovery."
+  def resend(conn, %{"resend" => %{"email" => email}}) when is_binary(email) do
+    if registration_enabled?() do
+      case Accounts.request_verification_email(email) do
+        {:ok, %PlayerAccount{} = account} ->
+          _result = deliver_verification(account)
+
+        {:error, _reason} ->
+          Logger.error("Space Nova verification resend could not update the account")
+
+        _ignored ->
+          :ok
+      end
+
+      conn
+      |> put_flash(:info, "If this address belongs to an unverified pilot, a confirmation link will be sent if permitted. Check your inbox or try again later.")
+      |> redirect(to: ~p"/register/success")
+    else
+      conn
+      |> put_status(:service_unavailable)
+      |> render(:resend,
+        page_title: "Resend pilot confirmation",
+        registration_enabled: false,
+        form: Phoenix.Component.to_form(%{}, as: :resend)
+      )
+    end
+  end
+
+  def resend(conn, _params) do
+    conn
+    |> put_flash(:info, "If this address belongs to an unverified pilot, a confirmation link will be sent if permitted.")
+    |> redirect(to: ~p"/register/success")
+  end
+
+  defp deliver_verification(%PlayerAccount{verification_token: token} = account)
+       when is_binary(token) do
+    verification_url =
+      url(~p"/verify-account?#{%{id: account.id, token: token}}")
+
+    mailer = Application.get_env(:darkorbit_web, :registration_mailer, Mailer)
+
+    case mailer.deliver(RegistrationEmail.verification(account, verification_url)) do
+      {:ok, _response} ->
+        :ok
+
+      _error ->
+        Logger.error("Space Nova verification email delivery failed")
+        :error
+    end
+  rescue
+    _error ->
+      Logger.error("Space Nova verification email delivery raised an exception")
+      :error
+  end
+
+  defp private_token_response(conn) do
+    conn
+    |> put_resp_header("cache-control", "no-store")
+    |> put_resp_header("referrer-policy", "no-referrer")
+  end
+
+  defp render_registration(conn, params) do
+    render(conn, :new,
+      page_title: "Create pilot account",
+      registration_enabled: registration_enabled?(),
+      form: Phoenix.Component.to_form(params, as: :registration)
+    )
+  end
+
+  defp registration_enabled? do
+    Application.get_env(:darkorbit_web, :registration_email_enabled, false)
+  end
+end

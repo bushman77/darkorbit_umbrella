@@ -23,15 +23,35 @@ defmodule DarkorbitWeb.Router do
     pipe_through :browser
 
     get "/", PageController, :home
+    get "/helmet", HelmetController, :show
     get "/login", SessionController, :new
     post "/login", SessionController, :create
+    get "/register", RegistrationController, :new
+    post "/register", RegistrationController, :create
+    get "/register/success", RegistrationController, :success
+    get "/register/resend", RegistrationController, :resend_new
+    post "/register/resend", RegistrationController, :resend
+    get "/verify-account", RegistrationController, :verify
+    post "/verify-account", RegistrationController, :confirm
     delete "/logout", SessionController, :delete
+  end
+
+  # The phone checks a saved HMD bearer credential without joining a pilot
+  # channel. JSON API avoids exposing the credential in URL or browser session.
+  scope "/", DarkorbitWeb do
+    pipe_through :api
+
+    post "/helmet/verify", HelmetController, :verify
+    post "/helmet/pair", HelmetController, :pair
   end
 
   scope "/", DarkorbitWeb do
     pipe_through [:browser, :require_authenticated_player]
 
     get "/play", GameController, :show
+    get "/equipment", EquipmentController, :show
+    post "/equipment", EquipmentController, :update
+    post "/equipment/activate", EquipmentController, :activate
   end
 
   # Other scopes may use custom stacks.
@@ -52,6 +72,7 @@ defmodule DarkorbitWeb.Router do
       pipe_through :browser
 
       live_dashboard "/dashboard", metrics: DarkorbitWeb.Telemetry
+      forward "/mailbox", Plug.Swoosh.MailboxPreview
     end
   end
 end

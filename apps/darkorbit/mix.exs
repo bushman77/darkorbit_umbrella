@@ -44,6 +44,7 @@ defmodule Darkorbit.MixProject do
       {:jason, "~> 1.2"},
       {:bcrypt_elixir, "~> 3.3"},
       {:swoosh, "~> 1.16"},
+      {:gen_smtp, "~> 1.3"},
       {:req, "~> 0.5"}
     ]
   end

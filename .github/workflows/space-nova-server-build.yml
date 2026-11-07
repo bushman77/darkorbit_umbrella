@@ -1,0 +1,102 @@
+name: Build Space Nova EC2 server package
+
+on:
+  push:
+    branches: [sbs]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Only the newest sbs revision needs an EC2 package.
+concurrency:
+  group: space-nova-ec2-server-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  server:
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: space_nova_server_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      MIX_ENV: prod
+    steps:
+      - uses: actions/checkout@v4
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: "27.3"
+          elixir-version: "1.18.4"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Validate deployment menu and safety checks
+        run: python3 -m unittest discover -s scripts -p 'test_space_nova_deploy.py'
+      - name: Build production Elixir release with bundled assets
+        run: |
+          npm ci --prefix apps/darkorbit_web/assets
+          mix deps.get --only prod --check-locked
+          mix compile --warnings-as-errors
+          mix assets.deploy
+          test -s apps/darkorbit_web/priv/static/cache_manifest.json
+          mix release space_mmo --overwrite
+          test -x _build/prod/rel/space_mmo/bin/space_mmo
+      - name: Smoke-test Caddy proxy mode and migrations
+        env:
+          DATABASE_URL: ecto://postgres:postgres@127.0.0.1/space_nova_server_ci
+          PHX_HOST: spacenova.ddns.net
+          SPACE_NOVA_PROXY_MODE: "true"
+          SPACE_NOVA_EMAIL_PROVIDER: none
+          SPACE_NOVA_REGISTRATION_OPEN: "false"
+        run: |
+          export SECRET_KEY_BASE="$(openssl rand -hex 48)"
+          bin=_build/prod/rel/space_mmo/bin/space_mmo
+          "$bin" eval 'Darkorbit.Release.migrate()'
+          "$bin" start > "$RUNNER_TEMP/space-nova-server.log" 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          ready=0
+          for _ in $(seq 1 45); do
+            if curl --fail --silent --show-error --max-time 2 \
+                -H "Host: spacenova.ddns.net" \
+                -H "X-Forwarded-Proto: https" \
+                http://127.0.0.1:4000/login -o /dev/null; then
+              ready=1
+              break
+            fi
+            if ! kill -0 "$server_pid" 2>/dev/null; then break; fi
+            sleep 1
+          done
+          if [[ "$ready" != 1 ]]; then
+            cat "$RUNNER_TEMP/space-nova-server.log" >&2
+            exit 1
+          fi
+          ss -lnt | grep -Eq '127\.0\.0\.1:4000\b'
+      - name: Package and checksum Ubuntu x86_64 release
+        run: |
+          mkdir -p dist
+          tar -C _build/prod/rel -czf dist/space-nova-server-linux-x64.tar.gz space_mmo
+          tar -tzf dist/space-nova-server-linux-x64.tar.gz | grep -F 'space_mmo/bin/space_mmo' >/dev/null
+          tar -tzf dist/space-nova-server-linux-x64.tar.gz | grep -F 'cache_manifest.json' >/dev/null
+          (cd dist && sha256sum space-nova-server-linux-x64.tar.gz > SHA256SUMS)
+          (cd dist && sha256sum -c SHA256SUMS)
+          printf 'Source commit: %s\n' "$GITHUB_SHA"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: space-nova-ec2-server
+          retention-days: 7
+          if-no-files-found: error
+          path: |
+            dist/space-nova-server-linux-x64.tar.gz
+            dist/SHA256SUMS

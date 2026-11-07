@@ -9,10 +9,12 @@ defmodule Core.Combat.ActionCatalog do
   """
 
   @slot_count 10
+  # Stable internal action IDs preserve old hotbar bindings and tests;
+  # displayed names and equipment stats now follow the Sunracer.
   @pulse_emitter %{
     id: "pulse_emitter",
     type: :weapon,
-    label: "Phoenix pulse emitter",
+    label: "Equipped ship beam weapon",
     cooldown_ms: 700
   }
 
@@ -20,7 +22,7 @@ defmodule Core.Combat.ActionCatalog do
     id: "x1_laser",
     type: :ammunition,
     activation_mode: :toggle,
-    label: "X1 laser",
+    label: "Fire equipped laser",
     icon: "laser",
     weapon_id: "pulse_emitter"
   }

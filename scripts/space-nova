@@ -1,0 +1,331 @@
+#!/usr/bin/env bash
+# Space Nova build & release helper for Pop!_OS.
+set -euo pipefail
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+CLIENT="$ROOT/clients/tauri"
+REPO=bushman77/darkorbit_umbrella
+BRANCH=sbs
+die() { echo "Error: $*" >&2; exit 1; }
+require() { command -v "$1" >/dev/null 2>&1 || die "Install $1 first."; }
+gh_ready() { require gh; gh auth status >/dev/null 2>&1 || die "Run 'gh auth login' first."; }
+on_branch() { [[ "$(git -C "$ROOT" branch --show-current)" == "$BRANCH" ]] || die "Switch to the sbs branch first."; }
+clean_tree() { [[ -z "$(git -C "$ROOT" status --porcelain --untracked-files=no)" ]] || die "Commit or stash existing changes first."; }
+version_now() { python3 "$ROOT/scripts/space-nova-version.py" get; }
+usage() {
+cat <<'EOF'
+Space Nova build and release menu:
+  ./scripts/space-nova             Interactive menu
+  ./scripts/space-nova test        Run launcher tests
+  ./scripts/space-nova linux       Build stable-name Linux .deb + AppImage
+  ./scripts/space-nova server      Build diagnostic Linux server archive
+  ./scripts/space-nova windows     Request Windows .exe build on GitHub
+  ./scripts/space-nova download    Download .exe for the current commit
+  ./scripts/space-nova status      Show recent GitHub Actions runs
+  ./scripts/space-nova version X.Y.Z  Update umbrella mix.exs version only
+  ./scripts/space-nova release X.Y.Z  Build server, Linux and Windows; publish after CI passes
+  ./scripts/space-nova publish X.Y.Z  Alias for release
+  ./scripts/space-nova deploy     Deploy verified Ubuntu server build to EC2
+GitHub commands require 'gh auth login' first. No private keys are read here.
+EOF
+}
+test_client() {
+  require npm
+  (cd "$ROOT/apps/darkorbit_web/assets" && npm ci && npm test)
+  (cd "$CLIENT" && npm ci && npm test)
+}
+linux_build() (
+  require git; require npm; require python3; on_branch; clean_tree
+  local backup file
+  backup="$(mktemp -d)"
+  local files=(
+    clients/tauri/package.json clients/tauri/package-lock.json
+    clients/tauri/src-tauri/tauri.conf.json clients/tauri/src-tauri/Cargo.toml
+    clients/tauri/src-tauri/Cargo.lock
+  )
+  for file in "${files[@]}"; do
+    mkdir -p "$backup/$(dirname "$file")"
+    cp "$ROOT/$file" "$backup/$file"
+  done
+  trap 'for file in "${files[@]}"; do cp "$backup/$file" "$ROOT/$file"; done; rm -rf "$backup"' EXIT
+  python3 "$ROOT/scripts/space-nova-version.py" sync
+  (cd "$CLIENT" && npm ci && npm test && npm run build)
+  # Tauri's bundle directories may contain installers from earlier builds.
+  # Select only the currently requested version, not every historical package.
+  local version image deb
+  version="$(version_now)"
+  image="$CLIENT/src-tauri/target/release/bundle/appimage/Space Nova_${version}_amd64.AppImage"
+  deb="$CLIENT/src-tauri/target/release/bundle/deb/Space Nova_${version}_amd64.deb"
+  [[ -s "$image" ]] || die "Missing current AppImage: $image"
+  [[ -s "$deb" ]] || die "Missing current Debian package: $deb"
+  mkdir -p "$ROOT/dist/releases"
+  cp -- "$image" "$ROOT/dist/releases/space-nova-linux-x64.AppImage"
+  cp -- "$deb" "$ROOT/dist/releases/space-nova-linux-x64.deb"
+  echo "Linux diagnostic installers: $ROOT/dist/releases"
+  echo "To replace an already installed same-version package:"
+  echo "  sudo dpkg -i \"$ROOT/dist/releases/space-nova-linux-x64.deb\""
+)
+server_build() (
+  require git; require mix; require npm; require tar; on_branch; clean_tree
+  # Build an archive of committed files, never the live workstation checkout.
+  # This excludes ignored/untracked development TLS keys and other local data.
+  umask 077
+  local buildroot output
+  buildroot="$(mktemp -d "${TMPDIR:-/tmp}/space-nova-server.XXXXXXXX")"
+  trap 'rm -rf -- "$buildroot"' EXIT
+  echo "Preparing isolated source from $(git -C "$ROOT" rev-parse --short HEAD)"
+  git -C "$ROOT" archive HEAD | tar -xf - -C "$buildroot"
+
+  # Refuse the archive if anyone accidentally committed a local TLS private key.
+  if find "$buildroot/apps/darkorbit_web/priv/cert" -type f -name '*key*' -print -quit 2>/dev/null | grep -q .; then
+    die "A TLS private key is tracked in Git. Refusing to package it."
+  fi
+
+  (cd "$buildroot" &&
+    npm ci --prefix apps/darkorbit_web/assets &&
+    MIX_ENV=prod mix deps.get --only prod &&
+    MIX_ENV=prod mix compile --warnings-as-errors &&
+    MIX_ENV=prod mix assets.deploy &&
+    test -s apps/darkorbit_web/priv/static/cache_manifest.json &&
+    MIX_ENV=prod mix release space_mmo --overwrite)
+
+  mkdir -p "$ROOT/dist/releases"
+  output="$ROOT/dist/releases/space-nova-server-linux-x64.tar.gz"
+  tar -C "$buildroot/_build/prod/rel" -czf "$output" space_mmo
+  tar -tzf "$output" | grep -F 'space_mmo/bin/space_mmo' >/dev/null
+  tar -tzf "$output" | grep -F 'cache_manifest.json' >/dev/null
+  echo "Local diagnostic archive: $output"
+  echo "The official portable Ubuntu 24.04 release is built on GitHub Actions."
+)
+windows_build() {
+  require git; on_branch; gh_ready
+  gh workflow run space-nova-windows.yml --repo "$REPO" --ref "$BRANCH"
+  echo "Windows build queued. View: https://github.com/$REPO/actions/workflows/space-nova-windows.yml"
+  echo "Once successful: ./scripts/space-nova download"
+}
+download_windows() {
+  require git; on_branch; gh_ready
+  local sha run_id folder
+  sha="$(git -C "$ROOT" rev-parse HEAD)"
+  run_id="$(gh run list --repo "$REPO" --workflow space-nova-windows.yml --branch "$BRANCH" \
+    --limit 40 --json databaseId,headSha,conclusion \
+    --jq ".[] | select(.headSha == \"$sha\" and .conclusion == \"success\") | .databaseId" | head -n1)"
+  [[ -n "$run_id" ]] || die "No successful Windows build for this exact commit. Run 'windows', check 'status', then retry."
+  folder="$CLIENT/dist/windows"
+  mkdir -p "$folder"
+  gh run download "$run_id" --repo "$REPO" --name space-nova-windows-x86_64 --dir "$folder"
+  echo "Installer extracted to: $folder"
+}
+prepare_version() {
+  local v="${1:-}"
+  require git; require python3; on_branch; clean_tree
+  python3 "$ROOT/scripts/space-nova-version.py" set "$v"
+  echo "Only umbrella mix.exs changed. Commit and push to sbs before releasing."
+}
+publish_release() {
+  local v="${1:-}" confirmed sha
+  require git; require python3; on_branch; clean_tree; gh_ready
+  python3 "$ROOT/scripts/space-nova-version.py" check "$v"
+  git -C "$ROOT" fetch --quiet origin "$BRANCH"
+  sha="$(git -C "$ROOT" rev-parse HEAD)"
+  [[ "$sha" == "$(git -C "$ROOT" rev-parse "origin/$BRANCH")" ]] ||
+    die "Push your version commit to origin/sbs before publishing."
+  if gh release view "v$v" --repo "$REPO" >/dev/null 2>&1; then die "Release v$v already exists."; fi
+  if gh api "repos/$REPO/git/ref/tags/v$v" >/dev/null 2>&1; then die "Tag v$v already exists."; fi
+  echo "Publish v$v from commit $sha after server, Linux and Windows builds pass?"
+  echo "This does NOT deploy to EC2."
+  read -r -p 'Type PUBLISH to confirm: ' confirmed
+  [[ "$confirmed" == PUBLISH ]] || die "Cancelled."
+  gh workflow run space-nova-release.yml --repo "$REPO" --ref "$BRANCH" \
+    --raw-field "version=$v" --raw-field "expected_sha=$sha"
+  echo "Release pipeline submitted: https://github.com/$REPO/actions/workflows/space-nova-release.yml"
+  echo "Follow progress with './scripts/space-nova status'."
+}
+deploy_ec2() (
+  require git; require ssh; require scp; require sha256sum; require tar
+  on_branch; gh_ready
+
+  local sha row run_id status conclusion archive_dir key target confirmed stage i
+  git -C "$ROOT" fetch --quiet origin "$BRANCH"
+  sha="$(git -C "$ROOT" rev-parse "origin/$BRANCH")"
+  [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || die "Cannot determine origin/sbs commit."
+
+  # Only deploy a successful Ubuntu artifact built from the exact remote sbs commit.
+  row="$(gh run list --repo "$REPO" --workflow space-nova-server-build.yml \
+    --branch "$BRANCH" --limit 50 \
+    --json databaseId,headSha,status,conclusion \
+    --jq ".[] | select(.headSha == \"$sha\") | [.databaseId, .status, (.conclusion // \"\")] | @tsv" | head -n1)"
+  if [[ -z "$row" ]]; then
+    echo "No server package for $sha; requesting the Ubuntu server build."
+    gh workflow run space-nova-server-build.yml --repo "$REPO" --ref "$BRANCH"
+    for i in $(seq 1 45); do
+      row="$(gh run list --repo "$REPO" --workflow space-nova-server-build.yml \
+        --branch "$BRANCH" --limit 50 \
+        --json databaseId,headSha,status,conclusion \
+        --jq ".[] | select(.headSha == \"$sha\") | [.databaseId, .status, (.conclusion // \"\")] | @tsv" | head -n1)"
+      [[ -n "$row" ]] && break
+      sleep 2
+    done
+  fi
+  [[ -n "$row" ]] || die "GitHub build was not found. Check './scripts/space-nova status' and retry."
+  IFS=$'\t' read -r run_id status conclusion <<< "$row"
+  [[ "$run_id" =~ ^[0-9]+$ ]] || die "Invalid GitHub workflow run ID."
+
+  if [[ "$status" != completed ]]; then
+    echo "Waiting for Ubuntu server build $run_id to finish."
+    gh run watch "$run_id" --repo "$REPO" --exit-status ||
+      die "Server build failed; refusing deployment."
+  fi
+  conclusion="$(gh run view "$run_id" --repo "$REPO" --json conclusion --jq .conclusion)"
+  [[ "$conclusion" == success ]] || die "Server build $run_id is not successful ($conclusion)."
+
+  umask 077
+  archive_dir="$(mktemp -d)"
+  trap 'rm -rf -- "$archive_dir"' EXIT
+  gh run download "$run_id" --repo "$REPO" --name space-nova-ec2-server --dir "$archive_dir"
+  [[ -s "$archive_dir/space-nova-server-linux-x64.tar.gz" ]] || die "Missing server archive."
+  [[ -s "$archive_dir/SHA256SUMS" ]] || die "Missing artifact checksums."
+  (cd "$archive_dir" && sha256sum -c SHA256SUMS) || die "Server archive checksum mismatch."
+  tar -tzf "$archive_dir/space-nova-server-linux-x64.tar.gz" | grep -x 'space_mmo/bin/space_mmo' >/dev/null ||
+    die "Server archive does not contain the expected executable."
+
+  key="${SPACE_NOVA_DEPLOY_SSH_KEY:-$HOME/Downloads/space-mmo-dev.pem}"
+  target="${SPACE_NOVA_DEPLOY_HOST:-ubuntu@54.200.202.235}"
+  [[ -r "$key" ]] || die "SSH key missing: $key (set SPACE_NOVA_DEPLOY_SSH_KEY)."
+  [[ "$target" =~ ^[a-zA-Z0-9_.-]+@[a-zA-Z0-9_.-]+$ ]] ||
+    die "Invalid SSH destination: set SPACE_NOVA_DEPLOY_HOST=user@host."
+  local -a ssh_args=(-i "$key" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=10)
+
+  echo
+  echo "Deploy source: $sha (successful Ubuntu workflow run $run_id)"
+  echo "EC2 destination: $target:/home/ubuntu/deploy/space_mmo"
+  echo "A brief outage is expected. Existing database, Caddy, and private env stay untouched."
+  echo "The old OTP directory is kept only until the new service passes its health check."
+  read -r -p "Type DEPLOY to replace the running server: " confirmed
+  [[ "$confirmed" == DEPLOY ]] || die "Cancelled; nothing changed on EC2."
+
+  ssh "${ssh_args[@]}" "$target" \
+    'test -x /home/ubuntu/deploy/space_mmo/bin/space_mmo &&
+     test -f /home/ubuntu/.config/space_mmo.env &&
+     sudo -n systemctl cat space-mmo >/dev/null' ||
+    die "EC2 preflight failed; server unchanged."
+
+  stage="$(ssh "${ssh_args[@]}" "$target" \
+    'mktemp -d /home/ubuntu/deploy/.space-nova-update.XXXXXXXX')"
+  [[ "$stage" =~ ^/home/ubuntu/deploy/\.space-nova-update\.[A-Za-z0-9]+$ ]] ||
+    die "Unexpected EC2 staging path. Stop and inspect the remote host."
+
+  # If transport fails, remove the temporary upload without touching the live service.
+  if ! scp "${ssh_args[@]}" \
+       "$archive_dir/space-nova-server-linux-x64.tar.gz" "$archive_dir/SHA256SUMS" \
+       "$target:$stage/"; then
+    ssh "${ssh_args[@]}" "$target" "rm -rf -- '$stage'" || true
+    die "Transfer failed; running server unchanged."
+  fi
+
+  ssh "${ssh_args[@]}" "$target" bash -se -- "$stage" <<'REMOTE_DEPLOY'
+set -euo pipefail
+stage="$1"
+active=/home/ubuntu/deploy/space_mmo
+service=space-mmo
+stopped=0
+switched=0
+keep_stage=0
+
+[[ "$stage" =~ ^/home/ubuntu/deploy/\.space-nova-update\.[A-Za-z0-9]+$ ]] || exit 1
+recover() {
+  local rc=$?
+  trap - EXIT
+  if ((rc != 0)); then
+    echo "Deployment failed. Attempting to restore the previous running release." >&2
+    if ((switched)); then
+      sudo -n systemctl stop "$service" || true
+      rm -rf -- "$active"
+      if ! mv -- "$stage/previous_space_mmo" "$active"; then
+        keep_stage=1
+        echo "ROLLBACK FAILED: previous release remains at $stage/previous_space_mmo" >&2
+      fi
+    fi
+    if ((stopped)) && ((keep_stage == 0)); then
+      sudo -n systemctl start "$service" ||
+        echo "Previous release restored but restart failed; check systemctl status." >&2
+    fi
+  fi
+  if ((keep_stage == 0)); then rm -rf -- "$stage"; fi
+  exit "$rc"
+}
+trap recover EXIT
+
+(cd "$stage" && sha256sum -c SHA256SUMS)
+tar -xzf "$stage/space-nova-server-linux-x64.tar.gz" -C "$stage"
+test -x "$stage/space_mmo/bin/space_mmo"
+test -d "$active"
+test -f /home/ubuntu/.config/space_mmo.env
+sudo -n systemctl cat "$service" >/dev/null
+
+sudo -n systemctl stop "$service"
+stopped=1
+mv -- "$active" "$stage/previous_space_mmo"
+switched=1
+mv -- "$stage/space_mmo" "$active"
+
+# Migration needs the private systemd EnvironmentFile (not present in an SSH shell).
+# systemd loads credentials without printing them or requiring ubuntu to read the 0600 file.
+sudo -n systemd-run --unit="space-nova-migrate-$(date +%s)-$RANDOM" \
+  --wait --pipe --collect \
+  --property=User=ubuntu \
+  --property=WorkingDirectory=/home/ubuntu/deploy/space_mmo \
+  --property=EnvironmentFile=/home/ubuntu/.config/space_mmo.env \
+  "$active/bin/space_mmo" eval 'Darkorbit.Release.migrate()' </dev/null
+# The remote commands arrive on stdin over SSH. systemd-run --pipe must not
+# inherit that stream, or it can consume the remainder of this deployment script.
+sudo -n systemctl start "$service"
+for attempt in $(seq 1 40); do
+  if sudo -n systemctl is-active --quiet "$service" &&
+    curl -fsS --max-time 2 -H 'Host: spacenova.ddns.net' \
+      -H 'X-Forwarded-Proto: https' \
+      http://127.0.0.1:4000/login -o /dev/null; then
+    echo "Space Nova updated successfully; Phoenix responds on 127.0.0.1:4000."
+    exit 0
+  fi
+  sleep 1
+done
+echo "New server failed its health check." >&2
+exit 1
+REMOTE_DEPLOY
+  echo "EC2 deployment completed. Verify https://spacenova.ddns.net/login and email delivery."
+)
+
+menu() {
+  cat <<'EOF'
+
+Space Nova desktop build manager
+  1) Test
+  2) Build Linux installers
+  3) Build Windows .exe
+  4) Download Windows .exe
+  5) Build status
+  6) Prepare new version
+  7) Publish server and client release
+  8) Compile local Linux server (diagnostic)
+  9) Deploy Ubuntu server release to EC2
+  0) Exit
+EOF
+  local answer ver
+  read -r -p 'Choose: ' answer
+  case "$answer" in
+    1) test_client;; 2) linux_build;; 3) windows_build;; 4) download_windows;;
+    5) gh_ready; gh run list --repo "$REPO" --branch "$BRANCH" --limit 12;;
+    6) read -r -p 'Version (X.Y.Z): ' ver; prepare_version "$ver";;
+    7) read -r -p 'Version (X.Y.Z): ' ver; publish_release "$ver";;
+    8) server_build;; 9) deploy_ec2;;
+    0) exit 0;; *) die "Invalid choice";;
+  esac
+}
+case "${1:-menu}" in
+  menu) menu;; help|-h|--help) usage;; test) test_client;;
+  linux) linux_build;; windows) windows_build;; download) download_windows;;
+  status) gh_ready; gh run list --repo "$REPO" --branch "$BRANCH" --limit 12;;
+  version) prepare_version "${2:-}";; release|publish) publish_release "${2:-}";;
+  server) server_build;; deploy) deploy_ec2;;
+  *) usage; exit 1;;
+esac

@@ -1,0 +1,29 @@
+name: Verify SBS optics do not drift
+
+on:
+  push:
+    branches: [sbs]
+    paths:
+      - "apps/darkorbit_web/assets/js/game/stereo_view.js"
+      - "apps/darkorbit_web/assets/js/game/stereo_viewport.mjs"
+      - "apps/darkorbit_web/assets/js/game/stereo_viewport_test.mjs"
+      - "apps/darkorbit_web/assets/js/game/helmet_alignment*.mjs"
+      - ".github/workflows/sbs-optics-tests.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  optical-projection:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Test repeated SBS frames and lens calibration
+        run: |
+          node --test apps/darkorbit_web/assets/js/game/stereo_viewport_test.mjs
+          node --test apps/darkorbit_web/assets/js/game/helmet_alignment_keys_test.mjs
+          node --test apps/darkorbit_web/assets/js/game/helmet_alignment_test.mjs

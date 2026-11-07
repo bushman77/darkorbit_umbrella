@@ -1,0 +1,147 @@
+:root {
+  color-scheme:dark; font-family:Inter,ui-sans-serif,system-ui,-apple-system,sans-serif;
+  --nova-cyan:#79eeff; --nova-dim:#91b8ca; --nova-edge:#2b7189;
+  background:#020914; color:#e8f8ff;
+}
+* {box-sizing:border-box}
+body {margin:0;min-width:320px;background:#020914}
+button,input {font:inherit}
+button:focus-visible,input:focus-visible {outline:2px solid #b3fbff;outline-offset:3px}
+button {cursor:pointer}
+.launcher-stage {
+  position:relative;min-height:100vh;display:flex;flex-direction:column;
+  padding:clamp(10px,1.5vw,22px);overflow:hidden;
+  background:
+    radial-gradient(circle at 38% 30%,#0e64823b,transparent 40%),
+    radial-gradient(circle at 88% 75%,#102d5745,transparent 40%),
+    #020914;
+}
+.launcher-stage::before {
+  content:"";position:absolute;inset:0;pointer-events:none;opacity:.28;
+  background-image:radial-gradient(#9fe6fb88 .7px,transparent .9px);
+  background-size:83px 101px;
+}
+.launcher-rail,.launcher-commandbar {
+  position:relative;display:flex;align-items:center;justify-content:space-between;
+  gap:14px;flex-wrap:wrap;border:1px solid var(--nova-edge);
+  background:linear-gradient(180deg,#0b2c3d,#031420);
+  box-shadow:inset 0 1px 0 #9fe6ff1a,0 5px 35px #0008;
+  font:800 11px/1.4 ui-monospace,monospace;letter-spacing:.14em;color:var(--nova-dim);
+}
+.launcher-rail {min-height:60px;padding:12px clamp(15px,2.3vw,30px);border-radius:5px}
+.launcher-brand {
+  color:#a8fbff;font-size:clamp(15px,1.6vw,20px);letter-spacing:.28em;
+  display:inline-flex;align-items:center;gap:12px;
+}
+.launcher-brand span {font-size:22px;text-shadow:0 0 14px #64efff}
+.shell {
+  position:relative;flex:1;display:grid;align-items:stretch;
+  grid-template-columns:minmax(0,1.1fr) minmax(340px,.9fr);
+  width:min(1390px,100%); margin:clamp(12px,2vw,28px) auto;
+  border:1px solid #33859e;border-radius:6px;overflow:hidden;
+  background:linear-gradient(155deg,#061a2c,#030e1b);
+  box-shadow:0 30px 90px #000b,0 0 20px #41d9f514;
+}
+.launcher-briefing {
+  display:flex;flex-direction:column;justify-content:center;
+  padding:clamp(28px,4vw,58px);
+  border-right:1px solid #2a7085;
+  background:radial-gradient(circle at 50% 43%,#0f54703d,transparent 47%),#051a2b;
+}
+.eyebrow,.console-heading {
+  font:800 11px/1.5 ui-monospace,monospace;letter-spacing:.16em;color:#8dedf7;
+}
+.launcher-orbit {
+  position:relative;align-self:center;flex:0 0 auto;
+  width:min(50%,270px);aspect-ratio:1;margin:18px 0 30px;
+  border:1px solid #5de2f153;border-radius:50%;
+  box-shadow:inset 0 0 32px #19d5f015,0 0 50px #18bce910;
+  background:
+    linear-gradient(90deg,transparent 49.5%,#70d6e21d 50%,transparent 50.5%),
+    linear-gradient(0deg,transparent 49.5%,#70d6e21d 50%,transparent 50.5%);
+}
+.launcher-orbit::before,.launcher-orbit::after {
+  content:"";position:absolute;border:1px dashed #70d9e459;border-radius:50%;
+  inset:15%;
+}
+.launcher-orbit::after {inset:32%;border-style:solid}
+.launcher-orbit span {
+  position:absolute;left:50%;top:50%;width:13%;aspect-ratio:1;
+  transform:translate(-50%,-50%);border-radius:50%;
+  background:#8bf8ff;box-shadow:0 0 25px #4be7ff,0 0 60px #19c5e860;
+}
+h1 {
+  font-size:clamp(30px,3.5vw,57px);font-weight:850;
+  letter-spacing:-.045em;line-height:1.08;margin:0 0 22px;
+}
+h1 strong {font-weight:850;color:#8af1ff;text-shadow:0 0 30px #00dafb26}
+.intro {max-width:540px;line-height:1.8;color:#b2cedc;font-size:14px}
+.launcher-readouts {
+  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:12px;margin-top:clamp(30px,4vw,58px);
+}
+.launcher-readouts>div {padding-top:10px;border-top:1px solid #2a8195}
+.launcher-readouts small {
+  display:block;font:700 10px/1.5 ui-monospace,monospace;letter-spacing:.12em;color:#78b0c5
+}
+.launcher-readouts strong {
+  display:block;margin-top:5px;font:750 11px/1.4 ui-monospace,monospace;
+  color:#d0f5ff;overflow-wrap:anywhere
+}
+.launcher-console {
+  display:flex;flex-direction:column;justify-content:center;
+  padding:clamp(26px,4vw,65px);
+  background:linear-gradient(160deg,#09243a,#020c1a 82%);
+}
+.console-heading {display:flex;align-items:center;gap:12px}
+.console-light {width:9px;height:9px;border-radius:50%;background:#6cf2b2;box-shadow:0 0 10px #3dffc86b}
+h2 {font-size:clamp(25px,2.5vw,37px);letter-spacing:-.035em;margin:15px 0 8px}
+.console-subtitle {font-size:13px;line-height:1.8;color:#a1bfd0}
+form {margin-top:clamp(20px,2vw,32px)}
+label {
+  display:block;margin-bottom:11px;color:#b5dce9;
+  font:750 12px/1.4 ui-monospace,monospace;letter-spacing:.07em;
+}
+input {
+  display:block;width:100%;min-height:49px;padding:12px 14px;
+  color:white;background:#051829;border:1px solid #36829c;border-radius:3px;
+  box-shadow:inset 0 0 15px #0008;
+}
+.hint {font-size:12px;line-height:1.75;color:#a7c6d5}
+.hint code {font:600 11px ui-monospace,monospace;color:#b6f3ff;overflow-wrap:anywhere}
+.actions {display:flex;flex-wrap:wrap;gap:10px;margin-top:20px}
+button {
+  min-height:42px;padding:10px 14px;border-radius:3px;border:1px solid #3d819b;
+  font-size:12px;font-weight:800;letter-spacing:.02em;
+  transition:background .14s,border-color .14s,box-shadow .14s;
+}
+.primary {
+  flex:1 1 100%;background:linear-gradient(110deg,#62e3f5,#b1fdff);
+  color:#041521;border-color:#b0fcff;box-shadow:0 0 21px #2adfff22
+}
+.primary:hover {background:#d4feff;box-shadow:0 0 26px #46f3ff44}
+.secondary {flex:1 1 130px;background:#0c293b;color:#d4f2fa}
+.secondary:hover {background:#13435a;border-color:#94f5ff}
+.local-server {margin-top:16px}
+.text-button {padding:4px 0;min-height:32px;border:0;background:transparent;color:#94f4ff}
+.text-button:hover {color:white;text-decoration:underline;text-underline-offset:4px}
+.error {margin-top:16px;color:#ffc2b6;font-size:13px}
+.error[hidden] {display:none}
+footer {
+  margin-top:clamp(24px,4vw,42px);padding-top:16px;border-top:1px solid #2b6a80;
+  color:#91b7c7;font-size:12px;line-height:1.65
+}
+.launcher-commandbar {min-height:40px;padding:8px 18px;border-radius:4px}
+@media(max-width:850px) {
+  .shell {grid-template-columns:minmax(0,1fr)}
+  .launcher-briefing {border-right:0;border-bottom:1px solid #2a7085;padding:30px}
+  .launcher-orbit {display:none}
+  .launcher-readouts {margin-top:22px}
+  .launcher-console {padding:30px}
+}
+@media(max-width:530px) {
+  .launcher-rail-status,.launcher-commandbar span:last-child {display:none}
+  .launcher-briefing,.launcher-console {padding:22px}
+  .launcher-readouts {grid-template-columns:1fr}
+}
+@media(prefers-reduced-motion:reduce) {* {transition:none!important}}

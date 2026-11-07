@@ -1,0 +1,91 @@
+<div id="helmet-client" data-pair-code={@pairing_code}
+     class="fixed inset-0 z-50 h-dvh w-screen select-none overflow-hidden bg-black text-white"
+     style="touch-action: none; background: #000;">
+  <%!-- The actual display is one full-screen canvas with two *nonoverlapping*
+       scissored eye viewports; no duplicate canvases or video stream. --%>
+  <canvas id="helmet-viewport" class="absolute inset-0 block h-full w-full" hidden></canvas>
+
+  <%!-- Read-only encounter decision mirror: two independent eye panels.
+       The authenticated laptop provides the Hail and Resume controls. --%>
+  <section id="helmet-encounter" hidden class="helmet-encounter-overlay"
+    aria-label="Encounter hold" role="status">
+    <div class="helmet-encounter-eye">
+      <div class="helmet-encounter-card">
+        <p class="helmet-encounter-kicker">SOL / ENCOUNTER DETECTED</p>
+        <strong data-helmet-encounter-title>Unidentified vessel</strong>
+        <p data-helmet-encounter-faction class="helmet-encounter-instruction">FACTION / Unknown</p>
+        <p data-helmet-encounter-kind>INTERPLANETARY CRUISE PAUSED</p>
+        <p class="helmet-encounter-instruction">Choose HAIL or RESUME on the laptop</p>
+      </div>
+    </div>
+    <div class="helmet-encounter-eye" aria-hidden="true">
+      <div class="helmet-encounter-card">
+        <p class="helmet-encounter-kicker">SOL / ENCOUNTER DETECTED</p>
+        <strong data-helmet-encounter-title>Unidentified vessel</strong>
+        <p data-helmet-encounter-faction class="helmet-encounter-instruction">FACTION / Unknown</p>
+        <p data-helmet-encounter-kind>INTERPLANETARY CRUISE PAUSED</p>
+        <p class="helmet-encounter-instruction">Choose HAIL or RESUME on the laptop</p>
+      </div>
+    </div>
+  </section>
+
+  <%!-- A separate read-only surrender instrument on the paired phone.
+       Each SBS eye gets the same notification, independent of laptop target
+       selection. It does not obscure the cockpit or accept input. --%>
+  <section id="helmet-surrender" hidden class="helmet-surrender-overlay"
+           role="status" aria-live="polite" aria-label="Tactical surrender">
+    <div class="helmet-surrender-eye">
+      <div class="helmet-surrender-card">
+        <span>TARGET SURRENDERED</span>
+        <strong data-helmet-surrender-name>CONTACT</strong>
+        <small>ACCEPT OR RETREAT ON LAPTOP</small>
+      </div>
+    </div>
+    <div class="helmet-surrender-eye" aria-hidden="true">
+      <div class="helmet-surrender-card">
+        <span>TARGET SURRENDERED</span>
+        <strong data-helmet-surrender-name>CONTACT</strong>
+        <small>ACCEPT OR RETREAT ON LAPTOP</small>
+      </div>
+    </div>
+  </section>
+
+  <div id="helmet-message" hidden
+       class="pointer-events-none absolute inset-x-0 top-1/2 z-20 mx-auto max-w-md -translate-y-1/2 px-6 text-center text-sm text-cyan-100"
+       role="status"></div>
+
+  <%!-- Browsers require a real tap to enter fullscreen. One tap is sufficient,
+       and after it the phone stays black until the laptop enters combat view. --%>
+  <div id="helmet-setup"
+       class="absolute inset-0 z-30 flex items-center justify-center bg-black/95 px-5 py-6">
+    <div class="w-full max-w-sm space-y-4 rounded-xl border border-cyan-700/60 bg-slate-950 px-5 py-6 text-center">
+      <h1 class="text-lg font-bold tracking-widest text-cyan-200">PILOT HMD</h1>
+      <p class="text-sm text-slate-300">
+        Rotate the phone to landscape. Tap Enter VR for fullscreen headset mode.
+        The display stays black until the cockpit opens on your laptop.
+        The phone will request screen-on protection when you enter VR.
+      </p>
+      <p class="text-xs text-amber-200">
+        Android screen-on protection requires a supported browser and a secure
+        HTTPS connection. On an HTTP LAN connection, adjust the phone's screen
+        timeout and battery optimization settings if the screen sleeps.
+      </p>
+      <button id="helmet-fullscreen" type="button"
+              class="w-full rounded-lg border border-cyan-300 bg-cyan-800 px-5 py-3 text-sm font-bold tracking-wide text-white">
+        ENTER FULLSCREEN VR
+      </button>
+      <p id="helmet-fullscreen-hint" class="text-xs text-slate-400" role="status">
+        Android requires one tap before a page can enter fullscreen.
+      </p>
+      <p class="rounded-md border border-slate-700 p-3 text-left text-xs text-slate-300">
+        Lens calibration uses the laptop keyboard while the cockpit is active:
+        ← / → adjusts image spacing; F6 / Ctrl+F6 adjusts eye separation.
+        Tap once per adjustment. Settings save automatically on the phone.
+      </p>
+      <button id="helmet-windowed" type="button"
+              class="text-xs text-slate-400 underline underline-offset-4">
+        Continue without fullscreen
+      </button>
+    </div>
+  </div>
+</div>

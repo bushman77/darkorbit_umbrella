@@ -7,8 +7,8 @@ import Config
 # any compile-time configuration in here, as it won't be applied.
 # The block below contains prod specific runtime configuration.
 
-config :darkorbit_web, DarkorbitWeb.Endpoint,
-  http: [port: String.to_integer(System.get_env("PORT", "4000"))]
+# Local Phoenix listens on TCP 4000. Production supports HTTPS via Caddy
+# on 443, or optional direct Phoenix TLS on 4000.
 
 if config_env() == :prod do
   database_url =
@@ -40,73 +40,145 @@ if config_env() == :prod do
       You can generate one by calling: mix phx.gen.secret
       """
 
+  # Explicitly opt into Caddy TLS termination on EC2. In proxy mode,
+  # Phoenix listens on loopback only and generates public HTTPS:443 URLs.
+  # Other deployments can continue terminating TLS directly on port 4000.
+  behind_proxy? = System.get_env("SPACE_NOVA_PROXY_MODE") in ~w(1 true)
+
   config :darkorbit_web, DarkorbitWeb.Endpoint,
-    http: [
-      # Enable IPv6 and bind on all interfaces.
-      # Set it to  {0, 0, 0, 0, 0, 0, 0, 1} for local network only access.
-      ip: {0, 0, 0, 0, 0, 0, 0, 0}
+    url: [
+      host: System.get_env("PHX_HOST", "spacenova.ddns.net"),
+      scheme: "https",
+      port: if(behind_proxy?, do: 443, else: 4000)
     ],
+    server: true,
     secret_key_base: secret_key_base
 
-  # ## Using releases
-  #
-  # If you are doing OTP releases, you need to instruct Phoenix
-  # to start each relevant endpoint:
-  #
-  #     config :darkorbit_web, DarkorbitWeb.Endpoint, server: true
-  #
-  # Then you can assemble a release by calling `mix release`.
-  # See `mix help release` for more information.
+  if behind_proxy? do
+    # Never expose this plaintext listener outside the EC2 loopback interface.
+    config :darkorbit_web, DarkorbitWeb.Endpoint,
+      http: [ip: {127, 0, 0, 1}, port: 4000],
+      https: false
+  else
+    tls_certfile =
+      System.get_env("SPACE_NOVA_TLS_CERTFILE") ||
+        raise "SPACE_NOVA_TLS_CERTFILE must point to the production TLS certificate PEM"
 
-  # ## SSL Support
-  #
-  # To get SSL working, you will need to add the `https` key
-  # to your endpoint configuration:
-  #
-  #     config :darkorbit_web, DarkorbitWeb.Endpoint,
-  #       https: [
-  #         ...,
-  #         port: 443,
-  #         cipher_suite: :strong,
-  #         keyfile: System.get_env("SOME_APP_SSL_KEY_PATH"),
-  #         certfile: System.get_env("SOME_APP_SSL_CERT_PATH")
-  #       ]
-  #
-  # The `cipher_suite` is set to `:strong` to support only the
-  # latest and more secure SSL ciphers. This means old browsers
-  # and clients may not be supported. You can set it to
-  # `:compatible` for wider support.
-  #
-  # `:keyfile` and `:certfile` expect an absolute path to the key
-  # and cert in disk or a relative path inside priv, for example
-  # "priv/ssl/server.key". For all supported SSL configuration
-  # options, see https://hexdocs.pm/plug/Plug.SSL.html#configure/1
-  #
-  # We also recommend setting `force_ssl` in your config/prod.exs,
-  # ensuring no data is ever sent via http, always redirecting to https:
-  #
-  #     config :darkorbit_web, DarkorbitWeb.Endpoint,
-  #       force_ssl: [hsts: true]
-  #
-  # Check `Plug.SSL` for all available options in `force_ssl`.
+    tls_keyfile =
+      System.get_env("SPACE_NOVA_TLS_KEYFILE") ||
+        raise "SPACE_NOVA_TLS_KEYFILE must point to the production TLS private key PEM"
 
-  # ## Configuring the mailer
-  #
-  # In production you need to configure the mailer to use a different adapter.
-  # Here is an example configuration for Mailgun:
-  #
-  #     config :darkorbit, Darkorbit.Mailer,
-  #       adapter: Swoosh.Adapters.Mailgun,
-  #       api_key: System.get_env("MAILGUN_API_KEY"),
-  #       domain: System.get_env("MAILGUN_DOMAIN")
-  #
-  # Most non-SMTP adapters require an API client. Swoosh supports Req, Hackney,
-  # and Finch out-of-the-box. This configuration is typically done at
-  # compile-time in your config/prod.exs:
-  #
-  #     config :swoosh, :api_client, Swoosh.ApiClient.Req
-  #
-  # See https://hexdocs.pm/swoosh/Swoosh.html#module-installation for details.
+    config :darkorbit_web, DarkorbitWeb.Endpoint,
+      http: false,
+      https: [
+        ip: {0, 0, 0, 0},
+        port: 4000,
+        cipher_suite: :strong,
+        certfile: tls_certfile,
+        keyfile: tls_keyfile
+      ]
+  end
+
+  # In proxy mode Caddy handles trusted TLS certificates/renewal.
+
+  # Email provider is independent from the registration switch. Configure and
+  # smoke-test a real transport before opening public registrations.
+  email_provider =
+    System.get_env("SPACE_NOVA_EMAIL_PROVIDER") ||
+      if(System.get_env("RESEND_API_KEY"), do: "resend", else: "none")
+
+  registration_from = System.get_env("REGISTRATION_FROM_EMAIL")
+  sender_valid? =
+    is_binary(registration_from) and
+      Regex.match?(~r/\A[^\s@]+@[^\s@]+\.[^\s@]+\z/, registration_from)
+
+  present? = fn key ->
+    case System.get_env(key) do
+      value when is_binary(value) -> String.trim(value) != ""
+      _ -> false
+    end
+  end
+
+  smtp_host = System.get_env("SMTP_HOST")
+  smtp_port =
+    case Integer.parse(System.get_env("SMTP_PORT") || "587") do
+      {port, ""} when port in [465, 587, 2525] -> port
+      _ -> nil
+    end
+
+  transport_ready? =
+    case email_provider do
+      "resend" ->
+        sender_valid? and present?.("RESEND_API_KEY")
+
+      "smtp" ->
+        sender_valid? and present?.("SMTP_HOST") and present?.("SMTP_USERNAME") and
+          present?.("SMTP_PASSWORD") and not is_nil(smtp_port) and
+          not String.contains?(smtp_host || "", ["/", " ", "@", ":"])
+
+      _ ->
+        false
+    end
+
+  registration_open? =
+    System.get_env("SPACE_NOVA_REGISTRATION_OPEN") in ~w(1 true)
+
+  config :darkorbit_web,
+    registration_email_enabled: transport_ready? and registration_open?,
+    email_delivery_configured: transport_ready?,
+    email_provider: if(transport_ready?, do: email_provider, else: "none"),
+    registration_from: registration_from || "noreply@localhost"
+
+  cond do
+    not transport_ready? ->
+      if email_provider != "none" do
+        IO.warn("Space Nova email configuration is incomplete; outbound mail and public registration are disabled")
+      end
+
+    email_provider == "resend" ->
+      config :darkorbit, Darkorbit.Mailer,
+        adapter: Swoosh.Adapters.Resend,
+        api_key: System.fetch_env!("RESEND_API_KEY")
+
+    email_provider == "smtp" ->
+      # Enforce both CA-chain and hostname verification. Plain SMTP and
+      # opportunistic STARTTLS are not permitted for production delivery.
+      tls_options = [
+        # gen_smtp's socket wrapper otherwise supplies depth: 0, which
+        # rejects Gmail's intermediate CA certificate chain.
+        versions: [:"tlsv1.2", :"tlsv1.3"],
+        depth: 10,
+        verify: :verify_peer,
+        cacerts: :public_key.cacerts_get(),
+        server_name_indication: String.to_charlist(smtp_host),
+        customize_hostname_check: [
+          match_fun: :public_key.pkix_verify_hostname_match_fun(:https)
+        ]
+      ]
+
+      connection_options =
+        if smtp_port == 465 do
+          [ssl: true, sockopts: tls_options]
+        else
+          [ssl: false, tls_options: tls_options]
+        end
+
+      config :darkorbit, Darkorbit.Mailer,
+        [
+          adapter: Swoosh.Adapters.SMTP,
+          relay: smtp_host,
+          port: smtp_port,
+          username: System.fetch_env!("SMTP_USERNAME"),
+          password: System.fetch_env!("SMTP_PASSWORD"),
+          auth: :always,
+          tls: :always,
+          retries: 1
+        ] ++ connection_options
+  end
+
+  if registration_open? and not transport_ready? do
+    IO.warn("Space Nova registration was requested but mail delivery is not ready; signup remains disabled")
+  end
 
   config :darkorbit, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")
 end

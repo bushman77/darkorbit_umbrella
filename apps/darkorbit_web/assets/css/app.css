@@ -691,3 +691,1202 @@ body {
     animation-iteration-count: 1 !important;
   }
 }
+
+
+/* Only the WebGL canvas is a flight display. A transparent div collects input. */
+#space-viewport { background: transparent; }
+#space-viewport-3d { opacity: 1; }
+/* The standard HUD is monoscopic; stereo mode uses the cockpit texture instead. */
+#game-client[data-display-mode="sbs"] > header,
+#game-client[data-display-mode="sbs"] .cockpit-interface,
+#game-client[data-display-mode="sbs"] #action-hotbar { display: none; }
+
+/* Prevent monoscopic help text from appearing across the two headset images. */
+#game-client[data-display-mode="sbs"] #game-controls-hint { display: none; }
+
+
+/* Navigation computer V1: a standalone, flat SVG route planner. */
+.navigation-computer {
+  position: absolute;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  overflow: auto;
+  align-items: flex-start;
+  justify-content: center;
+  padding: clamp(0.5rem, 2vw, 2rem);
+  background: #020a14;
+  color: #d2edf7;
+}
+.navigation-computer[hidden] { display: none; }
+.nav-shell {
+  width: min(1550px, 100%);
+  border: 1px solid #235878;
+  border-radius: 1rem;
+  background: linear-gradient(130deg, #0d2136, #06101e 67%);
+  box-shadow: 0 28px 90px #0009;
+  padding: clamp(1rem, 2vw, 1.7rem);
+}
+.nav-heading { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.4rem; }
+.nav-heading h2 { font-size: clamp(1.2rem, 2.8vw, 2rem); font-weight: 750; letter-spacing: .03em; color: #e4faff; }
+.nav-eyebrow { font: 700 .65rem/1.5 ui-monospace, monospace; letter-spacing: .19em; color: #68deef; }
+.nav-subtitle { margin-top: .3rem; font-size: .75rem; color: #799bb0; }
+.nav-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(250px, 315px); gap: 1rem; }
+.nav-map-frame { min-width: 0; overflow: hidden; border: 1px solid #235878; border-radius: .75rem; background: #061321; }
+.nav-map-caption, .nav-legend { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .6rem; padding: .65rem 1rem; font: 700 .62rem/1.5 ui-monospace, monospace; letter-spacing: .06em; color: #8bbed0; }
+#nav-chart { display: block; width: 100%; aspect-ratio: 5 / 3; cursor: crosshair; touch-action: manipulation; }
+.nav-legend { justify-content: flex-start; gap: 1.4rem; border-top: 1px solid #16364c; }
+.nav-legend span { display: flex; align-items: center; gap: .45rem; }
+.nav-legend i { display: inline-block; width: .55rem; height: .55rem; border-radius: 50%; }
+.nav-key-self { background: #6ff5ff; } .nav-key-ally { background: #c6b0ff; }
+.nav-key-npc { background: #ffad76; } .nav-key-route { border: 1px solid #73edf7; }
+.nav-console { padding: 1rem; border: 1px solid #235878; border-radius: .75rem; background: #061526; }
+.nav-state { margin: 1rem 0; padding: .8rem; border: 1px solid #205974; border-radius: .5rem; background: #103047; color: #9be9ff; font: 800 .79rem/1.4 ui-monospace, monospace; }
+.nav-metrics { display: grid; gap: .55rem; }
+.nav-metrics div { padding: .6rem .75rem; border: 1px solid #17364d; border-radius: .45rem; }
+.nav-metrics dt { color: #6f9bb1; font-size: .6rem; font-weight: 700; letter-spacing: .12em; }
+.nav-metrics dd { margin-top: .2rem; color: #e4faff; font: 700 .88rem ui-monospace, monospace; }
+.nav-console-heading { display: flex; justify-content: space-between; margin-top: 1.25rem; gap: 1rem; color: #8bd7e9; font: 700 .65rem ui-monospace, monospace; }
+.nav-waypoints { min-height: 3rem; max-height: 8rem; overflow-y: auto; margin: .55rem 0 1rem; padding-left: 1.3rem; color: #d9eaff; font: 650 .72rem/1.6 ui-monospace, monospace; }
+.nav-coordinate-form { display: grid; grid-template-columns: 1fr 1fr; gap: .55rem; }
+.nav-coordinate-form label { color: #90cada; font: 700 .65rem ui-monospace, monospace; }
+.nav-coordinate-form input { display: block; width: 100%; margin-top: .35rem; padding: .55rem; border: 1px solid #25607d; border-radius: .4rem; background: #0a2035; color: #f0fcff; }
+.nav-coordinate-form button { grid-column: span 2; }
+.nav-console-actions { display: grid; gap: .55rem; margin-top: .9rem; }
+.nav-secondary-actions { display: grid; grid-template-columns: 1fr 1fr; gap: .55rem; }
+.nav-button { padding: .68rem .8rem; border: 1px solid #327089; border-radius: .5rem; background: #113049; color: #b4ebf7; font-size: .75rem; font-weight: 750; cursor: pointer; }
+.nav-button:hover:not(:disabled) { border-color: #6deaf6; background: #17465d; }
+.nav-button:focus-visible { outline: 2px solid #73edf7; outline-offset: 2px; }
+.nav-button:disabled { opacity: .35; cursor: not-allowed; }
+.nav-primary { background: #11646c; border-color: #38a6ad; color: #efffff; }
+.nav-danger { color: #ffd0c2; border-color: #8c554c; background: #432521; }
+.nav-message { margin: 1rem 0 .7rem; min-height: 2.5rem; font-size: .73rem; line-height: 1.5; color: #90c3d8; }
+@media (max-width: 820px) {
+  .navigation-computer { align-items: flex-start; }
+  .nav-layout { grid-template-columns: 1fr; }
+  .nav-console { width: 100%; }
+}
+
+/* Classic 2D gameplay is retired; the atlas remains the overhead map. */
+.nav-coordinate-form .nav-altitude-label { grid-column: span 2; }
+
+/* SBS HUD is a stereoscopic cockpit texture, not monoscopic overlay. */
+#game-client[data-display-mode="sbs"] #flight-indicators { display: none; }
+
+/* Stereo hit confirmation is drawn independently for each eye on the
+   authoritative cockpit HUD texture; never draw mono DOM over SBS. */
+#game-client[data-display-mode="sbs"] #laser-hit-confirmation { display: none !important; }
+
+/* Solar Atlas V1: system-scale discovery above the existing tactical sector.
+   Screen and geometry are schematic; real AU data stays out of ship XY. */
+#nav-solar-view[hidden], #nav-sector-view[hidden] { display: none !important; }
+.atlas-view-tabs { display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;
+  margin:1rem 0 1.1rem;border-bottom:1px solid #1e4d69;padding-bottom:.9rem; }
+.atlas-view-tab { display:flex;align-items:center;gap:.5rem;padding:.7rem 1rem;
+  color:#91aebe;font:700 .79rem ui-monospace,monospace;cursor:pointer;
+  background:#071727;border:1px solid #20435a;border-radius:.45rem; }
+.atlas-view-tab.is-active {color:#d1ffff;background:#123950;border-color:#45bfcd;
+  box-shadow:inset 0 0 0 1px #3ab4c344; }
+.atlas-view-tab:focus-visible, .solar-zoom-button:focus-visible,
+.solar-body-button:focus-visible {outline:2px solid #82f7ff;outline-offset:2px;}
+.atlas-level-hint {margin-left:auto;color:#699eb5;font:600 .66rem ui-monospace,monospace;letter-spacing:.12em;}
+.solar-atlas-layout {display:grid;grid-template-columns:minmax(0,1fr) minmax(250px,295px);
+  gap:1rem;}
+.solar-atlas-frame {min-width:0;border:1px solid #27516c;border-radius:.7rem;
+  overflow:hidden;background:#04101f;}
+#nav-solar-chart {display:block;width:100%;height:auto;aspect-ratio:5/3;
+  background:radial-gradient(ellipse at 50% 50%,#0e2440,#040c19 70%);}
+#nav-solar-chart [data-body-id]:focus-visible circle {stroke:#ffffe2;stroke-width:3;}
+.solar-chart-controls {display:flex;align-items:center;justify-content:space-between;
+  gap:1rem;flex-wrap:wrap;padding:.75rem 1rem;border-top:1px solid #1e445e;
+  color:#8cafc5;font-size:.67rem;}
+.solar-chart-controls p {margin:0;line-height:1.55;flex:1;min-width:190px;}
+.solar-zoom-group{display:flex;gap:.35rem;flex-wrap:wrap;}
+.solar-zoom-button {background:#0b2135;color:#88b9cc;border:1px solid #29546b;
+  border-radius:.35rem;padding:.42rem .7rem;cursor:pointer;font:650 .69rem ui-monospace,monospace;}
+.solar-zoom-button.is-active {background:#144b59;border-color:#5ce2e6;color:#d0fcff;}
+.solar-atlas-panel {min-width:0;display:flex;flex-direction:column;gap:1rem;
+  border:1px solid #27516c;border-radius:.7rem;padding:1.1rem;
+  background:linear-gradient(155deg,#092236,#061525);}
+.solar-system-count {color:#b6e8f1;font:700 .74rem ui-monospace,monospace;letter-spacing:.08em;}
+.solar-body-list {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.4rem;}
+.solar-body-button {display:flex;align-items:center;gap:.5rem;padding:.65rem .5rem;
+  min-width:0;background:#061c2b;border:1px solid #25485d;border-radius:.4rem;
+  color:#b9d9e8;font:650 .73rem ui-monospace,monospace;cursor:pointer;text-align:left;}
+.solar-body-button[aria-pressed="true"] {border-color:#59d4e7;background:#134357;color:#fff;}
+.solar-body-swatch {display:block;flex:0 0 .6rem;width:.6rem;height:.6rem;border-radius:50%;
+  box-shadow:0 0 10px currentColor;}
+.solar-selected-body {border-top:1px solid #28556d;padding-top:1rem;}
+.solar-selected-body h3 {font-size:1.8rem;letter-spacing:.02em;font-weight:750;color:#e4faff;margin:.35rem 0 0;}
+#nav-solar-type {font-size:.8rem;color:#8baebe;margin:.15rem 0 1rem;}
+.solar-body-metrics {display:grid;gap:.5rem;}
+.solar-body-metrics>div {background:#071b2d;border:1px solid #193b52;border-radius:.4rem;padding:.65rem;}
+.solar-body-metrics dt {font:700 .6rem ui-monospace,monospace;letter-spacing:.1em;color:#75a9bf;}
+.solar-body-metrics dd {color:#e2fbff;font:700 1rem ui-monospace,monospace;margin-top:.25rem;}
+.solar-system-note {margin:auto 0 0;padding:.85rem;border:1px dashed #2b586d;border-radius:.4rem;
+  color:#90bed0;line-height:1.65;font-size:.7rem;}
+@media(max-width:860px) {.solar-atlas-layout{grid-template-columns:1fr;}
+  .solar-atlas-panel{gap:.7rem;} .atlas-level-hint{display:none;}}
+
+/* SOL V1 course controls and transit progress. The scene overlay is schematic
+   and never converts a planetary AU into a combat-sector coordinate. */
+.solar-navigation-console {display:grid;gap:.65rem;border-top:1px solid #27556c;padding-top:1rem;}
+.solar-navigation-console .nav-state {margin:.3rem 0;}
+.solar-navigation-console #nav-solar-route {font-size:.72rem;line-height:1.6;}
+.solar-navigation-console .solar-progress-label {font:700 .7rem ui-monospace,monospace;color:#97d4e4;}
+.solar-navigation-console progress {display:block;width:100%;height:.8rem;
+  accent-color:#5befe1;border:1px solid #346579;border-radius:.4rem;overflow:hidden;}
+.solar-navigation-console .nav-button {width:100%;}
+
+
+/* Phone HMD: HTML hidden state must win over Tailwind's .flex/.block display
+   utilities or the setup overlay can cover both eye images permanently. */
+#helmet-client [hidden] { display: none !important; }
+#helmet-client {
+  height: 100vh;
+  height: 100dvh;
+  width: 100vw;
+  overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: none;
+  background: #000;
+}
+#helmet-client:fullscreen {
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+}
+body:has(#helmet-client) {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+
+/* In SBS, proximity alerts appear on the per-eye 3D cockpit HUD instead.
+   A flat alert spanning both halves would be uncomfortable in a headset. */
+[data-display-mode="sbs"] #planetary-proximity-warning {
+  display: none !important;
+}
+
+/* Server-held encounter decisions are modal; SBS uses a matching panel
+   for each eye rather than stretching a flat alert across both eye images. */
+.solar-encounter-modal {
+  position: absolute; inset: 0; z-index: 110; display: grid;
+  grid-template-columns: minmax(0, 1fr); place-items: center;
+  overflow: auto; padding: 1rem; background: rgb(1 7 18 / .90);
+}
+.solar-encounter-modal[hidden] { display: none !important; }
+.solar-encounter-eye { display: flex; width: 100%; align-items: center; justify-content: center; }
+.solar-encounter-eye-right { display: none; }
+.solar-encounter-card {
+  width: min(31rem, 100%); padding: clamp(1.2rem, 3vw, 2rem);
+  border: 1px solid rgb(74 222 238 / .7); border-radius: 1rem;
+  background: linear-gradient(155deg, #102d47, #050f20 75%);
+  box-shadow: 0 20px 80px #000b, inset 0 0 28px #22d3ee10; color: #e6faff;
+}
+.solar-encounter-kicker { color: #67e8f9; font: 750 .65rem ui-monospace, monospace; letter-spacing: .18em; }
+.solar-encounter-hold { margin: .8rem 0 1rem; color: #fcd34d; font: 800 .7rem ui-monospace, monospace; letter-spacing: .1em; }
+.solar-encounter-card h2 { font-size: clamp(1.25rem, 2vw, 1.75rem); font-weight: 800; line-height: 1.25; }
+.solar-encounter-distance { color: #9fcee0; margin: .55rem 0 1rem; font: 650 .75rem ui-monospace, monospace; }
+.solar-encounter-description { color: #d0eaf2; line-height: 1.55; font-size: .9rem; }
+.solar-encounter-message { color: #a7f3d0; margin: 1rem 0; font-size: .8rem; white-space: pre-line; overflow-wrap: anywhere; }
+.solar-encounter-actions { display: grid; grid-template-columns: 1fr 1fr; gap: .65rem; margin-top: 1rem; }
+.solar-encounter-note { color: #96aabc; font-size: .7rem; line-height: 1.5; margin-top: 1.1rem; }
+#game-client[data-display-mode="sbs"] .solar-encounter-modal {
+  grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0; padding: .35rem;
+}
+#game-client[data-display-mode="sbs"] .solar-encounter-eye { padding: .35rem; }
+#game-client[data-display-mode="sbs"] .solar-encounter-eye-right { display: flex; }
+#game-client[data-display-mode="sbs"] .solar-encounter-card {
+  width: min(27rem, 100%); padding: clamp(.5rem, 1.5vw, 1rem);
+}
+#game-client[data-display-mode="sbs"] .solar-encounter-card h2 { font-size: clamp(.9rem, 1.6vw, 1.35rem); }
+#game-client[data-display-mode="sbs"] .solar-encounter-message,
+#game-client[data-display-mode="sbs"] .solar-encounter-description { font-size: .72rem; }
+#game-client[data-display-mode="sbs"] .solar-encounter-actions { grid-template-columns: 1fr; }
+@media (max-width: 520px) {
+  .solar-encounter-actions { grid-template-columns: 1fr; }
+  #game-client[data-display-mode="sbs"] .solar-encounter-note { font-size: .58rem; }
+}
+
+ 
+/* Read-only HMD close-pass alert; duplicate card for each eye's viewport. */
+.helmet-encounter-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 24;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: center;
+  pointer-events: none;
+  background: rgb(0 5 15 / .72);
+}
+.helmet-encounter-eye { display: flex; min-width: 0; justify-content: center; padding: .45rem; }
+.helmet-encounter-card {
+  display: grid;
+  gap: .35rem;
+  width: min(100%, 25rem);
+  min-width: 0;
+  border: 1px solid #66e6ee;
+  border-radius: .75rem;
+  padding: clamp(.55rem, 1.7vw, 1rem);
+  background: #081c32;
+  box-shadow: 0 15px 35px #0009;
+  text-align: center;
+  color: #e5fbff;
+  overflow-wrap: anywhere;
+}
+.helmet-encounter-kicker { font: 750 clamp(.5rem, .85vw, .7rem) ui-monospace, monospace; letter-spacing: .08em; color: #69e1f5; }
+.helmet-encounter-card strong { font-size: clamp(.8rem, 1.6vw, 1.4rem); }
+.helmet-encounter-card [data-helmet-encounter-kind] { font: 700 clamp(.55rem, 1vw, .75rem) ui-monospace, monospace; color: #fcd34d; }
+.helmet-encounter-instruction { font-size: clamp(.6rem, .9vw, .78rem); color: #b3eaf2; }
+#helmet-encounter[hidden] { display: none !important; }
+
+/* Paired-phone SBS surrender telemetry, independently drawn in both eyes.
+   Keep it above the cockpit without covering the reticle or flight controls. */
+.helmet-surrender-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 25;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  pointer-events: none;
+}
+.helmet-surrender-eye {
+  display: flex;
+  min-width: 0;
+  justify-content: center;
+  padding: clamp(.25rem, 1.2vw, .75rem);
+}
+.helmet-surrender-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: .12rem;
+  width: min(100%, 22rem);
+  margin-top: clamp(.5rem, 2.5vh, 1.5rem);
+  border: 1px solid #4ade80;
+  border-radius: .5rem;
+  padding: clamp(.3rem, .8vw, .55rem);
+  background: rgb(3 27 20 / .9);
+  color: #bbf7d0;
+  text-align: center;
+  font: 700 clamp(.55rem, 1.15vw, .78rem) ui-monospace, monospace;
+  letter-spacing: .04em;
+  overflow-wrap: anywhere;
+}
+.helmet-surrender-card strong {
+  font-size: clamp(.75rem, 1.7vw, 1.05rem);
+  color: #dcfce7;
+}
+.helmet-surrender-card small {
+  font-size: clamp(.47rem, .95vw, .67rem);
+  color: #a7f3d0;
+}
+#helmet-surrender[hidden] { display: none !important; }
+
+/* Interplanetary encounter decision options: hail, enter combat, ignore. */
+.solar-encounter-modal [data-encounter-action][hidden] { display: none !important; }
+@media (min-width: 650px) {
+  .solar-encounter-actions { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+.solar-tactical-panel {
+  position: absolute;
+  z-index: 84;
+  top: 5rem;
+  right: 1.25rem;
+  width: min(19rem, calc(100vw - 2rem));
+  display: grid;
+  gap: .65rem;
+  padding: .8rem 1rem;
+  border: 1px solid rgb(251 113 133 / .65);
+  border-radius: .8rem;
+  color: #f8fafc;
+  background: rgb(2 6 23 / .94);
+  box-shadow: 0 15px 34px #0009;
+  font: 650 .75rem ui-monospace, monospace;
+}
+.solar-tactical-panel strong { font-size: 1rem; color: #fecdd3; }
+.solar-tactical-panel [data-solar-tactical-message] {
+  line-height: 1.35; font-size: .7rem; color: #fcd6d9;
+}
+.solar-tactical-panel[hidden] { display: none !important; }
+
+/* An accepted merchant surrender is an explicit server-verified decision. */
+.solar-tactical-panel [hidden] { display: none !important; }
+
+
+/* -----------------------------------------------------------------------
+   SPACE NOVA HUD / visual system V1
+   Design tokens shared by the web game and desktop-hosted Phoenix screens.
+   All decorative layers are pointer-transparent. No canvas/JS controls are
+   simulated here: existing server-owned navigation remains authoritative.
+------------------------------------------------------------------------ */
+:root {
+  --nova-void: #020914;
+  --nova-deep: #061829;
+  --nova-panel: #081e30;
+  --nova-panel-edge: #174962;
+  --nova-cyan: #67e8f9;
+  --nova-cyan-muted: #8bc2d0;
+  --nova-ink: #e2f6ff;
+  --nova-line: rgb(60 195 226 / .39);
+  --nova-glow: 0 0 28px rgb(6 209 240 / .10);
+}
+
+.hud-kicker {
+  font: 750 .63rem/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--nova-cyan);
+}
+.hud-pulse {
+  width: .55rem; height: .55rem; flex: 0 0 .55rem;
+  border-radius: 50%; background: #54ffb7;
+  box-shadow: 0 0 11px rgb(84 255 183 / .65);
+}
+.hud-nav-rail {
+  display: flex; align-items: center; gap: clamp(.6rem, 2.1vw, 2rem);
+  min-height: 3.6rem; margin: -.35rem -.4rem 1.2rem;
+  padding: .35rem clamp(.8rem, 1.7vw, 1.6rem);
+  border: 1px solid var(--nova-line); border-radius: .6rem;
+  background: linear-gradient(180deg, #081d2c 3%, #020d17 96%);
+  box-shadow: inset 0 -2px 0 rgb(15 192 226 / .10), 0 12px 35px #0008;
+}
+.hud-brand {
+  display: inline-flex; align-items: center; gap: .72rem;
+  color: #a5f5ff; white-space: nowrap;
+  font: 850 clamp(.75rem, 1.3vw, 1rem)/1.3 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: .31em;
+  text-shadow: 0 0 15px rgb(62 223 245 / .22);
+}
+.hud-nav-current, .hud-nav-link {
+  display: inline-flex; align-items: center; gap: .45rem;
+  padding: .62rem .95rem; border: 1px solid transparent;
+  font: 750 .7rem/1.1 ui-monospace, monospace;
+  letter-spacing: .08em; white-space: nowrap;
+  color: #a1c0cd; text-decoration: none;
+}
+.hud-nav-current {
+  margin-left: clamp(.3rem, 2vw, 2rem);
+  border-color: #5cd7e7; color: #e5fcff;
+  background: linear-gradient(125deg, #135870, #0a293e);
+  box-shadow: inset 0 0 12px #28e1f12c, 0 0 15px #00e1ff28;
+  clip-path: polygon(9px 0,100% 0,calc(100% - 9px) 100%,0 100%);
+}
+.hud-nav-link:hover, .hud-nav-link:focus-visible {
+  border-color: var(--nova-line); color: #fff;
+  background: rgb(23 88 110 / .38);
+}
+.hud-nav-location {
+  margin-left: auto;
+  font: 750 .61rem/1.2 ui-monospace, monospace;
+  letter-spacing: .15em; white-space: nowrap;
+  color: #86b6c8;
+}
+
+/* Atlas is an edge-to-edge game screen, not a centered website card. */
+.navigation-computer {
+  display: block;
+  padding: 0;
+  background:
+    radial-gradient(ellipse at 55% 25%,rgb(10 96 128 / .18),transparent 56%),
+    repeating-linear-gradient(90deg,transparent 0 79px,rgb(41 130 164 / .024) 80px),
+    #010a14;
+}
+.navigation-computer::before {
+  position: fixed; inset: 0; content: ""; z-index: 0; pointer-events: none;
+  background-image:
+    radial-gradient(#b7ecff8a .65px, transparent .8px),
+    linear-gradient(rgb(70 173 210 / .035) 1px,transparent 1px);
+  background-size: 87px 109px, 100% 4px;
+  opacity: .3;
+}
+.navigation-computer .nav-shell {
+  position: relative; z-index: 1;
+  display: flex; flex-direction: column;
+  width: 100%; max-width: none; min-height: 100vh;
+  padding: clamp(.7rem, 1.35vw, 1.4rem);
+  border: 0; border-radius: 0;
+  background: transparent; box-shadow: none;
+}
+.navigation-computer .nav-heading {
+  align-items: center; gap: .7rem; margin: .1rem .25rem 1rem;
+}
+.navigation-computer .nav-heading h2 {
+  font: 850 clamp(1.6rem, 2.6vw, 2.6rem)/1.12 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: -.025em; color: #e8f7ff;
+  text-shadow: 0 0 24px rgb(67 193 246 / .10);
+}
+.navigation-computer .nav-subtitle { color: #a6c5d5; line-height: 1.6; }
+.navigation-computer .nav-heading .nav-button { white-space: nowrap; }
+.navigation-computer .atlas-view-tabs {
+  margin: 0 .3rem 1rem; padding-bottom: .7rem;
+  border-bottom-color: #29708a;
+}
+.navigation-computer .atlas-view-tab {
+  border-radius: .25rem; border-color: #2a6277;
+  background: linear-gradient(180deg,#0b2639,#051321);
+  transition: background .15s, border-color .15s, box-shadow .15s;
+}
+.navigation-computer .atlas-view-tab.is-active {
+  border-color: #6de6ed;
+  background: linear-gradient(135deg,#155a70,#0c3147);
+  box-shadow: inset 0 -2px 0 #9bfcff70,0 0 16px #19dbff2b;
+}
+.navigation-computer .solar-atlas-layout {
+  grid-template-columns: minmax(205px, 255px) minmax(0,1fr) minmax(265px,340px);
+  grid-template-areas: "operations map details";
+  align-items: start; gap: clamp(.5rem, .9vw, 1rem);
+}
+.solar-operations-panel {
+  grid-area: operations; min-width: 0; display: flex;
+  flex-direction: column; gap: .82rem;
+  border: 1px solid #286983; border-radius: .38rem;
+  padding: .75rem; color: var(--nova-ink);
+  background: linear-gradient(158deg,rgb(6 29 45 / .96),rgb(1 10 19 / .95));
+  box-shadow: inset 0 1px 0 #7bddff25, var(--nova-glow);
+}
+.hud-panel-heading {
+  display:flex; align-items:center; justify-content:space-between; gap:.6rem;
+  padding:.2rem .1rem .75rem; border-bottom:1px solid #25607c;
+}
+.hud-ops-card, .hud-traffic-panel {
+  padding:.85rem; border:1px solid #21536b; border-radius:.35rem;
+  background: linear-gradient(155deg,#0c263b,#051422);
+  box-shadow: inset 2px 0 0 rgb(37 198 231 / .13);
+}
+.hud-ops-card h3 {
+  margin:.32rem 0 .35rem; color:#e8f8ff;
+  font-size:.86rem; font-weight:750;
+}
+.hud-ops-card p:last-child, .hud-traffic-panel p {
+  color:#abc8d8; font-size:.72rem; line-height:1.6;
+}
+.hud-traffic-panel { border-color:#24798c; }
+.hud-traffic-panel #nav-traffic-contacts { max-height: 13rem; overflow-y:auto; }
+.hud-traffic-panel #nav-traffic-comms { color:#aaf5de; }
+.solar-operations-panel .solar-system-note {
+  margin: 0; padding: .8rem; border:1px dashed #236077;
+  color:#84b7c9; background:#061725; font-size:.67rem;
+}
+.navigation-computer .solar-atlas-frame {
+  grid-area: map; min-width:0; border-radius:.45rem;
+  border-color:#2f9bb4;
+  background: linear-gradient(180deg,#062037,#010c1b);
+  box-shadow: inset 0 0 32px #0bd4fe0a,0 0 24px #00cfff12;
+}
+.navigation-computer .solar-atlas-frame .nav-map-caption {
+  padding: .82rem 1.1rem; color:#b2eefa; letter-spacing:.12em;
+  background:linear-gradient(90deg,#0c3045,#061a2a);
+  border-bottom:1px solid #28788c;
+}
+.navigation-computer #nav-solar-chart {
+  background:
+    radial-gradient(circle at 50% 50%,rgb(14 74 99 / .42),transparent 52%),
+    radial-gradient(#b9f2ff70 .7px,transparent .9px),
+    radial-gradient(ellipse at 50% 60%,#0b2440,#010a18 75%);
+  background-size: auto, 64px 74px, auto;
+}
+.navigation-computer .solar-chart-controls {
+  border-top-color:#246c85;
+  background:linear-gradient(180deg,#082437,#061521);
+}
+.navigation-computer .solar-atlas-panel {
+  grid-area: details; gap:.72rem; border-radius:.38rem;
+  border-color:#296d84; padding:.9rem;
+  background:linear-gradient(160deg,#092538,#041321);
+  box-shadow: inset 0 1px 0 #90f7ff17, var(--nova-glow);
+}
+.navigation-computer .solar-body-button {
+  min-height: 2.2rem; border-radius: .24rem;
+  border-color:#255269; color:#c5e1ed;
+  background:linear-gradient(180deg,#0a293c,#041522);
+}
+.navigation-computer .solar-body-button:hover {
+  border-color:#70dce8; background:#0d3c51;
+}
+.navigation-computer .solar-body-button[aria-pressed="true"] {
+  border-color:#7bf8ff; color:#fff;
+  background:linear-gradient(125deg,#15536c,#0a3144);
+  box-shadow:0 0 13px rgb(4 236 255 / .2);
+}
+.navigation-computer .solar-selected-body { border-top-color:#348299; }
+.navigation-computer .solar-body-metrics>div {
+  border-color:#25556a; border-radius:.26rem; background:#082236;
+}
+.navigation-computer .solar-navigation-console {
+  border-top-color:#33768b; gap:.5rem;
+}
+.navigation-computer .nav-button {
+  border-radius: .3rem;
+  background:linear-gradient(145deg,#103e53,#0a253a);
+}
+.navigation-computer .nav-button:hover:not(:disabled) {
+  border-color:#7cf5ff; background:#164d61;
+}
+.navigation-computer .nav-primary {
+  color:#02131b; border-color:#72f8ff;
+  background:linear-gradient(115deg,#52dcf5,#b1fbff);
+  box-shadow:0 0 16px #30d8ef25; text-shadow:none;
+}
+.navigation-computer .nav-primary:hover:not(:disabled) {
+  color:#031824; background:#b6f9ff;
+}
+.navigation-computer .nav-danger {
+  color:#ffdacd; border-color:#87504a;
+  background:linear-gradient(120deg,#452723,#24151b);
+}
+.navigation-computer .hud-preferences {
+  margin:.85rem .25rem .5rem; padding:.65rem .95rem;
+  border-radius:.3rem; border-color:#22556a;
+  background:rgb(4 17 31 / .88);
+}
+.navigation-computer .hud-preferences>p { display:none; }
+.hud-keybar {
+  display:flex; align-items:center; flex-wrap:wrap; gap:1rem;
+  min-height:3rem; margin-top:auto; padding:.5rem .75rem;
+  border:1px solid #2a7992; border-radius:.35rem;
+  background:linear-gradient(180deg,#092b3d,#03131d);
+  font:750 .66rem/1.4 ui-monospace,monospace;
+  color:#a5d1df; letter-spacing:.04em;
+}
+.hud-keybar span { display:inline-flex; align-items:center; gap:.38rem; }
+.hud-keybar-title {
+  color:#80efff; letter-spacing:.18em;
+  padding-right:1rem; border-right:1px solid #31738a;
+}
+.hud-keybar kbd {
+  border:1px solid #37839c; border-radius:.22rem;
+  padding:.14rem .32rem; background:#051824; color:#a8fcff;
+  font:800 .67rem ui-monospace,monospace;
+}
+.hud-keybar-end { margin-left:auto; opacity:.65; }
+@media(max-width:1240px) {
+  .navigation-computer .solar-atlas-layout {
+    grid-template-columns:minmax(0,1fr) minmax(265px,340px);
+    grid-template-areas:"map details" "operations operations";
+  }
+  .solar-operations-panel { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .solar-operations-panel .hud-panel-heading { grid-column:1/-1; }
+}
+@media(max-width:850px) {
+  .navigation-computer .solar-atlas-layout {
+    grid-template-columns: minmax(0,1fr);
+    grid-template-areas:"map" "details" "operations";
+  }
+  .solar-operations-panel { display:flex; }
+  .hud-nav-rail { flex-wrap:wrap; }
+  .hud-nav-location { display:none; }
+  .navigation-computer .nav-heading { align-items:flex-start; }
+}
+@media(max-width:540px) {
+  .hud-brand { letter-spacing:.17em; }
+  .hud-nav-current { margin-left:0; }
+  .navigation-computer .nav-heading .nav-button { white-space:normal; }
+  .hud-keybar-end { display:none !important; }
+}
+
+/* SPACE NOVA HUD / access screens + website identity */
+.hud-screen {
+  --hud-edge: rgb(77 194 224 / .42);
+  --hud-panel-bg: #051625;
+  position:relative; isolation:isolate; color:#e9f9ff;
+  background:
+    radial-gradient(circle at 25% 18%,rgb(2 129 165 / .2),transparent 33%),
+    radial-gradient(circle at 83% 76%,rgb(8 52 126 / .23),transparent 40%),
+    #020812;
+}
+.hud-screen::before {
+  position:fixed; inset:0; z-index:-1; pointer-events:none;
+  content:"";
+  background-image: radial-gradient(#b5f3ff8c .65px, transparent .9px);
+  background-size: 83px 91px; opacity:.2;
+}
+.hud-auth-screen {
+  min-height:100vh; display:grid; place-items:center;
+  overflow-x:hidden; padding:clamp(.7rem,2.1vw,2rem);
+}
+.hud-auth-ambient {
+  position:fixed; inset:0; z-index:-1; pointer-events:none;
+  background:repeating-linear-gradient(90deg,transparent 0 89px,#39cfff07 90px);
+}
+.hud-auth-layout {
+  display:grid; grid-template-columns:minmax(0,1.03fr) minmax(330px,.97fr);
+  width:min(1180px,100%); min-height:min(700px,calc(100vh - 3rem));
+  border:1px solid rgb(78 196 223 / .5); border-radius:.55rem;
+  overflow:hidden;
+  background:linear-gradient(125deg,#061c30,#030e1b);
+  box-shadow:0 30px 110px #000b,inset 0 1px 0 #75f1ff2b,0 0 26px #00cfff0e;
+}
+.hud-auth-story {
+  display:flex; flex-direction:column; position:relative; overflow:hidden;
+  padding:clamp(1.5rem,3.4vw,3.8rem);
+  border-right:1px solid #1b647c;
+  background:
+    linear-gradient(140deg,transparent 54%,rgb(16 121 163 / .08)),
+    radial-gradient(circle at 50% 48%,#17527033,transparent 51%),
+    #041526;
+}
+.hud-auth-brand {
+  display:flex; flex-wrap:wrap; align-items:center; column-gap:.8rem; row-gap:.3rem;
+  font-weight:850; letter-spacing:.25em; color:#83f3ff;
+}
+.hud-auth-brand small {
+  flex-basis:100%; font:700 .61rem ui-monospace,monospace;
+  letter-spacing:.15em;color:#649eb8;
+}
+.hud-auth-orbit {
+  position:relative; align-self:center; flex:0 0 auto;
+  width:min(85%,330px); aspect-ratio:1;
+  margin:1.8rem 0; border:1px solid #329eb343; border-radius:50%;
+  background:
+    linear-gradient(90deg,transparent 49.8%,#55d2e214 50%,transparent 50.2%),
+    linear-gradient(0deg,transparent 49.8%,#55d2e214 50%,transparent 50.2%),
+    radial-gradient(circle,#0c56723b 2%,transparent 68%);
+  box-shadow:0 0 70px #27cafa10,inset 0 0 80px #15b6d40d;
+}
+.hud-auth-orbit::before, .hud-auth-orbit::after {
+  position:absolute; content:""; inset:12%; border:1px solid #3cc9e83b;
+  border-radius:50%;
+}
+.hud-auth-orbit::after { inset:31%; border-style:dashed; }
+.hud-auth-orbit-core {
+  position:absolute; top:50%; left:50%;
+  width:14%; aspect-ratio:1; transform:translate(-50%,-50%);
+  border-radius:50%; background:#7beaff;
+  box-shadow:0 0 22px #35dfff9e,0 0 55px #21b7db61;
+}
+.hud-auth-orbit-ship {
+  position:absolute; top:10%; left:67%; width:12px; height:12px;
+  transform:rotate(45deg); border:2px solid #a4fcff;
+  background:#0b3846; box-shadow:0 0 14px #6af2ff;
+}
+.hud-auth-story h2 {
+  margin:.7rem 0 1rem;
+  font-size:clamp(1.9rem,3.2vw,3.45rem);
+  line-height:1.05; letter-spacing:-.045em; font-weight:850;
+  color:#f1fbff;
+}
+.hud-auth-story-copy {
+  max-width:35rem; color:#abcbdc; line-height:1.75; font-size:.88rem;
+}
+.hud-auth-specs {
+  display:grid; grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:.5rem; margin-top:auto; padding-top:1.7rem;
+}
+.hud-auth-specs>div {
+  border-top:1px solid #3b98ac; padding-top:.65rem; min-width:0;
+}
+.hud-auth-specs span {
+  display:block; font:700 .55rem/1.5 ui-monospace,monospace;
+  letter-spacing:.12em; color:#78b2c8;
+}
+.hud-auth-specs strong {
+  display:block; margin-top:.3rem;
+  color:#b5f0ff; font:750 .65rem/1.4 ui-monospace,monospace;
+  overflow-wrap:anywhere;
+}
+.hud-auth-panel {
+  position:relative; align-self:center; width:100%;
+  margin:0; max-width:none; border:0; border-radius:0;
+  background:linear-gradient(160deg,rgb(7 28 44 / .88),rgb(2 10 22 / .94));
+  padding:clamp(1.6rem,3.2vw,3.8rem);
+  box-shadow:none;
+}
+.hud-auth-panel::before {
+  content:""; position:absolute; pointer-events:none;
+  inset:.75rem; border:1px solid #3891aa39; border-radius:.3rem;
+}
+.hud-auth-panel>* { position:relative; }
+.hud-auth-panel h1 { color:#f0fdff; letter-spacing:-.025em; }
+.hud-auth-panel form label, .hud-auth-panel .label {
+  color:#a9d6e6; letter-spacing:.035em;
+}
+.hud-auth-panel input.hud-field,
+.hud-auth-panel input:not([type="checkbox"]):not([type="hidden"]) {
+  background:#05182a; color:#effcff; border:1px solid #32738d;
+  border-radius:.3rem; min-height:2.85rem;
+  box-shadow:inset 0 1px 10px #01071080;
+}
+.hud-auth-panel input:focus-visible {
+  outline:2px solid #8ff8ff; outline-offset:2px;
+  border-color:#8ff8ff;
+}
+.hud-cta, .hud-auth-panel .hud-cta {
+  border:1px solid #98fbff; border-radius:.3rem;
+  background:linear-gradient(120deg,#54ddf3,#9df9ff);
+  color:#031623; font-weight:850; letter-spacing:.035em;
+  box-shadow:0 0 25px #36eaff22,inset 0 1px 0 #fff9;
+}
+.hud-cta:hover, .hud-auth-panel .hud-cta:hover {
+  background:linear-gradient(120deg,#a4fbff,#d5feff);
+  color:#02111d; border-color:#e5feff;
+}
+.hud-panel-back { color:#9bebff; }
+.hud-auth-success .hud-auth-panel {
+  max-width:34rem; border:1px solid var(--hud-edge);
+  border-radius:.5rem; text-align:center;
+  box-shadow:0 30px 90px #0009;
+}
+.hud-landing {
+  background:
+    radial-gradient(circle at 70% 4%,rgb(19 117 154 / .17),transparent 42%),
+    #020914;
+}
+.hud-landing .hud-landing-topbar {
+  max-width:none; padding-inline:clamp(1rem,3vw,3rem);
+  border-bottom:1px solid #2e879c;
+  background:linear-gradient(180deg,#082133e8,#020e1cde);
+  box-shadow:0 0 18px #00caf013;
+}
+.hud-landing .hud-landing-hero {
+  min-height:min(850px,90vh);
+}
+.hud-landing .hud-landing-hero>div:last-child>div:not([aria-hidden]) {
+  border-radius:.4rem; border-color:#328ba3;
+  box-shadow:0 15px 50px #0009,0 0 30px #38c9ef1e;
+}
+.hud-landing article, .hud-landing section#flight>div:first-child,
+.hud-landing section#future .grid>div {
+  border-color:#276780; border-radius:.4rem;
+  box-shadow:inset 0 1px 0 #87e7ff12;
+  background:linear-gradient(150deg,#0a2236,#041423);
+}
+.hud-landing #launch-client-link,
+.hud-landing #hero-register-link {
+  border-radius:.3rem;
+}
+.hud-landing #primary-launch-link {
+  border-radius:.3rem; color:#021722;
+  background:linear-gradient(115deg,#6ce4f6,#b5fcff);
+}
+.hud-landing #primary-launch-link:hover { background:#d0ffff; }
+@media(max-width:860px) {
+  .hud-auth-layout { grid-template-columns:minmax(0,1fr); }
+  .hud-auth-story { border-right:0; border-bottom:1px solid #1b647c; }
+  .hud-auth-orbit { display:none; }
+  .hud-auth-specs { margin-top:0; }
+  .hud-auth-panel { padding:clamp(1.6rem,4vw,3rem); }
+}
+@media(max-width:520px) {
+  .hud-auth-screen { padding:.5rem; }
+  .hud-auth-story { padding:1.3rem; }
+  .hud-auth-story h2 { font-size:1.7rem; }
+  .hud-auth-specs { grid-template-columns:1fr; gap:.2rem; }
+  .hud-auth-specs>div { display:flex; justify-content:space-between; gap:.7rem; }
+  .hud-auth-layout { min-height:auto; }
+}
+
+/* SOL: single-screen Atlas and planet actions. Physical destinations remain
+   server-defined celestial bodies, never invented coordinates on the SVG. */
+@media (min-width: 980px) and (min-height: 670px) {
+  .navigation-computer { overflow:hidden; }
+  .navigation-computer .nav-shell { height:100dvh; min-height:0; overflow:hidden; }
+  .navigation-computer #nav-solar-view { flex:1 1 auto; min-height:0; }
+}
+.navigation-computer .solar-atlas-layout {
+  grid-template-columns:minmax(0,1fr) minmax(240px,306px);
+  grid-template-areas:"map details"; align-items:stretch;
+}
+.navigation-computer .solar-atlas-frame {
+  position:relative;display:flex;flex-direction:column;
+  min-width:0;min-height:0;height:100%;
+}
+.navigation-computer #nav-solar-chart {
+  flex:1 1 auto; min-height:0; height:100%; width:100%;
+  aspect-ratio:auto;
+}
+.navigation-computer .solar-chart-controls { flex:0 0 auto; padding:.42rem .75rem;gap:.45rem; }
+.navigation-computer .solar-chart-controls p { font-size:.58rem; }
+.navigation-computer .solar-zoom-button { padding:.3rem .52rem; }
+.navigation-computer .solar-atlas-panel {
+  overflow:auto; min-height:0;height:100%; padding:.7rem; gap:.43rem;
+  scrollbar-width:thin; scrollbar-color:#27738b transparent;
+}
+.navigation-computer .solar-system-count { font-size:.6rem;letter-spacing:.06em; }
+.navigation-computer .solar-body-list { gap:.25rem; }
+.navigation-computer .solar-body-button { min-height:1.8rem; padding:.32rem .4rem;font-size:.68rem; }
+.navigation-computer .solar-selected-body { padding-top:.46rem; }
+.navigation-computer .solar-selected-inline { display:flex; align-items:baseline; gap:.6rem; }
+.navigation-computer .solar-selected-body h3 { margin:.1rem 0; font-size:1.25rem; }
+.navigation-computer #nav-solar-type { margin:0;font-size:.66rem; }
+.navigation-computer .solar-navigation-console { padding-top:.45rem;gap:.4rem; }
+.navigation-computer .solar-navigation-console .nav-state { margin:0;padding:.38rem .55rem;font-size:.69rem; }
+.navigation-computer .solar-body-metrics { gap:.28rem; }
+.navigation-computer .solar-body-metrics>div { padding:.36rem .5rem; }
+.navigation-computer .solar-body-metrics dt {font-size:.52rem;}
+.navigation-computer .solar-body-metrics dd {margin-top:.12rem;font-size:.75rem;overflow-wrap:anywhere;}
+.navigation-computer .solar-progress-label {font-size:.61rem!important;}
+.navigation-computer .solar-navigation-console progress {height:.48rem;}
+.navigation-computer .solar-navigation-console .nav-button {padding:.42rem .5rem;font-size:.68rem;}
+.solar-aux-details {border:1px solid #26657b;border-radius:.25rem;background:#061827;}
+.solar-aux-details summary {cursor:pointer;padding:.42rem .55rem;color:#a6eafa;font:750 .64rem/1.35 ui-monospace,monospace;letter-spacing:.04em;}
+.solar-aux-details summary:hover {background:#104054;}
+.solar-aux-details summary:focus-visible {outline:2px solid #80f3ff;outline-offset:2px;}
+.solar-aux-details[open]>.solar-body-metrics,
+.solar-aux-details[open]>.solar-contacts-content {margin:.35rem;margin-top:0;}
+.solar-contacts-content { margin-top:.2rem; }
+.solar-contacts-content p {margin-top:.35rem;margin-bottom:.35rem;}
+.solar-contacts-content #nav-traffic-contacts {max-height:12rem;overflow-y:auto;}
+.solar-context-menu {
+  position:absolute;z-index:25;width:clamp(175px,18vw,226px);
+  padding:.4rem;border:1px solid #65e1eb;border-radius:.35rem;
+  background:linear-gradient(140deg,#0c3247,#041321);
+  box-shadow:0 16px 50px #000e,0 0 18px #05d6ef30;
+}
+.solar-context-menu[hidden] {display:none!important;}
+.solar-context-target {
+  padding:.4rem .5rem;color:#96eefa;
+  font:800 .65rem ui-monospace,monospace;letter-spacing:.12em;
+  border-bottom:1px solid #34798b;
+}
+.solar-context-menu button {
+  display:block;width:100%;padding:.65rem .55rem;
+  border:1px solid transparent;border-radius:.25rem;
+  background:transparent;color:#e2f7ff;text-align:left;
+  font:750 .76rem ui-monospace,monospace;cursor:pointer;
+}
+.solar-context-menu button:hover:not(:disabled),
+.solar-context-menu button:focus-visible {border-color:#6de0ed;background:#15536a;}
+.solar-context-menu button:disabled {color:#668b9b;cursor:not-allowed;}
+@media (max-width:979px), (max-height:669px) {
+  .navigation-computer .nav-shell {height:auto;min-height:100dvh;overflow:visible;}
+  .navigation-computer {overflow:auto;}
+  .navigation-computer .solar-atlas-layout {height:auto;}
+  .navigation-computer .solar-atlas-frame {height:auto;min-height:0;}
+  .navigation-computer #nav-solar-chart {flex:0 0 auto;height:auto;min-height:260px;aspect-ratio:5/3;}
+  .navigation-computer .solar-atlas-panel {height:auto;max-height:none;}
+}
+@media(max-width:700px) {
+  .navigation-computer .solar-atlas-layout {
+    grid-template-columns:minmax(0,1fr);grid-template-areas:"map" "details";
+  }
+}
+
+
+/* =======================================================================
+   SPACE NOVA / FULL-SCREEN ATLAS HUD
+   The map is the entire play surface; instrument windows float on top.
+   The same authoritative SVG, server calls, and cockpit transition remain.
+======================================================================= */
+.navigation-computer {
+  position:absolute; inset:0; display:block; padding:0;
+  overflow:hidden; background:#020b18;
+}
+.navigation-computer .atlas-hud-shell {
+  position:relative; inset:0; display:block;
+  width:100%; height:100%; height:100dvh; min-height:0;
+  max-width:none; padding:0; margin:0; overflow:hidden;
+  border:0; border-radius:0; box-shadow:none; background:transparent;
+}
+.navigation-computer .atlas-hud-shell::before {
+  content:""; position:absolute; inset:0; pointer-events:none; z-index:1;
+  background:linear-gradient(180deg,#02081249,transparent 24%,transparent 76%,#030b16ab);
+}
+.navigation-computer #nav-solar-view,
+.navigation-computer #nav-sector-view {
+  position:absolute; inset:0; margin:0;
+  width:100%; height:100%; padding:0; overflow:hidden;
+  min-height:0; z-index:0;
+}
+.navigation-computer #nav-solar-view.solar-atlas-layout {
+  display:block; grid-template-columns:none; grid-template-areas:none;
+}
+.navigation-computer .solar-atlas-frame {
+  position:absolute; inset:0;
+  display:block; width:100%; height:100%;
+  min-width:0; min-height:0; overflow:hidden;
+  border:0; border-radius:0; box-shadow:none;
+  background:radial-gradient(circle at 50% 50%,#0a2943,#020a17 76%);
+}
+.navigation-computer #nav-solar-chart {
+  display:block; position:absolute; inset:0;
+  width:100%; height:100%; min-width:0; min-height:0;
+  aspect-ratio:auto; max-width:none;
+  cursor:crosshair; touch-action:manipulation;
+  background:radial-gradient(circle at 50% 50%,#0a2943,#020a17 76%);
+}
+/* Small unobtrusive chart labels, not a block above the map. */
+.navigation-computer .solar-atlas-frame>.nav-map-caption {
+  position:absolute; left:14px; top:73px; z-index:8;
+  display:inline-flex; gap:1.2rem; padding:.38rem .6rem;
+  width:max-content; max-width:calc(100vw - 330px);
+  border:1px solid #27677a; border-radius:.25rem;
+  background:#041626b8; backdrop-filter:blur(8px);
+  color:#9fd8e8; pointer-events:none;
+  font-size:.57rem; letter-spacing:.12em;
+}
+.navigation-computer .solar-atlas-frame>.solar-chart-controls {
+  position:absolute; bottom:53px; left:12px; z-index:16;
+  display:flex; width:auto; padding:.33rem .42rem; margin:0;
+  border:1px solid #34788d; border-radius:.32rem;
+  background:#051928e8; backdrop-filter:blur(10px);
+  box-shadow:0 8px 20px #0009;
+  pointer-events:auto;
+}
+.navigation-computer .solar-chart-controls p { display:none; }
+.navigation-computer .solar-zoom-button {
+  padding:.4rem .65rem; font-size:.67rem;
+}
+
+/* A single tight control strip floats above the world. */
+.navigation-computer .atlas-hud-top {
+  position:absolute; z-index:50; top:8px; left:8px; right:8px;
+  display:flex; flex-wrap:nowrap; align-items:center; gap:clamp(.4rem,.9vw,1rem);
+  min-height:49px; max-height:56px; padding:.35rem .8rem;
+  border:1px solid #40879c; border-radius:.4rem;
+  background:linear-gradient(180deg,#082738f0,#03131fea);
+  box-shadow:0 12px 40px #000b,inset 0 1px 0 #b1f9ff25;
+  backdrop-filter:blur(14px);
+}
+.navigation-computer .atlas-hud-top .hud-brand {
+  flex:0 0 auto; gap:.45rem; letter-spacing:.16em;
+  font-size:clamp(.66rem,1vw,.84rem);
+}
+.navigation-computer .atlas-hud-top #nav-title {
+  flex:0 0 auto; margin:0;
+  font:800 clamp(.85rem,1.2vw,1rem)/1.15 ui-sans-serif,system-ui,sans-serif;
+  letter-spacing:.015em; color:#e5faff; white-space:nowrap;
+}
+.navigation-computer .atlas-hud-top .atlas-view-tabs {
+  display:flex; flex:0 0 auto; align-items:center; flex-wrap:nowrap;
+  gap:.25rem; margin:0 auto 0 0; padding:0; border:0;
+}
+.navigation-computer .atlas-hud-top .atlas-view-tab {
+  display:inline-flex; align-items:center; gap:.3rem;
+  padding:.41rem .55rem; border-radius:.24rem;
+  font-size:.63rem; font-weight:800; white-space:nowrap;
+}
+.navigation-computer .atlas-loadout-link {
+  flex:0 0 auto; padding:.44rem .4rem; font-size:.62rem;
+}
+.navigation-computer .atlas-hud-top .hud-mini-button {
+  flex:0 0 auto; padding:.48rem .65rem; font-size:.65rem;
+  white-space:nowrap; line-height:1.3;
+}
+.navigation-computer .atlas-hud-top #nav-close {
+  background:linear-gradient(105deg,#17617b,#11405a);
+  border-color:#69ddec; color:#d9fcff;
+}
+.navigation-computer #helmet-panel {
+  position:absolute; z-index:90; top:65px; right:14px;
+  width:min(540px,calc(100vw - 28px));
+  max-height:calc(100dvh - 127px); overflow:auto;
+  margin:0; padding:1rem; border-color:#3a9eb1;
+  box-shadow:0 20px 60px #000b; background:#041523f5;
+  backdrop-filter:blur(12px);
+}
+.navigation-computer #helmet-panel[hidden] {display:none!important;}
+
+/* Compact floating HUD windows; the map continues under and around them. */
+.navigation-computer .atlas-hud-right {
+  position:absolute; z-index:24; top:68px; right:12px; bottom:52px;
+  display:flex; flex-direction:column; align-items:stretch; gap:.55rem;
+  width:clamp(235px,21vw,290px);
+  max-height:calc(100dvh - 120px);
+  overflow-y:auto; overflow-x:hidden;
+  padding:.15rem .2rem .3rem .15rem;
+  pointer-events:auto;
+  scrollbar-width:thin; scrollbar-color:#408a9d transparent;
+}
+.navigation-computer .hud-flight-widget,
+.navigation-computer .hud-target-widget,
+.navigation-computer .atlas-hud-right>.solar-contacts-drawer {
+  position:relative; flex:0 0 auto; width:100%; min-width:0;
+  border:1px solid #337e95; border-radius:.35rem;
+  padding:.55rem; color:#d9f6ff;
+  background:linear-gradient(155deg,#08283bdc,#031423e7);
+  box-shadow:0 12px 36px #000a,inset 0 1px 0 #8defff24;
+  backdrop-filter:blur(13px);
+}
+.navigation-computer .hud-widget-heading {
+  display:flex; align-items:center; justify-content:space-between;
+  min-height:1.45rem; gap:.4rem; margin-bottom:.42rem;
+  border-bottom:1px solid #31758b; padding:0 0 .4rem;
+  color:#92eaf7;
+  font:800 .61rem/1.2 ui-monospace,monospace; letter-spacing:.12em;
+}
+.navigation-computer .hud-widget-dismiss {
+  display:grid; place-items:center; width:1.4rem; height:1.4rem;
+  border:1px solid #327b93; border-radius:.2rem;
+  background:#09283a; color:#a7eff8; font:700 1rem/1 ui-sans-serif,sans-serif;
+  cursor:pointer;
+}
+.navigation-computer .hud-widget-dismiss:hover,
+.navigation-computer .hud-widget-dismiss:focus-visible {
+  border-color:#7bf0ff; color:white;
+}
+.navigation-computer .hud-target-widget[hidden] {display:none!important;}
+.navigation-computer .hud-flight-widget .solar-navigation-console {
+  display:grid; gap:.42rem; padding:0; border:0; margin:0;
+}
+.navigation-computer .hud-flight-widget .solar-navigation-console>.nav-eyebrow {
+  display:none; /* duplicated by the floating widget title */
+}
+.navigation-computer .hud-flight-widget .nav-state {
+  margin:0; padding:.42rem .5rem; font-size:.64rem; line-height:1.35;
+}
+.navigation-computer .hud-flight-widget .solar-body-metrics {
+  display:grid; gap:.27rem;
+}
+.navigation-computer .hud-flight-widget .solar-body-metrics>div {
+  padding:.3rem .45rem; background:#041a29b0;
+}
+.navigation-computer .hud-flight-widget .solar-body-metrics dt {font-size:.53rem;}
+.navigation-computer .hud-flight-widget .solar-body-metrics dd {
+  font-size:.7rem; margin-top:.12rem; overflow-wrap:anywhere;
+}
+.navigation-computer .hud-flight-widget .solar-progress-label {
+  font-size:.61rem; line-height:1.35;
+}
+.navigation-computer .hud-flight-widget progress {height:.4rem; border-radius:.2rem;}
+.navigation-computer .hud-flight-widget .nav-button {
+  padding:.42rem .52rem; font-size:.67rem;
+}
+.navigation-computer .hud-target-widget {
+  display:flex; gap:.38rem; padding:.55rem;
+  flex-direction:column; height:auto; overflow:visible;
+}
+.navigation-computer .hud-target-widget .solar-selected-body {
+  border:0; padding:0;
+}
+.navigation-computer .hud-target-widget .solar-selected-inline {
+  display:flex; align-items:baseline; gap:.5rem;
+}
+.navigation-computer .hud-target-widget .solar-selected-body h3 {
+  font-size:1.15rem; margin:.15rem 0;
+}
+.navigation-computer .hud-target-widget #nav-solar-type {
+  font-size:.68rem; margin:0;
+}
+.navigation-computer .hud-target-widget .nav-eyebrow {
+  font-size:.57rem;
+}
+.navigation-computer .hud-target-widget .solar-body-metrics>div {
+  padding:.36rem .42rem; background:#041c2cc5;
+}
+.navigation-computer .hud-target-widget .solar-body-metrics dt {font-size:.53rem;}
+.navigation-computer .hud-target-widget .solar-body-metrics dd {font-size:.75rem;}
+.navigation-computer .hud-catalog-drawer .solar-body-list {
+  padding:.3rem; gap:.22rem;
+}
+.navigation-computer .hud-catalog-drawer .solar-body-button {
+  min-height:1.8rem; padding:.35rem .4rem;
+}
+.navigation-computer .atlas-hud-right>.solar-contacts-drawer {
+  padding:.15rem .3rem;
+}
+.navigation-computer .solar-contacts-drawer summary {
+  padding:.32rem; font-size:.64rem;
+}
+.navigation-computer .solar-contacts-drawer .hud-traffic-panel {
+  padding:.45rem; border:0; background:transparent;
+}
+.navigation-computer .solar-context-menu {
+  z-index:65; background:linear-gradient(130deg,#0d364b,#041421);
+  backdrop-filter:blur(12px);
+}
+
+/* Pilot preferences expand upward, away from the map controls. */
+.navigation-computer .hud-control-drawer {
+  position:absolute; bottom:105px; left:12px; z-index:28;
+  width:min(285px,calc(100vw - 24px));
+  border:1px solid #34788d; border-radius:.3rem;
+  background:#051b2ade; color:#a7e9f5;
+  box-shadow:0 10px 30px #000a; backdrop-filter:blur(10px);
+}
+.navigation-computer .hud-control-drawer>summary {
+  cursor:pointer; padding:.45rem .65rem;
+  font:800 .65rem ui-monospace,monospace; letter-spacing:.07em;
+}
+.navigation-computer .hud-control-drawer>summary:focus-visible {
+  outline:2px solid #88f9ff; outline-offset:2px;
+}
+.navigation-computer .hud-control-drawer .hud-preferences {
+  display:block; margin:0; padding:.65rem;
+  border:0; border-top:1px solid #32758a; background:#051a2bed;
+}
+.navigation-computer .hud-control-drawer .hud-preferences>p {display:block;}
+.navigation-computer .hud-control-drawer .hud-preferences input {accent-color:#6ce9f9;}
+
+/* Bottom hotkeys remain a HUD strip, not page furniture. */
+.navigation-computer .hud-keybar {
+  position:absolute; z-index:40; bottom:8px; left:8px; right:8px;
+  min-height:34px; margin:0; padding:.32rem .7rem;
+  border:1px solid #397f96; border-radius:.25rem;
+  background:#041725e5; backdrop-filter:blur(12px);
+  font-size:.6rem; pointer-events:none; gap:clamp(.5rem,1.3vw,1.2rem);
+}
+.navigation-computer .hud-keybar-title {font-size:.6rem;}
+
+/* Local sector navigation also fills the map surface while the existing
+   waypoint form becomes a floating instrument. */
+.navigation-computer #nav-sector-view .nav-layout {
+  position:absolute; inset:0; display:block; margin:0; padding:0;
+}
+.navigation-computer #nav-sector-view .nav-map-frame {
+  position:absolute; inset:0; display:block; margin:0;
+  border:0; border-radius:0; background:#020c1b;
+}
+.navigation-computer #nav-chart {
+  position:absolute; inset:0; width:100%; height:100%;
+  aspect-ratio:auto; cursor:crosshair;
+}
+.navigation-computer #nav-sector-view .nav-map-caption {
+  position:absolute; z-index:15; top:73px; left:12px;
+  width:max-content; max-width:calc(100vw - 345px);
+  border:1px solid #295d70; background:#051829db;
+}
+.navigation-computer #nav-sector-view .nav-legend {
+  position:absolute; z-index:15; bottom:55px; left:12px;
+  padding:.5rem .7rem; border:1px solid #295d70;
+  background:#041829db;
+}
+.navigation-computer #nav-sector-view .nav-console {
+  position:absolute; top:68px; right:12px; z-index:24;
+  width:min(300px,33vw); max-height:calc(100dvh - 125px);
+  overflow-y:auto; scrollbar-width:thin;
+  border-color:#337e95; border-radius:.35rem;
+  background:linear-gradient(155deg,#08283bdf,#031423ef);
+  box-shadow:0 12px 36px #000a;
+}
+@media (max-width:1120px) {
+  .navigation-computer .atlas-hud-top { gap:.35rem; padding:.3rem .55rem; }
+  .navigation-computer .atlas-hud-top .hud-brand {font-size:.7rem;letter-spacing:.06em;}
+  .navigation-computer .atlas-hud-top #nav-title {font-size:.8rem;}
+  .navigation-computer .atlas-hud-top .atlas-view-tab {padding:.35rem .42rem;}
+  .navigation-computer .atlas-loadout-link {display:none;}
+}
+@media (max-width:790px) {
+  .navigation-computer .atlas-hud-top .hud-brand {display:none;}
+  .navigation-computer .atlas-hud-top #nav-title {font-size:.75rem;}
+  .navigation-computer .atlas-hud-top #nav-helmet-open {display:none;}
+  .navigation-computer .atlas-hud-right {width:min(250px,40vw);}
+  .navigation-computer .solar-atlas-frame>.nav-map-caption span:last-child {display:none;}
+}
+@media (max-width:570px) {
+  .navigation-computer .atlas-hud-top #nav-title {display:none;}
+  .navigation-computer .atlas-hud-top .atlas-view-tabs {margin-right:auto;}
+  .navigation-computer .atlas-hud-right {
+    top:67px; right:8px; bottom:50px; width:min(225px,51vw);
+  }
+  .navigation-computer .hud-keybar-end {display:none;}
+  .navigation-computer .hud-keybar {gap:.35rem;font-size:.52rem;}
+  .navigation-computer .hud-keybar kbd {font-size:.52rem;}
+}
+
+/* Movable instrument stack, controlled by a deliberate grip only.
+   The map and flight buttons retain their normal pointer behavior. */
+.navigation-computer .hud-widget-grip {
+  cursor:grab; user-select:none; touch-action:none;
+}
+.navigation-computer .hud-widget-grip.is-dragging {cursor:grabbing;}
+.navigation-computer .hud-widget-grip:focus-visible {
+  outline:2px solid #8cf6ff; outline-offset:3px;
+}
+.navigation-computer .hud-reset-button {
+  display:grid; place-items:center; width:29px; padding:.25rem;
+  font-size:1.1rem;
+}

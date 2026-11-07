@@ -2,5 +2,9 @@
   "private": true,
   "scripts": {
     "test": "node --test js/game/*_test.mjs"
+  },
+  "dependencies": {
+    "three": "0.187.0",
+    "qrcode": "1.5.4"
   }
 }

@@ -20,7 +20,19 @@ export const inputControl = target => Boolean(
   target?.isContentEditable
 )
 
+export const gameplayTypingTarget = target => Boolean(
+  target?.isContentEditable ||
+  ["INPUT", "TEXTAREA", "SELECT"].includes(target?.tagName?.toUpperCase?.()) ||
+  target?.matches?.("input, textarea, select, [contenteditable='true']")
+)
+
+export const manualLaserPointerIntent = (event, active) =>
+  Boolean(active && event?.button === 2 && !event.ctrlKey && !event.altKey &&
+    !event.metaKey && !event.shiftKey)
+
 export const combatKeyIntent = event => {
+  // Manual laser is exclusively RMB on the cockpit viewport. Space remains
+  // unassigned so it cannot accidentally activate weapons.
   if (event.repeat || inputControl(event.target)) {
     return null
   }
@@ -32,7 +44,8 @@ export const combatKeyIntent = event => {
   if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return null
 
   if (event.code === "Escape") return {type: "disengage"}
-  if (event.code === "Space") return {type: "rocket_unavailable"}
+  if (event.code === "KeyL") return {type: "toggle_laser"}
+  if (event.code === "KeyT") return {type: "target_nearest"}
 
   const slot = hotbarSlotForCode(event.code)
   return slot ? {type: "activate_slot", slot} : null
@@ -58,7 +71,9 @@ export const smoothAngle = (current, desired, blend) => {
 }
 
 export const desiredEntityAngle = (entity, entities) => {
-  const combatTarget = entity?.engagedTargetId && entities.get(entity.engagedTargetId)
+  const combatId = entity?.engagedTargetId ||
+    (entity?.kind === "npc" ? entity.targetId : null)
+  const combatTarget = combatId && entities.get(combatId)
   const combatAngle = angleToTarget(entity?.render, combatTarget?.render)
   return combatAngle ?? entity?.navigationAngle ?? entity?.angle ?? -Math.PI / 2
 }

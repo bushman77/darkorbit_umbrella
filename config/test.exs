@@ -23,6 +23,10 @@ config :darkorbit_web, DarkorbitWeb.Endpoint,
 # Print only warnings and errors during test
 config :logger, level: :warning
 
+# Test signup can verify through Swoosh.Adapters.Test without external email.
+config :darkorbit_web, registration_email_enabled: true,
+  registration_from: "noreply@localhost"
+
 # In test we don't send emails
 config :darkorbit, Darkorbit.Mailer, adapter: Swoosh.Adapters.Test
 
@@ -46,3 +50,7 @@ config :phoenix_live_view,
 # Sort query params output of verified routes for robust url comparisons
 config :phoenix,
   sort_verified_routes_query_params: true
+
+# Preserve historic world:1-1 channel/combat fixtures only during tests.
+# The running game starts on the real collision-ready sol:earth region.
+config :darkorbit, :legacy_test_earth_sector, true

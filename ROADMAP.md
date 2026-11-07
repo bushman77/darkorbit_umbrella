@@ -68,6 +68,26 @@ Inspired by:
 
 ## ✅ Completed Milestones
 
+### Repository-generated artifact hygiene
+
+- [x] Remove the five accidental empty Phoenix asset-root files and the empty
+  root npm lockfile without changing either real npm package lockfile.
+- [x] Reproduce and checksum all 31 tracked Phoenix digest/compression outputs
+  with `mix assets.deploy`, then remove only those generated copies while
+  preserving every undigested original artwork/static input.
+- [x] Ignore compiled Phoenix bundles, the digest manifest, gzip copies,
+  32-hex fingerprint copies, and the identified command-token files.
+- [x] Preserve `mix.lock`, both package-scoped npm lockfiles, the Tauri
+  `Cargo.lock`, source assets, configuration, and user data.
+- [x] Pass strict compilation, all 358 ExUnit tests, all 253 browser JavaScript
+  tests, all 12 Tauri JavaScript tests, the Phoenix asset build, and a local
+  unsigned Tauri Linux release build.
+- [ ] Resolve pre-existing repository-wide Elixir 1.20 RC formatter drift so
+  the complete `mix precommit` alias can pass without an unrelated bulk-format
+  change.
+- [ ] Decide separately whether Tauri release workflows should enforce
+  lockfile-only installs with `npm ci` instead of `npm install`.
+
 ### Milestone A — Persistent player domains
 
 - Account registration and authentication
@@ -103,7 +123,7 @@ Inspired by:
 
 ### Milestone E — Server-authoritative NPC combat
 
-- Configurable original NPC catalog with three deterministic `Rift Skirmisher` spawns in sector `1-1`
+- Configurable NPC catalog with **one Dart pirate fighter** in the Sector `1-1` demo (replacing the initial three Rift Skirmishers); deterministic respawn keeps one live enemy at a time
 - Map-owned NPC movement, hull, shields, targeting, bounded AI, destruction, and tick-based respawning
 - Pure range, cooldown, shield-absorption, hull-damage, and destruction rules
 - Authenticated target/select/fire channel intentions with authoritative multiplayer combat events
@@ -242,3 +262,681 @@ sizing and reload persistence, responsive docking, click-and-hold steering,
 Ctrl/X1 alternating toggles, retained-target resume, Space messaging, and
 canvas focus restoration. Multiplayer expansion and broader two-browser
 validation remain deferred.
+
+
+## Experimental SBS / 3D presentation (branch `sbs`)
+- [x] Introduce optional Three.js 3D cockpit and binocular side-by-side rendering.
+- [x] Preserve the existing 2D game and authoritative movement/combat protocol.
+- [x] Implement eye-aware pointer projection and a small unit test suite.
+- [ ] Run complete build, precommit, and manual stereo browser verification.
+- [ ] Introduce server-authoritative 3D motion and 6DOF flight as a separate milestone.
+- [ ] Add optional WebXR and true headset-tracked cockpit controls.
+
+- [x] Revise SBS viewport fit after first Firefox screenshot (instrument sizing
+  and peripheral framing, plus pure per-eye fit regression tests).
+- [ ] Visually recheck the revised cockpit layout in Firefox and headset.
+
+
+## Navigation Computer V1 — experimental `sbs` branch
+
+- [x] Full-screen SVG map independent of Classic 2D / 3D / SBS view selection.
+- [x] Pointer and coordinate waypoint selection (up to eight legs), undo and clear.
+- [x] Authenticated `plot_course` and `stop_navigation` commands.
+- [x] Server-side atomic route validation, ordered waypoint progression and manual override.
+- [x] Screen accessibility and keyboard controls (M, Escape, focus cycle).
+- [x] Regression tests for validation, movement, spoofing and map projection.
+- [ ] Run `npm test`, `mix assets.build` and `mix precommit` locally.
+- [ ] Manually verify course interaction, browser layout, headsets and two-player sync.
+- [ ] Introduce genuine 3D sectors, 6DOF flight and Newtonian/cruise modes.
+- [ ] Add real hazard-aware navigation, station docking and a stereo in-world chart.
+
+
+### Genuine space volume — XYZ first, flight dynamics second
+
+- [x] Server-owned XYZ coordinates with bounded positive/negative altitude.
+- [x] Deterministic 3D waypoint movement, proximity and NPC chase range.
+- [x] Preserve legacy XY snapshot fields while adding explicit XYZ fields.
+- [x] Switch the playable modes to single-view 3D and stereo SBS only.
+- [x] Move point-and-click course planning exclusively to the SVG sector atlas.
+- [x] Add altitude input, spatial route distance and 3D client interpolation.
+- [ ] Run local Elixir, Node and browser regression suites for this migration.
+- [ ] Next milestone: manual 6DOF yaw/pitch/roll and world-frame translation.
+- [ ] After that: assisted Cruise Flight and Newtonian inertia modes.
+- [ ] Later: 3D collision, docking, hazards and server-owned static objects.
+
+- [x] Remove Classic 2D flight renderer and retain overhead mapping only in the atlas.
+- [x] Regression-test the two allowed cockpit display modes.
+- [ ] Verify refreshed compiled assets and live 3D/SBS switching in Firefox.
+
+
+### Manual pilot controls slice — SBS branch
+- [x] Server-owned signed throttle with forward, neutral, reverse.
+- [x] Server-integrated 3-axis attitude and pitch/yaw/roll keyboard commands.
+- [x] Assisted Cruise Flight and momentum-preserving Newtonian Flight toggle.
+- [x] Bounds-safe tick motion; authenticated Channel controls and telemetry.
+- [x] Cabin and SBS flight indicators; keyboard and server tests added.
+- [ ] Run `mix precommit` and `npm test` on the laptop and test the flight feel.
+- [ ] Improve to quaternion-based attitude and body-frame 6DOF handling.
+- [ ] Add throttle controls on screen, smoothing, remapping, docking and inertia tuning.
+
+### Solar System Atlas foundation (2026-11-02)
+
+- [x] SOL system overview is the default main Atlas view; the Sun,
+  Mercury through Neptune, and Pluto are all visible/selectable.
+- [x] One astronomical catalog with mean AU distances and orbital
+  periods; compressed visual orbits and optional inner-system detail.
+- [x] Preserve Sector 1-1 as a distinct functional XYZ waypoint chart.
+  Clicking an AU marker cannot submit an invalid tactical waypoint.
+- [x] No change to currently working flight, weapon, Dart NPC or
+  authoritative combat simulation.
+- [ ] Server-authoritative star-system and celestial body catalog,
+  faction ownership and planetary orbital/region models.
+- [ ] Define coordinate transformations and ship's astronomical
+  position separately from local per-sector XYZ coordinates.
+- [ ] Introduce star-system travel, orbital approach and true
+  navigable destinations after the above state model is established.
+- [ ] Build EncounterDirector using system region, ship contacts,
+  navigation progress and factions; do not tie encounters to a
+  fixed NPC respawn coordinate.
+
+### Peaceful login and SOL journey V1 (2026-11-02)
+
+- [x] Remove default Sector 1-1 NPC materialization; no hostile Dart on login.
+- [x] Retain Dart NPC definition and its authoritative 3D combat behavior
+  behind explicit server-only `start_encounter/1`.
+- [x] Production encounters do not automatically respawn after destruction.
+- [x] Introduce independent, supervised SOL navigation state per pilot.
+- [x] Authenticated planet destination selection, system travel progress,
+  arrival, abort and server-owned transit broadcasts.
+- [x] Atlas display of SOL region, voyage plan and schematic progress marker.
+- [ ] Persist current SOL region across full game server restarts (database).
+- [ ] Associate the player's physical ship with orbital region/planet sectors.
+- [ ] Implement proper navigation transitions into and out of local flight.
+- [ ] Dynamic encounters with NPC-v-NPC skirmishes, contact discovery,
+  faction relationships, piracy and neutral traffic.
+- [ ] Ephemeris/orbital positions, credible transfer paths, game-time scaling.
+
+### Living universe / first neutral contact (2026-11-03)
+
+- [x] Add an independent Earth–Mars commercial freighter with stable runtime
+  identity, scheduled route, reason for travel, manifest and return cargo.
+- [x] Advance civilian traffic on the system clock without requiring players.
+- [x] Detect nearby vessels using server-side compressed-SOL distance and
+  expose contacts to the correct authenticated pilot only.
+- [x] Display sensor contacts in the Atlas and allow server-validated
+  non-hostile hailing without changing cargo or itinerary.
+- [x] Keep pilot navigation, sector combat and tactical NPC spawning separate.
+- [ ] Make traffic, missions, cargo and voyage position survive server restarts.
+- [ ] Instantiate contacts as shared local tactical encounters with relative
+  entry positions, extraction boundaries and reconciliation on exit.
+- [ ] Add physical outcomes: trade, rescue, piracy, faction response and
+  persistent cargo-delivery consequences.
+
+### Planetary cockpit visualization V1 (2026-11-03)
+
+- [x] Server-authored planetary visual metadata, including true mean
+  radii and an explicit visual-only approach/orbit preview stage.
+- [x] Three.js camera-relative planet rendering with physically correct
+  apparent angular diameter, cloud textures, lighting and atmosphere,
+  without widening tactical camera clipping or sector bounds.
+- [x] In both standard 3D and SBS, show the actual SOL destination
+  growing through cruise and large on arrival (Venus 65° of 70° FOV).
+- [x] Keep the planet at a stable world bearing when the ship turns;
+  provide a visible cockpit label explaining the preview.
+- [x] Add server geometry/navigation and client projection/render tests.
+- [ ] Replace visual staging with server-owned, physically meaningful
+  planet-centered orbital frames and safe 3D approach spawn positions.
+- [ ] Make local ship thrust change its true planet-relative position
+  and visible altitude; implement planetary collision/atmosphere rules.
+- [ ] Preserve simultaneous multiplayer observers, tactical traffic,
+  and clean entry/exit between SOL cruise and local orbital flight.
+
+### Sub-light interplanetary cruise V2 (2026-11-02)
+
+- [x] Explicit `:conventional` vs `:interplanetary_cruise` propulsion states.
+- [x] Independent server-owned, compressed system-level ship position
+  computed from drive speed and the same one-second multiplayer clock.
+- [x] Travel budgets approximately 3–5 minutes inner system, 10 minutes
+  Jupiter, 15–22 minutes outer system, without FTL or time compression.
+- [x] Disable conventional flight/combat commands during interplanetary cruise.
+- [x] Atlas shows current drive, system cruise speed, distance and ETA.
+- [x] Cover concurrent players, ticks, position, duration, and command
+  isolation in regression tests.
+- [ ] Integrate local cockpit movement/velocities into an authoritative
+  system-level ship position at sector boundaries.
+- [ ] Generate safe semi-random planetary approach positions and real
+  celestial bodies in their local sector centers.
+- [ ] Preserve the actual midcourse position when abandoning cruise instead
+  of restoring the departure region.
+- [ ] Implement drive acceleration/deceleration and possible interception.
+
+
+### Planetary orbital regions V2 (2026-11-03)
+
+- [x] Nine independently supervised SOL planetary tactical regions,
+  including Earth, plus an isolated legacy `1-1` combat test fixture;
+  server-owned map identities and join validation.
+- [x] Arrival side derived from the incoming SOL voyage, with deterministic
+  pilot staggering and heading toward the actual planet centre.
+- [x] Separate local provisional-kilometre coordinates from compressed
+  system-wide cruise coordinates, preserving one shared map per planet.
+- [x] Automatically transfer the pilot's Phoenix channel on arrival,
+  update the local Atlas bounds and keep SOL navigation broadcasts global.
+- [x] Real planetary mean radii, camera-relative planet rendering and
+  a server-controlled exclusion sphere, now lethal when crossed.
+- [x] Remove the four original procedural test asteroid spheres and
+  relocate the starfield around the camera in large maps.
+- [x] Add directional arrival, region routing, collision and view tests.
+- [x] Send live Earth pilots to `sol:earth` with a real-radius map,
+  retaining the old `1-1` first-login spawn only under test configuration.
+- [ ] Preserve active hull/shields/loadout and physical orbital coordinates
+  across region transitions, disconnects and full server restarts.
+- [ ] Implement trajectory-preserving interplanetary handoff, orbital
+  velocity/gravity, planet rotation, real docking and atmospheric entry.
+- [ ] Add permanent stations, asteroid fields and contextual traffic
+  in the respective planetary regions.
+
+
+### Fatal planetary impact V1 (2026-11-03)
+
+- [x] Replace the old harmless orbital-volume clamp with a server-owned
+  lethal impact boundary at 1.08× the planet's actual mean radius.
+- [x] Use swept 3D segment-sphere intersection to prevent high-speed
+  tunnelling during manual flight or local plotted autopilot.
+- [x] Zero hull, shields and momentum; mark destroyed and clear targets,
+  waypoints and NPC pursuit; broadcast a single planetary-death event.
+- [x] Show a planet-named crash message and release pointer lock on death.
+- [x] Add pure and live map integration tests for normal approach,
+  first impact, fast through-crossing and safety of other flight modes.
+- [ ] Add escalating proximity/collision alerts and gravitational effects.
+- [ ] Implement controlled respawn or rescue/recovery workflow for pilots.
+- [x] Enable identical lethal collision and proximity warning behavior
+  for Earth and every other SOL planetary region.
+
+
+### Planetary proximity warning V1 (2026-11-03)
+
+- [x] Server-owned CAUTION (1.55× lethal radius) and CRITICAL
+  (1.20× lethal radius) proximity bands for all nine orbital maps.
+- [x] Publish one event per zone change, including retreat to safety,
+  without emitting a warning every 100ms simulation tick.
+- [x] Include current per-pilot 3D collision clearance and warning level
+  in world snapshots for late join/reconnect recovery.
+- [x] Add amber/red cockpit alerts and corresponding stereoscopic in-world
+  HUD warnings; hide the flat warning in SBS.
+- [x] Test thresholds, 3D altitude, transition suppression,
+  in-range join snapshots and complete caution→critical→clear flight.
+- [ ] Add optional configurable warning audio.
+- [ ] Add recovery/respawn mechanics, planetary approach autopilot
+  protections and realistic atmospheric/orbital physics.
+
+### Planet hazard parity across SOL and future catalogue extension (2026-11-03)
+
+- [x] One physical radius source in the authoritative SOL catalogue.
+- [x] All nine navigable worlds, **including Earth**, receive the same
+  region-local kilometres, approach-direction arrival, caution/critical
+  alerts, lethal swept collision and destroyed-ship protocol.
+- [x] First Earth gameplay session enters `sol:earth`; the original
+  `1-1` sector is retained only as an explicit test-only fixture.
+- [x] Planetary region sizing can expand automatically for very large
+  future planets; no special collision handler per body.
+- [x] Generic future planet-ID syntax and procedural texture fallback.
+- [x] Add full nine-planet map-server integration crash parity test plus
+  fresh-Earth safe-arrival and catalogue radius regression tests.
+- [ ] Build multi-system celestial catalogue and separate cross-system
+  travel/wormhole transitions (future phase, not part of this release).
+- [ ] Add destruction recovery and persistent ship state between sessions.
+
+
+### Living SOL close-pass encounter V1 (2026-11-03)
+
+- [x] Six independent, scheduled traffic vessels with distinct routes,
+  purposes, manifests and return journeys, simulated without players.
+- [x] Encounter opportunities derive from **real** intersecting SOL routes,
+  relative velocity, departure time and fixed close-approach radius.
+- [x] Announce a close pass once per pilot per vessel voyage, isolate pilot
+  events over Phoenix and include current flyby in reconnection snapshots.
+- [x] Show a 3D traffic ship in normal/SBS cockpits using real SOL relative
+  bearing and distance-dependent visual magnification.
+- [x] Provide Hail and Dismiss; private manifest requires server-checked
+  authenticated hailing. Do not spawn NPCs or expose cargo on passive scans.
+- [x] Extend traffic, navigation, event privacy, and cockpit geometry tests.
+- [ ] Design a persistent **shared tactical encounter instance** at true
+  relative vessel coordinates, with voluntary intercept/approach and rejoin
+  to original sublight trajectory.
+- [ ] Add lawful/hostile dispositions, distress requests, NPC-v-NPC
+  conflicts, escorts, weapons and consequence/reputation systems.
+- [ ] Persist traffic schedules and pilot encounter state across restarts.
+ 
+### EncounterDirector V1 — server-owned classification (2026-11-03)
+
+- [x] Classify already-observed strategic contacts as neutral flyby,
+  patrol attention or hostile contact, with no NPC spawning.
+- [x] Bind faction-owned Venus patrol to ZOC and provisional server-only
+  standing threshold; leave missing standing neutral.
+- [x] Emit pilot-specific classified encounter snapshots/events without
+  stopping cruise; label classifications in the normal cockpit panel.
+- [x] Add unit and navigation event regressions for classification.
+- [ ] Integrate durable player-faction reputation and lawful NPC disposition
+  changes; default traffic remains non-hostile.
+- [ ] Add shared tactical encounter instances, voluntary/forced interception
+  and route-safe resumption; policy labels do not start combat.
+- [ ] Run Mix/JS suites and manually verify 3D + SBS UI in a live browser.
+
+
+### Encounter decision hold V1 (2026-11-03)
+
+- [x] Freeze only the involved pilot's strategic cruise progression upon
+  a real server-owned close pass; all other ships and traffic keep moving.
+- [x] Retain a pilot-scoped pending decision across channel reconnects.
+- [x] Reject spoofed encounter identities, unsupported choices, premature
+  course aborts and repeated resolutions.
+- [x] Show a modal with Hail and Ignore / Resume actions, including an
+  SBS per-eye version, while retaining real sensor-range validation.
+- [x] Add deterministic navigation and authenticated-channel regressions.
+- [ ] Execute Mix/asset suites, build assets, and visually verify normal 3D
+  and SBS flows in a real browser/HMD.
+- [ ] Introduce physical voluntary/forced interception, shared tactical
+  instancing and ship-state-safe resumption, including NPC motion policies.
+- [ ] Persist paused voyages and NPC traffic across full server restarts.
+
+### SBS development LAN listener (2026-11-03)
+
+- [x] Bind Phoenix dev endpoint to `0.0.0.0:4000` by default to support a
+  headset/phone connecting to the laptop over trusted LAN Wi-Fi.
+- [x] Provide `DARKORBIT_LOOPBACK_ONLY=1` opt-out for laptop-only debugging.
+- [ ] Verify remote HMD pairing from another device and review production
+  origin/security rules before any public hosting.
+
+
+### Encounter popup reliability and paired HMD notification (2026-11-03)
+
+- [x] Open the existing laptop encounter modal as soon as the authenticated
+  first-contact event arrives, without waiting for a navigation snapshot.
+- [x] Restore held decision state from navigation snapshots on reconnect;
+  block underlying Atlas focus until decision is resolved.
+- [x] Mirror read-only, authenticated close-pass status to the paired
+  headset in both SBS eyes while the helmet is in cockpit mode.
+- [x] Add unit tests for per-eye rendering and channel tests for
+  privacy filtering and read-only commands.
+- [ ] Run tests, build assets, and manually verify both displays.
+- [ ] Add authorized VR controls for choices only if/when the helmet is
+  upgraded from a read-only viewer to an authenticated input device.
+
+### Reliable procedural SOL encounter traffic (2026-11-03)
+
+- [x] Retain the six existing scheduled traffic ships.
+- [x] Launch a real, shared, server-owned vessel along a converging lane for
+  the current playtest's interplanetary voyages; randomize type and phase.
+- [x] Prevent population growth beyond 32 added vessels; expire each after
+  15 minutes while retaining scheduled ships.
+- [x] Preserve a pending pilot's established hail connection after physical
+  sensor separation, without permitting arbitrary remote hails.
+- [x] Add regression tests for a fresh corridor with no existing fleet,
+  bounded spawning, contact selection and travel resumption.
+- [ ] Execute tests and verify Earth–Venus popup on laptop/paired headset.
+- [ ] Tune actual encounter chance, route density, sector/faction hostility,
+  and implement shared tactical combat interception.
+
+
+
+### SOL tactical encounter handoff (2026-11-03)
+
+- [x] Allow Engage for held hostile and patrol contacts only; retain Hail
+  and Ignore/Resume for ordinary neutral flybys.
+- [x] Validate encounter ID and session on server before entering combat;
+  prevent forged entry and resuming a voyage during an active fight.
+- [x] Spawn a Dart-class NPC under contact's callsign in the pilot's current
+  authoritative orbital map, near the live ship and outside planetary
+  exclusion geometry. Use current planet visuals for collision clarity.
+- [x] Permit local cockpit movement and weapon use during tactical hold,
+  while retaining SOL voyage position/progress and multiplayer isolation.
+- [x] Server-check NPC destruction before victory; permit explicit retreat,
+  clean up enemy and target locks, resume original travel.
+- [x] Route paired read-only HMD world subscriptions to actual orbital map.
+- [x] Add core and Phoenix channel regression tests including auth and
+  rejected client-originated victory.
+- [ ] Execute full Mix/JS suites and verify laptop plus headset gameplay.
+- [ ] Build a true isolated mid-voyage tactical arena rather than temporarily
+  using the pilot's current planetary combat map.
+- [ ] Implement pilot defeat/respawn, battle rewards, independent ship models,
+  trade scene choices, and faction-specific patrol interception.
+
+- [x] Cancel a defeated pilot's held SOL course on authoritative destruction
+  and prevent a dead pilot from invoking a fake defeat or retreat.
+- [x] Render tactical Dart variants as the actual 3D Dart ship model.
+- [ ] Implement final death/respawn UX and economic consequences.
+
+
+### Neutral trader attack choice (2026-11-03)
+
+- [x] Offer Attack vessel for neutral SOL close-pass contacts, in addition
+  to Hail and Ignore / Resume.
+- [x] Validate the exact server-owned neutral encounter and pilot session
+  before entering a local 3D tactical fight.
+- [x] Make neutral tactical opponents passive until a confirmed damage hit;
+  retain proactive hostile raider behavior.
+- [x] Add UI action-choice tests and headless tests for retaliation, close
+  pass, authorization, and voyage resumption.
+- [ ] Run Mix/JavaScript suites and verify laptop plus SBS headset.
+- [ ] Implement actual trader ship visuals and AI/behavior beyond the
+  existing Dart-class tactical placeholder.
+- [ ] Add standing/reputation penalties, faction-law response, cargo/loot,
+  and rewards for attacking civilian traffic.
+
+
+### Scow merchant hull implementation (2026-11-03)
+
+- [x] Register a separate Scow NPC type with reference-grounded 210 armor
+  and Garnet 10-class laser and provisional balance values.
+- [x] Assign server-owned Scow identity to independent traders, couriers
+  and scheduled merchant traffic without changing their routes or cargo.
+- [x] Spawn actual Scow combat opponents via authenticated neutral SOL
+  encounter handoff, while hostile fighters retain the Dart placeholder.
+- [x] Create and render an original blue low-poly cargo vessel in normal
+  cockpit and SBS phone headset with existing target selection geometry.
+- [x] Add model and simulation tests for class identifiers, hull, damage
+  and SOL encounter mapping.
+- [ ] Verify full Mix/JavaScript test suites and live laptop/HMD gameplay.
+- [ ] Implement NPC captain doctrine: flight, surrender, radio threats,
+  variable morale and faction standing/reputation penalties, rather
+  than assuming every attacked Scow fights to destruction.
+- [ ] Implement larger Tanker merchants as a separate hull with stronger
+  defenses; add salvage and transferred cargo after surrender/defeat.
+
+
+### Scow graphics verification and impact orientation (2026-11-03)
+
+- [x] Replace generic gray SOL close-pass preview with actual Scow
+  merchant mesh (Dart for fighter contacts) using shared model factory.
+- [x] Preserve Scow preview from `pending_encounter` during pilot hold.
+- [x] Publish an authoritative `ship_class` in tactical map NPC snapshots;
+  render identical class in laptop and paired SBS phone.
+- [x] Display selected NPC class in the cockpit target readout.
+- [x] Add model-switch, pending-contact and ship-class regression tests.
+- [ ] Run full JS/Elixir test suite and check actual headset graphics.
+- [ ] Track authoritative NPC heading and calculate front/aft impact arc
+  from server-side 3D weapon hit geometry, not browser-derived positions.
+- [ ] Replace pooled shields with forward/aft shields and original
+  class-based mitigation, including Scow Aft-1.
+- [ ] Add component damage (engines, beam, missiles, shields, ECM),
+  persistent system status, handling penalties and TAC presentation.
+- [ ] Separate cosmetic model hit markers from server-owned damage outcomes.
+
+
+### Merchant voyage-aligned tactical movement (2026-11-03)
+
+- [x] Stop using the four-corner legacy NPC patrol for merchant encounters.
+- [x] Carry the existing shared SOL origin/destination through the
+  authenticated encounter into the tactical map.
+- [x] Project a short straight merchant transit lane using its real
+  strategic bearing, deflecting only to avoid planet impacts/map edges.
+- [x] Keep neutral Scow flight moving while defensive turret fire uses
+  server-confirmed damage; do not make it chase the attacking pilot.
+- [x] Publish stable course heading to desktop and headset renderers.
+- [x] End combat on Scow lane exit, remove the local NPC, clear target locks,
+  and resume the owner's SOL voyage even after losing the client connection.
+- [x] Add pure route geometry and AI tests plus world-level escape tests.
+- [ ] Run Mix and asset tests, then verify moving Scow in laptop and headset.
+- [ ] Move combat to a genuine mid-space battle bubble tied continuously
+  to shared strategic ships; reconcile ship death, cargo, and encounters.
+- [ ] Add merchant captains' flee, surrender, defend, and radio responses,
+  informed by morale, player threat and ship damage.
+
+
+### Sunracer, inventory/equipment, and Scow survival (2026-11-03)
+
+- [x] Make default ship 1 the original Sunracer while keeping existing
+  player ownership, two configurations and other purchasable hulls.
+- [x] Set starter Garnet to 10 and base armor to 300; four-tonne cargo
+  capacity, Forward-1 shield, missile tube, .20G, and 45°/s as metadata.
+- [x] Add Beryl/Sapphire replacement laser rules for Sunracer hardpoint;
+  preserve additive multi-laser loadouts for later ship classes.
+- [x] Expose authenticated server-owned equipment inventory and C-1/C-2
+  layout at /equipment, with atomic fitting and account-scoped activation.
+- [x] Create persistent server-owned commodity stacks and enforce ship
+  cargo capacity under account and inventory locks.
+- [x] Make provoked Scows evade at <=80% hull and surrender at <=35%;
+  owner can accept surrender with server verification and return to SOL.
+- [x] Protect surrendered merchants against automatic or manual laser hits.
+- [x] Add Core, Darkorbit DB and Phoenix controller/channel regression tests.
+- [ ] Run full test/build suites and verify browser/SBS headset gameplay.
+- [ ] Replace provisional speed with original Sunracer acceleration and
+  turn dynamics as appropriate to game's tactical speed scale.
+- [ ] Add original forward/aft directional shield-class laser and collision
+  reduction, subsystem damage, equipment status and repair.
+- [ ] Add an actual merchant captain's varied morale, danger appraisal,
+  surrender offers and reputation/behavior consequences.
+- [ ] Build docking/shipyard purchase, commodity trading and capacity-safe
+  cargo transfer from a surrendered/destroyed strategic vessel.
+- [ ] Reconcile persistent strategic NPC identity with temporary tactical
+  encounter actor before implementing real cargo theft/loot.
+
+### Strategic-to-tactical vessel reconciliation (2026-11-03)
+
+- [x] Give scheduled and procedural SOL ships canonical combat conditions,
+  inherited by tactical NPC actors rather than reset at each encounter
+- [x] Bind tactical encounters to contact ID and traffic voyage number
+- [x] Enforce one active tactical claim per real vessel, even with two pilots
+- [x] Reconcile observed hull/shields on retreat, defeat and autonomous escape
+- [x] Leave surrendered merchants disabled and destroyed ships as tombstones
+- [x] Preserve strategic cargo unchanged and reject duplicate/stale reports
+- [x] Keep tactical-claimed procedural contacts alive until resolution
+- [x] Cover claim contention, tampering, persistent damage, surrender,
+  destruction, and autonomous escape with headless regression cases
+- [ ] Run Mix tests and check-only precommit on the Elixir workstation
+- [ ] Introduce a genuinely shared mid-space battle bubble with multiple
+  pilots targeting the same physical NPC simultaneously
+- [ ] Add durable DB snapshots and recovery of in-flight settlement on
+  unexpected OTP restarts, plus explicit salvage/claim lifecycle
+- [ ] Add authenticated market and cargo surrender transfers using locked
+  inventories; do not mint rewards from local combat actors
+
+### Lightweight NPC cognition V1 — Symbrella-derived (planned)
+
+Source: [Symbrella `symbolic_generation`](https://github.com/bushman77/Symbrella/tree/symbolic_generation). Extract **only bounded, reusable symbolic mechanisms**; do not embed the complete Symbrella brain or companion runtime in the MMO.
+
+- [ ] **Structured perception + bounded working memory:** feed server-authorized encounter events (contact, attack, damage, assistance) into a small per-character active context. Adapt the relevant retention/admission ideas from `Brain.WorkingMemory` / `Brain.WM`; no natural-language parsing of game events.
+- [ ] **Scoped episodic memory:** adapt `Brain.Hippocampus.Recall`'s scoped, recency-weighted retrieval to structured NPC episodes. Persist only salient encounters, with the remembering **character** identified separately from the strategic ship and tactical actor.
+- [ ] **Goal and decision policy:** extract small pure, testable patterns from `Brain.GoalStack` / `Brain.ActionSelector` for goals such as trade, survive, threaten, surrender, and retreat. Produce *intentions*, never direct writes to combat, inventory, navigation, or ownership state; the authoritative game server validates and executes them.
+- [ ] **Prewritten dialogue:** render approved lines from the chosen intent, NPC role/personality, and encounter context. Support bounded player dialogue choices; no generative dialogue or LLM.
+- [ ] **First vertical slice:** one merchant captain recalls a prior attack or rescue, chooses an appropriate goal/response, and retains memory across tactical encounters and a server restart. Add deterministic tests for identity isolation, recall, intention validation, and fallback when cognition is unavailable.
+
+**Non-goals for V1:** dictionary/brain-cell import, LIFG language parsing or lambda sentence composition, full Thalamus/ACC/OFC/DLPFC/neuromodulator processes, image/camera input, llama.cpp, and a GenServer per NPC. Keep Symbrella's personal companion identity/memory completely separate. Run cognition outside the map tick; reuse the existing bounded `Core.NPC.AI` for movement/combat, with safe deterministic fallback. Benchmark CPU, RAM, and decision latency before scaling NPC counts.
+
+
+### Voluntary SOL free-flight cockpit (2026-11-05)
+
+- [x] Atlas cruise represents AI-assisted strategic propulsion and avoids physical debris collision simulation.
+- [x] Authenticated pilot can suspend a real SOL journey at the current position for conventional cockpit flight without encountering another vessel.
+- [x] Each pilot receives an isolated, empty deep-space region under a supervised DynamicSupervisor; local coordinates never substitute for shared SOL position.
+- [x] Returning to Atlas resumes exactly the stored journey and requires a surviving, server-authorized ship.
+- [ ] Implement debris entities, swept collisions, physical hull damage and cockpit-only hazards; no random Atlas damage.
+- [ ] Upgrade private local maps to shared, location-grounded tactical instances when co-located pilots interact.
+- [x] Add channel and headless tests for authenticated entry/exit, remote map authorization, flight controls and ship condition gating.
+- [x] Targeted Core, Phoenix Channel, and JavaScript tests passed in [SOL free-flight CI](https://github.com/bushman77/darkorbit_umbrella/actions/runs/42067967403) on 2026-11-05.
+- [ ] Manually verify browser transition, reconnect, server restart, and SBS headset; full repository suites remain a separate verification.
+
+
+### SOL merchant cargo seizure and faction consequences V1 (2026-11-05)
+
+- [x] Offer two distinct outcomes after map-verified merchant surrender:
+  **release captain** without taking cargo or **seize cargo** and resume cruise.
+- [x] Map a real SOL traffic manifest into capacity-limited physical cargo
+  crates at a provisional rate of ten strategic units per one-tonne crate;
+  retain the source's remaining manifest units.
+- [x] Lock the account/inventory, enforce active ship cargo capacity, and
+  issue a database-unique claim receipt per vessel and voyage. All item
+  identities are restricted to the authoritative cargo catalog.
+- [x] Apply the receipt's exact debit to the canonical strategic vessel on
+  tactical settlement; reuse the original receipt on interrupted cleanup.
+- [x] Add durable, deduplicated SOL faction events and account standings:
+  first confirmed neutral merchant hit -12, civilian cargo seizure -18,
+  with standing bounded to [-100, 100]. Raider encounters do not incur
+  neutral-merchant penalties.
+- [x] Refresh SOL encounter policy standing from PostgreSQL upon login, and
+  update the in-memory navigation cache after a faction event.
+- [x] Show the two choices in the cockpit and add cargo receipts/standing to
+  the authenticated Equipment Locker.
+- [x] Add isolated tests for catalog conversions, cargo capacity, idempotent
+  replay, unrelated-account rejection, out-of-stock claims, faction penalties,
+  canonical vessel debit and rejection of forged channel requests.
+- [ ] Run database migration, full Elixir/JavaScript suites, build and live
+  phone SBS verification on the developer workstation; these changes are
+  committed but not locally executed in this authoring environment.
+- [ ] Persist/recover the complete SOL navigation and in-flight settlement
+  state across a full OTP/host restart. The SQL receipt prevents repeat cargo
+  minting, but SOL traffic recovery is a separate consistency milestone.
+- [ ] Make faction infractions a first-class map-level event so non-owner
+  attackers and disconnect-mid-hit cases are captured without relying on
+  the owner's Phoenix channel observing the shot.
+- [ ] Add player-selected individual cargo lots, voluntary buy/sell orders,
+  planetary dock warehouses, prices, taxes, smuggling inspections and
+  law-specific reputation penalties.
+
+
+### SOL orbital bases and forward refineries V1 (2026-11-05)
+
+- [x] Derive one stable planetary **orbital base**, **forward refinery** and
+  **three named docking bays** from each registered SOL destination
+  (Mercury–Pluto, Earth included). The Sun is not a port.
+- [x] Create a shared strategic stock ledger with distinct provisional
+  industrial profiles and minute-based bounded refinery production.
+- [x] Advance merchant traffic and refinery inventories in the same
+  Solar Navigation GenServer clock, independent of active pilots.
+- [x] Queue traders at full bays, unload their real arriving manifests,
+  load outbound requested cargo only from available refinery stock and
+  free berths on departure. Trade ships retain vessel/voyage identities,
+  damage state and faction; disabled/destroyed vessels do not deliver.
+- [x] Debit the origin refinery whenever the global shipping timetable
+  or procedural neutral traffic launches a new trader. Previously
+  underway seed ships count as starting-world assets.
+- [x] Report local orbital-base occupancy only in authorized navigation
+  snapshots and on berth changes; avoid remote inventories and full
+  station broadcasts on every world tick.
+- [x] Publish a fixed, safe orbital site in every planetary tactical map
+  and render an original lightweight 3D base in desktop and paired SBS
+  cockpit views. No new asset bundle or external download is required.
+- [x] Add isolated tests for stock transfers, production, arrival/departure,
+  bay queues, future-body station fallback, fixed orbital geometry and
+  live Navigation-backed inventory consumption; Node tests cover the
+  station pose and camera-relative stereo placement.
+- [ ] Run the new ExUnit/Node tests and visually verify the orbital base
+  in the real laptop and paired Galaxy SBS cockpit.
+- [ ] Render *individual physically docked Scows* at their occupied bay
+  coordinates and implement actual ship-to-station approach/docking
+  trajectories. Current bay movements are strategic, not tactical
+  physics or player-interactive docking.
+- [ ] Add ship docking permissions, collision-safe approach corridors,
+  port fees, faction-based access, purchase/sale pricing and warehouse
+  transaction APIs.
+- [ ] Persist refinery reserves, berth leases, production clocks and
+  strategic voyages across OTP/server restarts. V1 station state is
+  supervised RAM state; account cargo/standing already has its own
+  PostgreSQL persistence boundary.
+
+
+### SOL encounter overlap / mixed-faction guard (2026-11-05)
+
+- [x] Keep one authentic pending/tactical encounter identity in every
+  navigation snapshot while that pilot is fighting. Changing nearby traffic
+  cannot replace the displayed combat vessel or faction mid-encounter.
+- [x] Add a 15-second post-resolution clearance period to distinguish a new
+  nearby ship's encounter from the just-finished fight. SOL traffic still moves
+  and refineries still produce during this period.
+- [x] Isolate tactical target locks and two-wing laser traces to the pilot's
+  exclusively leased NPC. Another player's Scow or unrelated map NPC can no
+  longer be struck by the same private encounter's weapon burst.
+- [x] Reconcile faction offenses against both the SOL claim and the map's
+  exact strategic contact/voyage identity. Seizure requires the verified
+  tactical report's identity to match before any ledger credit.
+- [x] Display the call sign and faction with each penalty and clear stale
+  faction-hit banners when the tactical encounter changes.
+- [x] Add regression tests for two overlapping Scows in one map and two
+  distinct-faction merchants approaching the same pilot during one voyage.
+- [ ] Run ExUnit/Node suites and live exercise on the developer workstation;
+  code review is not a substitute for a passing test run.
+- [ ] Longer term: separate physically shared multiplayer combat arenas from
+  the current exclusive private tactical lease model, with explicit lawful
+  collateral damage and faction-incident attribution.
+
+
+### Scow defensive combat reliability (2026-11-06)
+
+- [x] Reproduce the movement/range ordering defect through the complete
+  MapServer combat path before changing production logic.
+- [x] Preserve the AI decision-time firing origin through authoritative
+  resolution so same-tick cruise/evasion cannot cancel a legitimate shot.
+- [x] Keep neutral Scows passive until a confirmed hit and target only the
+  pilot who owns the provoked tactical encounter.
+- [x] Preserve the Scow's strategic identity, cargo settlement, faction,
+  route heading and destination while it defends, evades or surrenders.
+- [x] Prefer a collision-checked 340-unit Scow encounter separation and keep
+  520-unit directional candidates as safe planetary/map fallbacks.
+- [x] Cover defensive events/damage, cooldown, range rejection, movement,
+  surrender/destruction and concurrent pilot isolation with deterministic
+  full-MapServer tests.
+- [x] Pass the focused NPC AI (4 tests), focused world/MapServer (45 tests),
+  full umbrella (358 tests), and warnings-as-errors compilation checks.
+- [ ] Resolve repository-wide Elixir 1.20 RC formatter drift before
+  `mix precommit` can pass without unrelated formatting changes.
+- [ ] Perform manual browser/SBS verification of neutral approach, defensive
+  fire, evasion and surrender presentation.
+- [ ] Replace private per-pilot tactical leases with a genuinely shared combat
+  arena before introducing lawful collateral damage or cooperative defense.
+
+## Unified GitHub Release Distribution — 2026-11-06
+
+- [x] Release-manager source and workflows assembled on `sbs`; canonical version in root `mix.exs` (0.3.1), derived desktop build metadata and stable public filenames.
+- [x] Ubuntu x86_64 OTP release build definition, migration entry point and CI startup smoke-test instructions.
+- [x] Windows NSIS and Linux AppImage/`.deb` release staging, Tauri updater signatures, checksums and gated draft-first publication.
+- [x] Release-specific offline version tests and push-time validation workflow.
+- [ ] Inspect GitHub Actions validation results following merge/commit; resolve any CI build failures.
+- [ ] Perform first signed end-to-end release test; GitHub Releases currently has no published package.
+- [ ] Verify installer upgrades on real Windows/Linux systems and Android SBS phone pairing.
+- [ ] Add separate EC2 deployment automation with backups, migrations and rollback controls.
+
+See `docs/space-nova-release.md` for the distribution procedure.
+
+### Release diagnostic packaging safeguard (2026-11-06)
+
+- [x] Build local server diagnostics from temporary committed source rather than accidentally bundling workstation TLS keys.
+- [ ] Run `./scripts/space-nova server` on Pop!_OS and verify a complete archive; isolated build may require additional disk space.
+
+### Production Caddy compatibility (2026-11-06)
+
+- [x] Align production runtime with observed working EC2 Caddy TLS on 443 and loopback-only Phoenix HTTP on 4000; preserve optional direct TLS.
+- [x] Align Tauri default launcher URL with public HTTPS 443, migrate saved old production origin and revise tests/docs.
+- [ ] Rebuild and stage server release from updated source; configure `SPACE_NOVA_PROXY_MODE=true` only in private EC2 systemd environment.
+- [ ] Run production migration and controlled cutover after verifying database backup, then confirm public HTTPS and websocket operation.
+- [ ] Publish/install new signed client version so existing Tauri installations adopt port 443 by default.
+
+### Installed production client on HTTPS-inspected networks (2026-11-06)
+
+- [x] Add opt-in native Tauri/WebKitGTK SOCKS5 handling for installed clients;
+  public HTTPS certificate validation remains enforced.
+- [x] Add one-command SSH tunnel + installed client runner and regression tests.
+- [ ] Rebuild, reinstall and smoke-test the installed Linux production client
+  through SSH with the current Fortinet-filtered network.
+
+### Pilot registration verification recovery (2026-11-06)
+
+- [x] 24-hour, SHA-256-digested, single-use email verification tokens.
+- [x] CSRF-protected activation confirmation POST (safe GET for link scanners).
+- [x] Non-enumerating resend form and per-account resend throttling.
+- [x] Recovery path for failed initial email delivery without duplicating starter assets.
+- [x] Domain/controller tests and separate registration CI workflow.
+- [ ] Verify a production sending identity, configure Resend privately on EC2, and test real signup.
+- [ ] Add durable mail outbox/automatic retries, per-IP abuse controls and password reset before public launch.
+
+### Production email sending platform — 2026-11-06
+
+- [x] Retain Swoosh as the mail API and add optional SMTP transport via gen_smtp.
+- [x] Select Swoosh SMTP / Resend through a private environment setting, requiring TLS and provider credentials.
+- [x] Separate working outbound transport from an explicit production registration open switch.
+- [x] Add an operator-only probe to send a single test email without creating an account.
+- [x] Document installation, private SMTP configuration, provider verification and a safe production test.
+- [x] Resolve and commit gen_smtp / ranch Mix dependency lock entries.
+- [ ] Validate production OTP release packaging and an actual SMTP delivery test.
+- [ ] Verify SMTP sending identity, install private credentials, deliver an email to a real inbox.
+- [ ] Open public registration only after real delivery succeeds and abuse controls are reviewed.

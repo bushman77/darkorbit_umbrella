@@ -32,6 +32,7 @@ defmodule Darkorbit.AccountsTest do
 
       assert [starter_ship] = Fleet.list_ships_for_user(account.id)
       assert starter_ship.ship_id == 1
+      assert Core.Ships.Catalog.fetch!(1).name == "Sunracer"
 
       assert [configuration_one, configuration_two] =
                Loadouts.list_loadouts_for_player_ship(starter_ship.id)
@@ -101,14 +102,105 @@ defmodule Darkorbit.AccountsTest do
       assert {:error, :invalid_credentials} =
                Accounts.authenticate_by_username_and_password(attrs.username, "wrong-password")
 
-      hash = account.verification["hash"]
-      assert {:ok, verified} = Accounts.verify_account(account.id, hash)
+      token = account.verification_token
+      assert {:ok, verified} = Accounts.verify_account(account.id, token)
       assert verified.verification["verified"]
-      assert {:error, :already_verified} = Accounts.verify_account(account.id, hash)
+      assert {:error, :already_verified} = Accounts.verify_account(account.id, token)
 
       old_session_id = verified.session_id
       assert {:ok, logged_in} = Accounts.login_account(attrs.username, attrs.password)
       refute logged_in.session_id == old_session_id
+    end
+
+    test "verification tokens are hashed at rest, expire, and are single-use" do
+      account = player_account_fixture()
+      stored = Accounts.get_by_username(account.username)
+
+      assert is_binary(account.verification_token)
+      assert byte_size(stored.verification["hash"]) == 64
+      refute stored.verification["hash"] == account.verification_token
+      assert is_nil(stored.verification_token)
+      assert {:error, :invalid_or_expired_token} =
+               Accounts.verify_account(account.id, "wrong-token")
+
+      expired =
+        Map.put(stored.verification, "expires_at", System.system_time(:second) - 1)
+
+      stored
+      |> PlayerAccount.system_changeset(%{"verification" => expired})
+      |> Repo.update!()
+
+      assert {:error, :invalid_or_expired_token} =
+               Accounts.verify_account(account.id, account.verification_token)
+
+      assert {:ok, resent} = Accounts.request_verification_email(account.email)
+      assert {:ok, verified} = Accounts.verify_account(account.id, resent.verification_token)
+      assert verified.verification["verified"] == true
+      refute Map.has_key?(verified.verification, "hash")
+      assert {:error, :already_verified} =
+               Accounts.verify_account(account.id, resent.verification_token)
+    end
+
+    test "resend rotates tokens, throttles repeat requests, and hides account existence" do
+      account = player_account_fixture()
+      old_token = account.verification_token
+
+      assert {:ok, :ignored} =
+               Accounts.request_verification_email("missing@example.test")
+
+      assert {:ok, resent} = Accounts.request_verification_email(account.email)
+      assert resent.verification_token != old_token
+
+      assert {:error, :invalid_or_expired_token} =
+               Accounts.verify_account(account.id, old_token)
+
+      assert {:ok, :ignored} = Accounts.request_verification_email(account.email)
+      assert Accounts.get_by_username(account.username).verification["resend_count"] == 1
+
+      assert {:ok, _verified} =
+               Accounts.verify_account(account.id, resent.verification_token)
+
+      assert {:ok, :ignored} = Accounts.request_verification_email(account.email)
+    end
+
+    test "caps resend requests at five per rolling 24-hour window" do
+      account = player_account_fixture()
+      now = System.system_time(:second)
+
+      for attempt <- 1..5 do
+        if attempt > 1 do
+          current = Accounts.get_by_username(account.username)
+          record = Map.put(current.verification, "resend_requested_at", now - 61)
+
+          current
+          |> PlayerAccount.system_changeset(%{"verification" => record})
+          |> Repo.update!()
+        end
+
+        assert {:ok, %PlayerAccount{}} =
+                 Accounts.request_verification_email(account.email)
+      end
+
+      current = Accounts.get_by_username(account.username)
+      record = Map.put(current.verification, "resend_requested_at", now - 61)
+
+      current
+      |> PlayerAccount.system_changeset(%{"verification" => record})
+      |> Repo.update!()
+
+      assert {:ok, :ignored} = Accounts.request_verification_email(account.email)
+    end
+
+    test "active loadout configuration persists, defaults to C-1 and rejects invalid choices" do
+      account = player_account_fixture()
+      assert Darkorbit.World.active_configuration(account.id) == 1
+      assert {:error, :invalid_configuration} =
+        Accounts.activate_configuration(account.id, 3)
+      assert {:ok, _} = Accounts.activate_configuration(account.id, 2)
+      assert Darkorbit.World.active_configuration(account.id) == 2
+      assert {:ok, status} = Darkorbit.World.player_status(account.id,
+        Darkorbit.World.active_configuration(account.id))
+      assert status.configuration.number == 2
     end
 
     test "selects a company only once" do

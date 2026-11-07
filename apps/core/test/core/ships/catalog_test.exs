@@ -5,15 +5,19 @@ defmodule Core.Ships.CatalogTest do
   alias Core.Ships.Catalog, as: ShipCatalog
 
   test "provides initial ships with all authoritative base statistics" do
-    assert {:ok, phoenix} = ShipCatalog.fetch(1)
-    assert phoenix.name == "Phoenix"
-    assert phoenix.hit_points == 4_000
-    assert phoenix.shields == 0
-    assert phoenix.speed == 320
-    assert phoenix.damage == 40
-    assert phoenix.cargo_capacity == 100
-    assert phoenix.laser_slots == 1
-    assert phoenix.generator_slots == 1
+    assert {:ok, sunracer} = ShipCatalog.fetch(1)
+    assert sunracer.name == "Sunracer"
+    assert sunracer.hit_points == 300
+    assert sunracer.shields == 0
+    assert sunracer.speed == 320
+    assert sunracer.damage == 10
+    assert sunracer.cargo_capacity == 4
+    assert sunracer.forward_shield_class == 1
+    assert sunracer.aft_shield_class == 0
+    assert sunracer.missile_tube
+    assert sunracer.cargo_pods == 4
+    assert sunracer.laser_slots == 1
+    assert sunracer.generator_slots == 1
   end
 
   test "provides laser, speed generator, and shield definitions" do

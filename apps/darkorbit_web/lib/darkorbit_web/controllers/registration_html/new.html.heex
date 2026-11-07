@@ -1,0 +1,67 @@
+<div id="registration-page" class="hud-screen hud-auth-screen">
+  <div class="hud-auth-ambient" aria-hidden="true"></div>
+  <div class="hud-auth-layout">
+    <aside class="hud-auth-story" aria-label="Space Nova mission briefing">
+      <div class="hud-auth-brand">
+        <.icon name="hero-rocket-launch" class="size-6" />
+        <span>SPACE NOVA</span>
+        <small>FLIGHT OPERATIONS / SOL</small>
+      </div>
+      <div class="hud-auth-orbit" aria-hidden="true">
+        <span class="hud-auth-orbit-core"></span>
+        <span class="hud-auth-orbit-ship"></span>
+      </div>
+      <p class="hud-kicker">PILOT RECRUITMENT // SOL-01</p>
+      <h2>YOUR JOURNEY<br />BEGINS HERE.</h2>
+      <p class="hud-auth-story-copy">Register your callsign and commission your starter Sunracer for a living Solar System.</p>
+      <div class="hud-auth-specs">
+        <div><span>THEATRE</span><strong>SOLAR SYSTEM / SOL</strong></div>
+        <div><span>FLIGHT SYSTEMS</span><strong>ATLAS + 3D + SBS</strong></div>
+        <div><span>SIMULATION</span><strong>SERVER AUTHORITATIVE</strong></div>
+      </div>
+    </aside>
+  <main class="hud-auth-panel">
+    <.link href={~p"/"} class="hud-panel-back mb-9 inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.22em] text-cyan-200 transition hover:text-white">
+      <.icon name="hero-arrow-left" class="size-4" />
+      SPACE NOVA
+    </.link>
+    <p class="text-xs font-bold uppercase tracking-[0.24em] text-cyan-300/75">PILOT RECRUITMENT</p>
+    <h1 class="mt-2 text-3xl font-black tracking-tight text-white sm:text-4xl">Create your pilot account.</h1>
+    <p class="mt-4 text-sm leading-7 text-slate-400">Choose your callsign, secure your account and prepare to launch your starter Sunracer into the Solar System.</p>
+
+    <div :if={!@registration_enabled} id="registration-closed" class="mt-8 rounded-xl border border-amber-300/25 bg-amber-300/5 p-5 text-sm leading-7 text-amber-100">
+      Pilot registration is currently closed while we prepare verified email delivery. Please check back soon.
+    </div>
+
+    <.form
+      :if={@registration_enabled}
+      for={@form}
+      id="pilot-registration-form"
+      action={~p"/register"}
+      method="post"
+      class="hud-auth-form mt-8 space-y-5"
+    >
+      <div class="grid gap-5 sm:grid-cols-2">
+        <.input field={@form[:username]} type="text" label="Account username" minlength="4" maxlength="20" autocomplete="username" required placeholder="pilot_01"
+          class="hud-field mt-2 w-full rounded-xl border border-slate-700 bg-slate-900/90 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/70 focus:ring-4 focus:ring-cyan-400/10" />
+        <.input field={@form[:pilot_name]} type="text" label="Pilot callsign" minlength="4" maxlength="20" autocomplete="nickname" required placeholder="Starfarer"
+          class="hud-field mt-2 w-full rounded-xl border border-slate-700 bg-slate-900/90 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/70 focus:ring-4 focus:ring-cyan-400/10" />
+      </div>
+      <.input field={@form[:email]} type="email" label="Email address" maxlength="260" autocomplete="email" required placeholder="pilot@example.com"
+        class="hud-field mt-2 w-full rounded-xl border border-slate-700 bg-slate-900/90 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/70 focus:ring-4 focus:ring-cyan-400/10" />
+      <.input field={@form[:password]} value="" type="password" label="Account password" minlength="8" maxlength="72" autocomplete="new-password" required placeholder="At least 8 characters"
+        class="hud-field mt-2 w-full rounded-xl border border-slate-700 bg-slate-900/90 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/70 focus:ring-4 focus:ring-cyan-400/10" />
+      <p class="text-xs leading-6 text-slate-500">Your starter ship and loadouts are provisioned by the server. You'll receive a confirmation email before your first login.</p>
+      <button id="pilot-register-button" type="submit" class="hud-cta mt-2 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-cyan-300 px-6 py-3.5 text-sm font-bold text-slate-950 transition hover:bg-cyan-200">
+        Create pilot account
+        <.icon name="hero-arrow-right" class="size-4" />
+      </button>
+    </.form>
+
+    <div class="mt-8 flex flex-wrap items-center justify-between gap-3 border-t border-slate-800 pt-6 text-xs">
+      <span class="text-slate-500">Already have a callsign?</span>
+      <.link href={~p"/login"} id="register-sign-in-link" class="font-bold text-cyan-200 transition hover:text-white">Pilot sign in</.link>
+    </div>
+  </main>
+  </div>
+</div>

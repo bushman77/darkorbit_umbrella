@@ -1,0 +1,50 @@
+name: Validate Phoenix world-stream optimizations
+
+on:
+  push:
+    branches: [sbs]
+    paths:
+      - "apps/darkorbit_web/lib/darkorbit_web/world_stream_*.ex"
+      - "apps/darkorbit_web/lib/darkorbit_web/channels/world_channel.ex"
+      - "apps/darkorbit_web/test/darkorbit_web/world_stream_*.exs"
+      - "apps/darkorbit_web/test/darkorbit_web/channels/world_channel_test.exs"
+      - ".github/workflows/world-stream-elixir-tests.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  stream-tests:
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: darkorbit_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      MIX_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: "27.3"
+          elixir-version: "1.18.4"
+      - name: Fetch dependencies
+        run: mix deps.get
+      - name: Compile test dependencies
+        run: mix compile
+      - name: Verify stream unit and channel integration tests
+        run: |
+          mix test apps/darkorbit_web/test/darkorbit_web/world_stream_delta_test.exs
+          mix test apps/darkorbit_web/test/darkorbit_web/world_stream_policy_test.exs
+          mix test apps/darkorbit_web/test/darkorbit_web/channels/world_channel_test.exs

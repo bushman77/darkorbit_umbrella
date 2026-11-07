@@ -26,8 +26,8 @@ defmodule Darkorbit.AccountsFixtures do
 
   def verified_player_account_fixture(attrs \\ %{}) do
     player_account = player_account_fixture(attrs)
-    hash = get_in(player_account.verification, ["hash"])
-    {:ok, verified_account} = Darkorbit.Accounts.verify_account(player_account.id, hash)
+    token = player_account.verification_token
+    {:ok, verified_account} = Darkorbit.Accounts.verify_account(player_account.id, token)
     verified_account
   end
 end
