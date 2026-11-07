@@ -349,7 +349,11 @@ class SpaceClient {
   }
 
   connect() {
-    this.socket = new Socket("/socket", {params: {token: this.token}})
+    // For native installed builds the game document is local but the
+    // authoritative Channel socket lives at the chosen HTTPS server.
+    const endpoint = this.root.dataset.serverOrigin
+      ? this.root.dataset.serverOrigin + "/socket" : "/socket"
+    this.socket = new Socket(endpoint, {params: () => ({token: this.root.dataset.socketToken})})
     this.socket.onOpen(() => this.setConnection("Relay connected", "online"))
     this.socket.onError(() => this.setConnection("Relay interrupted", "error"))
     this.socket.onClose(() => this.setConnection("Relay offline", "error"))
@@ -517,6 +521,9 @@ class SpaceClient {
     this.root.dataset.mapId = this.mapId
     this.entities.clear()
     this.player = response.player
+    if (Array.isArray(response.hotbar) && this.root.dataset.nativeClient === "true") {
+      this.populateNativeHotbar(response.hotbar)
+    }
     this.selfId = entityKey(response.player.pilot.id)
     this.boundaries = response.map.boundaries
     this.volume = response.map.volume || this.volume
@@ -1395,6 +1402,29 @@ class SpaceClient {
         element.classList.toggle("border-emerald-400/50", feedback.hit)
         element.classList.toggle("border-rose-400/50", !feedback.hit)
       }
+    }
+  }
+
+  // The browser page renders hotbar slots in HEEx. The installed client
+  // instead receives the same authoritative action catalog on Channel join.
+  populateNativeHotbar(hotbar) {
+    for (const entry of hotbar) {
+      const slot = this.root.querySelector('[data-hotbar-slot="' + entry.slot + '"]')
+      if (!slot) continue
+      const action = entry.action
+      if (action) {
+        slot.dataset.actionId = action.id
+        slot.dataset.actionType = action.type
+        slot.dataset.activationMode = action.activation_mode
+      } else {
+        delete slot.dataset.actionId
+        delete slot.dataset.actionType
+        delete slot.dataset.activationMode
+      }
+      const label = slot.querySelector("[data-hotbar-label]")
+      if (label) label.textContent = action?.label || "Empty"
+      slot.setAttribute("aria-label", action ? entry.key + " " + action.label : entry.key + " Empty")
+      slot.classList.toggle("hotbar-slot-empty", !action)
     }
   }
 

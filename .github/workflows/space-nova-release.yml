@@ -244,6 +244,11 @@ jobs:
           if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY) -or [string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD)) { throw "Required Tauri signing secrets are missing" }
           $configured = (Get-Content clients/tauri/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
           if ($configured -ne $env:RELEASE_VERSION) { throw "Requested version does not match tauri.conf.json" }
+      - name: Set up Elixir/OTP for native game assets
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: '27.3'
+          elixir-version: '1.18.4'
       - name: Install shared renderer dependencies
         run: npm ci --prefix apps/darkorbit_web/assets
       - name: Install client dependencies
@@ -308,6 +313,11 @@ jobs:
           test -n "$TAURI_SIGNING_PRIVATE_KEY" || { echo "Missing signing key"; exit 1; }
           test -n "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" || { echo "Missing signing password"; exit 1; }
           python3 -c 'import json,os; v=json.load(open("clients/tauri/src-tauri/tauri.conf.json"))["version"]; assert v==os.environ["RELEASE_VERSION"], "Version mismatch"'
+      - name: Set up Elixir/OTP for native game assets
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: '27.3'
+          elixir-version: '1.18.4'
       - name: Install shared renderer dependencies
         run: npm ci --prefix apps/darkorbit_web/assets
       - name: Install client dependencies

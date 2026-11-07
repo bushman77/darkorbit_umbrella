@@ -3,6 +3,7 @@
 import {cp, mkdir, readdir, readFile, rm, writeFile} from "node:fs/promises"
 import {fileURLToPath} from "node:url"
 import path from "node:path"
+import {convertGameMarkup, nativeGameDocument} from "./native-game-markup.mjs"
 
 export const clientRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 export const repoRoot = path.resolve(clientRoot, "../..")
@@ -23,6 +24,7 @@ export async function stageClient({
   sourceRoot = repoRoot,
   client = clientRoot,
   destination = outputRoot,
+  includeNativeGame = true,
 } = {}) {
   const uiSource = path.join(client, "ui")
   const gameSource = path.join(sourceRoot, "apps/darkorbit_web/assets/js/game")
@@ -66,6 +68,26 @@ export async function stageClient({
   }
   await mkdir(path.join(destination, "images"), {recursive: true})
   await cp(gameImages, path.join(destination, "images", "game"), {recursive: true})
+
+  if (includeNativeGame) {
+    const publicAssets = path.join(sourceRoot, "apps/darkorbit_web/priv/static/assets")
+    const compiled = [
+      ["native_game.js", "native_game.js"],
+      ["css/app.css", "native_game.css"],
+    ]
+    for (const [from, to] of compiled) {
+      try {
+        await cp(path.join(publicAssets, from), path.join(destination, to))
+      } catch (cause) {
+        throw new Error("Native game assets are missing (" + from +
+          "). Run: node clients/tauri/scripts/build-native-assets.mjs", {cause})
+      }
+    }
+    const template = await readFile(path.join(sourceRoot,
+      "apps/darkorbit_web/lib/darkorbit_web/controllers/game_html/show.html.heex"), "utf8")
+    const gameHtml = nativeGameDocument(convertGameMarkup(template))
+    await writeFile(path.join(destination, "game.html"), gameHtml)
+  }
 
   return {destination, modules}
 }

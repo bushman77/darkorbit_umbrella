@@ -30,3 +30,9 @@ test("only the local launcher includes native networking commands", () => {
   assert.match(js, /restart_client/)
   assert.doesNotMatch(js, /danger_accept_invalid_certs|ignore_certificate_errors/)
 })
+
+test("Launch game opens local HTML, not the server-hosted /play page", () => {
+  const js = readFileSync(new URL("../ui/launcher.mjs", import.meta.url), "utf8")
+  assert.match(js, /window\.location\.assign\("\.\/game\.html"\)/)
+  assert.doesNotMatch(js, /navigateTo\(gameUrl\)/)
+})

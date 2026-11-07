@@ -6,6 +6,10 @@ on:
     paths:
       - "clients/tauri/**"
       - "apps/darkorbit_web/assets/js/game/**"
+      - "apps/darkorbit_web/assets/js/native_game.js"
+      - "apps/darkorbit_web/lib/darkorbit_web/controllers/game_html/show.html.heex"
+      - "apps/darkorbit_web/assets/css/app.css"
+      - "config/config.exs"
       - "apps/darkorbit_web/assets/package-lock.json"
       - "apps/darkorbit_web/priv/static/images/game/**"
       - ".github/workflows/space-nova-windows.yml"
@@ -32,6 +36,12 @@ jobs:
       - name: Install Tauri CLI
         working-directory: clients/tauri
         run: npm install
+
+      - name: Set up Elixir/OTP for local game asset compilation
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: '27.3'
+          elixir-version: '1.18.4'
 
       - name: Install shared renderer dependencies
         run: npm ci --prefix apps/darkorbit_web/assets

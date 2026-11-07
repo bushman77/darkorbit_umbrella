@@ -29,7 +29,7 @@ test("desktop packaging stages renderer and assets without build-time network ac
     await writeFile(path.join(vendor, "three.core.js"), "export {}")
     await writeFile(path.join(images, "local-scout.svg"), "<svg></svg>")
     const destination = path.join(client, "dist/ui")
-    const result = await stageClient({sourceRoot: temp, client, destination})
+    const result = await stageClient({sourceRoot: temp, client, destination, includeNativeGame: false})
     assert.equal(result.modules, 1)
     assert.equal(await readFile(path.join(destination, "index.html"), "utf8"), "launcher")
     assert.match(await readFile(path.join(destination, "game/stereo_view.js"), "utf8"),

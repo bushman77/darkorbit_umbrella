@@ -16,7 +16,7 @@ defmodule DarkorbitWeb.Endpoint do
     longpoll: [connect_info: [session: @session_options]]
 
   socket "/socket", DarkorbitWeb.UserSocket,
-    websocket: true,
+    websocket: [check_origin: {DarkorbitWeb.NativeClientCors, :socket_origin_allowed?, []}],
     longpoll: true
 
   # Serve at "/" the static files from "priv/static" directory.
@@ -43,6 +43,9 @@ defmodule DarkorbitWeb.Endpoint do
   plug Phoenix.LiveDashboard.RequestLogger,
     param_key: "request_logger",
     cookie_key: "request_logger"
+
+  # Restrict cross-origin native login and handle its JSON OPTIONS preflight.
+  plug DarkorbitWeb.NativeClientCors
 
   plug Plug.RequestId
   plug Plug.Telemetry, event_prefix: [:phoenix, :endpoint]

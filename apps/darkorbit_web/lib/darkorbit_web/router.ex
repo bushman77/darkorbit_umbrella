@@ -19,6 +19,14 @@ defmodule DarkorbitWeb.Router do
     plug :accepts, ["json"]
   end
 
+  scope "/api/native", DarkorbitWeb do
+    pipe_through :api
+
+    post "/login", NativeClientController, :login
+    post "/refresh", NativeClientController, :refresh
+    post "/logout", NativeClientController, :logout
+  end
+
   scope "/", DarkorbitWeb do
     pipe_through :browser
 

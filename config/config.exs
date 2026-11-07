@@ -59,6 +59,13 @@ config :esbuild,
     env: %{"NODE_PATH" => [Path.expand("../deps", __DIR__), Mix.Project.build_path()]}
   ]
 
+# A standalone client entrypoint bundles only Phoenix Channels and game code;
+# no LiveView/cookie or server-rendered page assets are required at runtime.
+config :esbuild, :darkorbit_native,
+  args: ~w(js/native_game.js --bundle --target=es2022 --outfile=../priv/static/assets/native_game.js --external:/fonts/* --external:/images/* --alias:@=.),
+  cd: Path.expand("../apps/darkorbit_web/assets", __DIR__),
+  env: %{"NODE_PATH" => [Path.expand("../deps", __DIR__), Mix.Project.build_path()]}
+
 # Configure tailwind (the version is required)
 config :tailwind,
   version: "4.1.12",

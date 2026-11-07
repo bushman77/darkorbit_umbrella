@@ -1,5 +1,5 @@
 import {
-  DEFAULT_SERVER_URL, LOCAL_SERVER_URL, gameUrl, registrationUrl, homeUrl, serverOrigin,
+  DEFAULT_SERVER_URL, LOCAL_SERVER_URL, registrationUrl, homeUrl, serverOrigin,
   initialServerOrigin
 } from "./server_url.mjs"
 
@@ -44,9 +44,20 @@ function navigateTo(destinationFor) {
   }
 }
 
+// The main game is installed locally. Only authentication and real-time
+// authoritative commands use the selected remote Phoenix server.
 form.addEventListener("submit", event => {
   event.preventDefault()
-  navigateTo(gameUrl)
+  error.hidden = true
+  try {
+    const origin = serverOrigin(input.value)
+    sessionStorage.setItem("space-nova-native-server", origin)
+    localStorage.setItem(storageKey, origin)
+    window.location.assign("./game.html")
+  } catch (cause) {
+    error.textContent = cause.message || "Unable to select that game server."
+    error.hidden = false
+  }
 })
 register.addEventListener("click", () => navigateTo(registrationUrl))
 homepage.addEventListener("click", () => navigateTo(homeUrl))

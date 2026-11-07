@@ -57,14 +57,14 @@
             <span class="console-light" aria-hidden="true"></span>
             <span>UPLINK CONTROL // CONNECT</span>
           </div>
-          <h2>Establish uplink</h2>
-          <p class="console-subtitle">Select the authoritative Space Nova server to begin your flight.</p>
+          <h2>Launch standalone game</h2>
+          <p class="console-subtitle">The cockpit, HUD and graphics run locally; select the authoritative multiplayer server.</p>
           <form id="connect-form" novalidate>
             <label for="server-url">Game server address</label>
             <input id="server-url" type="url" inputmode="url" autocomplete="url" spellcheck="false" placeholder="https://spacenova.ddns.net" required>
             <p class="hint">Secure public server: <code>https://spacenova.ddns.net</code>. For local Phoenix development, use <code>http://127.0.0.1:4000</code>.</p>
             <div class="actions">
-              <button type="submit" class="primary">Launch game <span aria-hidden="true">→</span></button>
+              <button type="submit" class="primary">Launch standalone game <span aria-hidden="true">→</span></button>
               <button type="button" id="register-pilot" class="secondary">Create pilot account</button>
               <button type="button" id="visit-home" class="secondary">Visit homepage</button>
             </div>
@@ -74,7 +74,7 @@
             </div>
             <p role="alert" id="error" class="error" hidden></p>
           </form>
-          <footer>Authentication is handled by your selected Phoenix server. Public registration may be closed until verified email delivery is configured.</footer>
+          <footer>Your pilot signs in through an authenticated HTTPS API; Phoenix Channels carry real-time gameplay. Registration and email verification still use the hosted website.</footer>
         </section>
       </main>
 

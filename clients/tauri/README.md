@@ -337,3 +337,42 @@ To test this feature on Pop!_OS, first launch the installed client normally,
 select Network settings → Manual SOCKS5, enter `127.0.0.1` and `1080`,
 and choose **Save and restart client**. Keep the tunnel alive and then
 launch the game. This is client-local and does not require deploying EC2.
+
+## Standalone native gameplay (native_client migration)
+
+**Launch standalone game** now opens a *local* `game.html`, not the remote
+`/play` page. The built desktop package contains the same Solar Atlas and
+3D/SBS cockpit template, Phoenix Channels JavaScript, Three.js, Tailwind
+styles, image assets, and HUD modules as the server-hosted implementation.
+
+The local login panel POSTs credentials (never saved) to
+`/api/native/login` over HTTPS, receives a short-lived signed socket token,
+then joins the authoritative Phoenix `world:*` Channel. Pilot commands,
+collision, inventory, faction and combat authority remain server-side.
+The native client refreshes its signed token every ten minutes and invalidates
+the session on sign-out. Authentication requests have strict native-origin
+CORS and a username-scoped attempt limiter; Phoenix Socket Origin verification
+is still enabled. No TLS validation is disabled.
+
+**Build dependencies:** in addition to Node/Rust/WebKitGTK, the native
+build needs Elixir/Erlang and the project's Mix deps. The npm prebuild hook
+compiles the local game bundle with `mix esbuild darkorbit_native` and
+local stylesheet with `mix tailwind darkorbit_web`; Tauri includes the
+compiled files in the installer. The game template is statically converted
+from the canonical Phoenix HEEx file, with explicit failure if new HEEx
+expressions appear.
+
+1. Deploy the matching EC2 release first (release manager option 9) to
+   introduce the new native login/refresh/logout JSON API.
+2. Build/install a matching native_client desktop package.
+3. Keep the existing SSH SOCKS5 proxy active, configure Networking if needed,
+   then select **Launch standalone game** and sign in with the verified pilot.
+
+For now, pilot equipment modification is still provided by the Phoenix
+website; native loadout editing will be migrated separately. The
+native UI displays a reminder instead of navigating away from the local
+renderer. The existing hosted `/play` page remains functional for browser
+users and regression testing.
+
+This is an *online* multiplayer client, not an offline single-player game:
+only assets, rendering and input handling are local.
