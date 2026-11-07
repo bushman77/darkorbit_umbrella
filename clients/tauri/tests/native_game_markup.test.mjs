@@ -43,5 +43,6 @@ test("native bootstrap uses authenticated API without persisting pilot tokens", 
 })
 
 test("native markup generation is identical with Windows CRLF and Unix LF", () => {
-  assert.equal(convertGameMarkup(template.replace(/\n/g, "\r\n")), markup)
+  const unix = template.replace(/\r\n?/g, "\n")
+  assert.equal(convertGameMarkup(unix.replace(/\n/g, "\r\n")), markup)
 })
