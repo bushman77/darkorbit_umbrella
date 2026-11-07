@@ -18,6 +18,12 @@ on:
       - "apps/darkorbit_web/lib/darkorbit_web/controllers/registration_html/**"
       - "apps/darkorbit_web/lib/darkorbit_web/registration_email.ex"
       - "apps/darkorbit_web/lib/darkorbit_web/router.ex"
+      - "apps/darkorbit_web/lib/darkorbit_web/native_client_cors.ex"
+      - "apps/darkorbit_web/lib/darkorbit_web/native_login_limiter.ex"
+      - "apps/darkorbit_web/lib/darkorbit_web/controllers/native_client_controller.ex"
+      - "apps/darkorbit_web/lib/darkorbit_web/endpoint.ex"
+      - "apps/darkorbit_web/lib/darkorbit_web/application.ex"
+      - "apps/darkorbit_web/test/darkorbit_web/controllers/native_client_controller_test.exs"
       - "apps/darkorbit_web/test/darkorbit_web/controllers/registration_controller_test.exs"
       - ".github/workflows/space-nova-account-tests.yml"
   workflow_dispatch:
@@ -60,6 +66,7 @@ jobs:
           mix test apps/darkorbit/test/darkorbit/accounts_test.exs
           mix test apps/darkorbit_web/test/darkorbit_web/controllers/registration_controller_test.exs
           mix test apps/darkorbit_web/test/darkorbit_web/controllers/session_controller_test.exs
+          mix test apps/darkorbit_web/test/darkorbit_web/controllers/native_client_controller_test.exs
       - name: Check production SMTP runtime (no email sent)
         env:
           MIX_ENV: prod
