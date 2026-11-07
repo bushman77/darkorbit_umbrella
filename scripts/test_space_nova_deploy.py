@@ -49,7 +49,11 @@ class DeploymentOptionTest(unittest.TestCase):
             data = root / "artifact"
             data.mkdir()
             release = data / "release.tar.gz"
-            subprocess.run(["tar", "-czf", str(release), "-C", str(root), "bin"],
+            executable = root / "space_mmo" / "bin" / "space_mmo"
+            executable.parent.mkdir(parents=True)
+            executable.write_text("#!/bin/sh\\nexit 0\\n")
+            executable.chmod(0o755)
+            subprocess.run(["tar", "-czf", str(release), "-C", str(root), "space_mmo"],
                            check=True)
             import hashlib
             digest = hashlib.sha256(release.read_bytes()).hexdigest()
@@ -64,6 +68,11 @@ class DeploymentOptionTest(unittest.TestCase):
                                     env=env)
             self.assertNotIn("UNEXPECTED_REMOTE_ACCESS", result.stderr)
             return result
+
+    def test_operator_declines_after_valid_checksum(self):
+        result = self.run_mock_deploy(corrupt=False)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Cancelled", result.stderr)
 
     def test_corrupted_artifact_never_reaches_ssh(self):
         result = self.run_mock_deploy(corrupt=True)

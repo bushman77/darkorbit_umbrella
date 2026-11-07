@@ -299,6 +299,7 @@ Space Nova desktop build manager
   6) Prepare new version
   7) Publish server and client release
   8) Compile local Linux server (diagnostic)
+  9) Deploy Ubuntu server release to EC2
   0) Exit
 EOF
   local answer ver
@@ -308,7 +309,7 @@ EOF
     5) gh_ready; gh run list --repo "$REPO" --branch "$BRANCH" --limit 12;;
     6) read -r -p 'Version (X.Y.Z): ' ver; prepare_version "$ver";;
     7) read -r -p 'Version (X.Y.Z): ' ver; publish_release "$ver";;
-    8) server_build;;
+    8) server_build;; 9) deploy_ec2;;
     0) exit 0;; *) die "Invalid choice";;
   esac
 }
@@ -317,6 +318,6 @@ case "${1:-menu}" in
   linux) linux_build;; windows) windows_build;; download) download_windows;;
   status) gh_ready; gh run list --repo "$REPO" --branch "$BRANCH" --limit 12;;
   version) prepare_version "${2:-}";; release|publish) publish_release "${2:-}";;
-  server) server_build;;
+  server) server_build;; deploy) deploy_ec2;;
   *) usage; exit 1;;
 esac
