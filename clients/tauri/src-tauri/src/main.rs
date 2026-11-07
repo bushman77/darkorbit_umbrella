@@ -1,5 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod network;
+
 use tauri::Manager;
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 use tauri_plugin_updater::UpdaterExt;
@@ -8,6 +10,11 @@ use tauri_plugin_updater::UpdaterExt;
 // process permissions are granted to either the launcher or remote web pages.
 fn main() {
     tauri::Builder::default()
+        .invoke_handler(tauri::generate_handler![
+            network::get_network_settings,
+            network::save_network_settings,
+            network::restart_client,
+        ])
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
@@ -17,10 +24,9 @@ fn main() {
             let window_config = &app.config().app.windows[0];
             let mut window = tauri::WebviewWindowBuilder::from_config(app.handle(), window_config)?;
 
-            if std::env::var("SPACE_NOVA_USE_SOCKS_TUNNEL").as_deref() == Ok("1") {
-                let proxy = "socks5://127.0.0.1:1080".parse()?;
-                window = window.proxy_url(proxy);
-                eprintln!("Space Nova: native SOCKS5 webview proxy enabled (127.0.0.1:1080)");
+            if let Some(proxy_url) = network::startup_proxy(app.handle()) {
+                window = window.proxy_url(proxy_url.parse()?);
+                eprintln!("Space Nova: native webview proxy enabled ({proxy_url})");
             }
 
             window.build()?;

@@ -7,7 +7,7 @@
     "frontendDist": "../dist/ui"
   },
   "app": {
-    "withGlobalTauri": false,
+    "withGlobalTauri": true,
     "windows": [
       {
         "label": "main",
@@ -24,7 +24,21 @@
     ],
     "security": {
       "csp": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none';",
-      "capabilities": []
+      "capabilities": [
+        {
+          "identifier": "local-networking-settings",
+          "description": "Only bundled Space Nova launcher pages may manage native proxy preferences.",
+          "windows": [
+            "main"
+          ],
+          "local": true,
+          "permissions": [
+            "allow-get-network-settings",
+            "allow-save-network-settings",
+            "allow-restart-client"
+          ]
+        }
+      ]
     }
   },
   "bundle": {

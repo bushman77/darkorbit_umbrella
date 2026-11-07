@@ -312,3 +312,28 @@ markup, bundled CSS, and authenticated socket bootstrap still come from EC2.
 The local render check does not replace that route yet. We retain it until an
 authenticated native protocol/asset version boundary can be introduced safely.
 No change to the SSH SOCKS5 tunnel or TLS validation is required.
+
+## Native networking preferences (migration milestone 2)
+
+The bundled launcher now has a **Network settings** control. Select either
+**System network settings** or **Manual SOCKS5 proxy** (hostname and TCP port).
+The native Rust app validates the values, saves them to the per-user Tauri
+application config directory as non-secret `network.json`, and restarts the
+client to apply the choice to its WebKitGTK/WebView2 webview.
+
+This does **not** create an SSH tunnel, modify GNOME settings, store SSH keys,
+or disable TLS validation. Keep the existing `tunnel()` function or
+`scripts/space-nova-tunnel` running when selecting localhost port 1080.
+The original `SPACE_NOVA_USE_SOCKS_TUNNEL=1` launch override is preserved and
+takes precedence over the saved profile until the app is started without it.
+
+Only locally bundled launcher pages can call the three Tauri commands.
+Permission generation explicitly enumerates them in `build.rs` and the
+local-only capability excludes remote origins; Rust independently rejects
+commands from nonlocal webview URLs. The Phoenix /play page cannot manage
+the user's OS or native settings.
+
+To test this feature on Pop!_OS, first launch the installed client normally,
+select Network settings → Manual SOCKS5, enter `127.0.0.1` and `1080`,
+and choose **Save and restart client**. Keep the tunnel alive and then
+launch the game. This is client-local and does not require deploying EC2.

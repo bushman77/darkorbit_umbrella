@@ -8,13 +8,36 @@
     <title>Space Nova — Desktop Client</title>
     <link rel="stylesheet" href="./launcher.css">
     <script type="module" src="./launcher.mjs"></script>
+    <script type="module" src="./networking.mjs"></script>
   </head>
   <body>
     <div class="launcher-stage">
       <header class="launcher-rail">
         <span class="launcher-brand"><span aria-hidden="true">✦</span> SPACE NOVA</span>
         <span class="launcher-rail-status">FLIGHT SYSTEMS // DESKTOP CLIENT</span>
+        <button type="button" id="networking-open" class="networking-open">⚙ Network settings</button>
       </header>
+
+      <section id="networking-panel" class="networking-panel" hidden aria-label="Native networking settings">
+        <div class="networking-title"><h2>Networking</h2><button type="button" id="networking-close" class="text-button">Close ✕</button></div>
+        <form id="networking-form">
+          <label for="proxy-mode">Connection mode</label>
+          <select id="proxy-mode" name="proxy-mode">
+            <option value="system">System network settings</option>
+            <option value="socks5">Manual SOCKS5 proxy</option>
+          </select>
+          <div id="proxy-fields" hidden>
+            <label for="proxy-host">Proxy hostname / IPv4</label>
+            <input id="proxy-host" type="text" placeholder="127.0.0.1" autocomplete="off" spellcheck="false" required>
+            <label for="proxy-port">Proxy port</label>
+            <input id="proxy-port" type="number" value="1080" min="1" max="65535" required>
+          </div>
+          <p id="networking-override" class="networking-note" hidden>The SPACE_NOVA_USE_SOCKS_TUNNEL=1 launch option currently forces 127.0.0.1:1080. Restart without that option to apply your saved preference.</p>
+          <p id="networking-status" role="status" class="networking-note"></p>
+          <button class="primary" type="submit">Save and restart client</button>
+        </form>
+        <p class="networking-note">These settings affect the native client only. They do not start an SSH tunnel or change GNOME's system proxy.</p>
+      </section>
 
       <main class="shell">
         <section class="launcher-briefing" aria-label="Space Nova flight briefing">

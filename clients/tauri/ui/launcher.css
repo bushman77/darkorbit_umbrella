@@ -145,3 +145,21 @@ footer {
   .launcher-readouts {grid-template-columns:1fr}
 }
 @media(prefers-reduced-motion:reduce) {* {transition:none!important}}
+
+/* Local-only proxy preferences, accessible before any game connection. */
+.networking-open {margin-left:auto;background:#0b293b;color:#bceefa;white-space:nowrap}
+.networking-panel {position:absolute;z-index:100;top:80px;right:clamp(10px,1.5vw,22px);
+  width:min(405px,calc(100vw - 20px));padding:22px;border:1px solid #368ba0;border-radius:7px;
+  background:#041929;box-shadow:0 30px 80px #000d;color:#dcf7fd}
+.networking-panel[hidden],#proxy-fields[hidden],#networking-override[hidden] {display:none}
+.networking-title {display:flex;align-items:center;justify-content:space-between;gap:12px}
+.networking-title h2 {font-size:22px;margin:0}
+.networking-panel form {margin-top:16px}
+.networking-panel select {display:block;width:100%;min-height:49px;margin-bottom:16px;
+  padding:8px 12px;color:white;background:#051829;border:1px solid #36829c;border-radius:3px}
+.networking-panel input {margin-bottom:16px}
+.networking-panel label {margin-top:8px}
+.networking-panel .primary {width:100%;margin-top:10px}
+.networking-note {font-size:12px;line-height:1.6;color:#b6ceda}
+.networking-note[data-error="true"] {color:#ffb3ad}
+#networking-override {color:#ffdf9d}

@@ -3175,6 +3175,7 @@ dependencies = [
 name = "space-nova-client"
 version = "0.3.1"
 dependencies = [
+ "serde",
  "serde_json",
  "tauri",
  "tauri-build",
