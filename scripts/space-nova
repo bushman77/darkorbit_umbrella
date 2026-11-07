@@ -167,40 +167,7 @@ deploy_ec2() (
     done
   fi
   [[ -n "$row" ]] || die "GitHub build was not found. Check './scripts/space-nova status' and retry."
-  IFS=  cat <<'EOF'
-
-Space Nova desktop build manager
-  1) Test
-  2) Build Linux installers
-  3) Build Windows .exe
-  4) Download Windows .exe
-  5) Build status
-  6) Prepare new version
-  7) Publish server and client release
-  8) Compile local Linux server (diagnostic)
-  9) Deploy Ubuntu server release to EC2
-  0) Exit
-EOF
-  local answer ver
-  read -r -p 'Choose: ' answer
-  case "$answer" in
-    1) test_client;; 2) linux_build;; 3) windows_build;; 4) download_windows;;
-    5) gh_ready; gh run list --repo "$REPO" --branch "$BRANCH" --limit 12;;
-    6) read -r -p 'Version (X.Y.Z): ' ver; prepare_version "$ver";;
-    7) read -r -p 'Version (X.Y.Z): ' ver; publish_release "$ver";;
-    8) server_build;; 9) deploy_ec2;;
-    0) exit 0;; *) die "Invalid choice";;
-  esac
-}
-case "${1:-menu}" in
-  menu) menu;; help|-h|--help) usage;; test) test_client;;
-  linux) linux_build;; windows) windows_build;; download) download_windows;;
-  status) gh_ready; gh run list --repo "$REPO" --branch "$BRANCH" --limit 12;;
-  version) prepare_version "${2:-}";; release|publish) publish_release "${2:-}";;
-  server) server_build;; deploy) deploy_ec2;;
-  *) usage; exit 1;;
-esac
-\t' read -r run_id status conclusion <<< "$row"
+  IFS=$'\t' read -r run_id status conclusion <<< "$row"
   [[ "$run_id" =~ ^[0-9]+$ ]] || die "Invalid GitHub workflow run ID."
 
   if [[ "$status" != completed ]]; then
@@ -218,7 +185,7 @@ esac
   [[ -s "$archive_dir/space-nova-server-linux-x64.tar.gz" ]] || die "Missing server archive."
   [[ -s "$archive_dir/SHA256SUMS" ]] || die "Missing artifact checksums."
   (cd "$archive_dir" && sha256sum -c SHA256SUMS) || die "Server archive checksum mismatch."
-  tar -tzf "$archive_dir/space-nova-server-linux-x64.tar.gz" | grep -qx 'space_mmo/bin/space_mmo' ||
+  tar -tzf "$archive_dir/space-nova-server-linux-x64.tar.gz" | grep -x 'space_mmo/bin/space_mmo' >/dev/null ||
     die "Server archive does not contain the expected executable."
 
   key="${SPACE_NOVA_DEPLOY_SSH_KEY:-$HOME/Downloads/space-mmo-dev.pem}"
@@ -238,7 +205,7 @@ esac
 
   ssh "${ssh_args[@]}" "$target" \
     'test -x /home/ubuntu/deploy/space_mmo/bin/space_mmo &&
-     test -r /home/ubuntu/.config/space_mmo.env &&
+     test -f /home/ubuntu/.config/space_mmo.env &&
      sudo -n systemctl cat space-mmo >/dev/null' ||
     die "EC2 preflight failed; server unchanged."
 
