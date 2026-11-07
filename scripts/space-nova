@@ -270,12 +270,14 @@ mv -- "$stage/space_mmo" "$active"
 
 # Migration needs the private systemd EnvironmentFile (not present in an SSH shell).
 # systemd loads credentials without printing them or requiring ubuntu to read the 0600 file.
-sudo -n systemd-run --unit="space-nova-migrate-$(date +%s)-$" \
+sudo -n systemd-run --unit="space-nova-migrate-$(date +%s)-$RANDOM" \
   --wait --pipe --collect \
   --property=User=ubuntu \
   --property=WorkingDirectory=/home/ubuntu/deploy/space_mmo \
   --property=EnvironmentFile=/home/ubuntu/.config/space_mmo.env \
-  "$active/bin/space_mmo" eval 'Darkorbit.Release.migrate()'
+  "$active/bin/space_mmo" eval 'Darkorbit.Release.migrate()' </dev/null
+# The remote commands arrive on stdin over SSH. systemd-run --pipe must not
+# inherit that stream, or it can consume the remainder of this deployment script.
 sudo -n systemctl start "$service"
 for attempt in $(seq 1 40); do
   if sudo -n systemctl is-active --quiet "$service" &&

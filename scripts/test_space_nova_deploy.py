@@ -75,6 +75,16 @@ class DeploymentOptionTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("Cancelled", result.stderr)
 
+    def test_remote_migration_does_not_consume_ssh_script_stdin(self):
+        source = SCRIPT.read_text()
+        self.assertIn(
+            "\"$active/bin/space_mmo\" eval 'Darkorbit.Release.migrate()' </dev/null",
+            source,
+        )
+        self.assertIn("--unit=\"space-nova-migrate-$(date +%s)-$RANDOM\"", source)
+        self.assertIn('sudo -n systemctl start "$service"', source)
+        self.assertIn("Space Nova updated successfully", source)
+
     def test_corrupted_artifact_never_reaches_ssh(self):
         result = self.run_mock_deploy(corrupt=True)
         self.assertNotEqual(result.returncode, 0)
