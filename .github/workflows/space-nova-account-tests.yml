@@ -79,10 +79,25 @@ jobs:
             cfg = Application.fetch_env!(:darkorbit, Darkorbit.Mailer)
             unless cfg[:adapter] == Swoosh.Adapters.SMTP and
                    cfg[:tls] == :always and cfg[:tls_options][:verify] == :verify_peer and
+                   cfg[:tls_options][:depth] == 10 and
+                   cfg[:tls_options][:versions] == [:"tlsv1.2", :"tlsv1.3"] and
+                   cfg[:tls_options][:server_name_indication] == ~c"smtp.example.test" and
+                   is_list(cfg[:tls_options][:cacerts]) and
                    cfg[:port] == 587 and
                    Application.get_env(:darkorbit_web, :email_delivery_configured) == true and
                    Application.get_env(:darkorbit_web, :registration_email_enabled) == false do
               raise "SMTP transport misconfigured or registration accidentally enabled"
             end
             IO.puts("SMTP runtime verified; public signup remains closed")
+          '
+          SMTP_PORT=465 mix run --no-start -e '
+            cfg = Application.fetch_env!(:darkorbit, Darkorbit.Mailer)
+            unless cfg[:adapter] == Swoosh.Adapters.SMTP and
+                   cfg[:port] == 465 and cfg[:ssl] == true and
+                   cfg[:sockopts][:verify] == :verify_peer and
+                   cfg[:sockopts][:depth] == 10 and
+                   cfg[:sockopts][:versions] == [:"tlsv1.2", :"tlsv1.3"] do
+              raise "Implicit TLS 465 socket verification is misconfigured"
+            end
+            IO.puts("Implicit TLS options verified")
           '

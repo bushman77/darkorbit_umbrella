@@ -144,6 +144,10 @@ if config_env() == :prod do
       # Enforce both CA-chain and hostname verification. Plain SMTP and
       # opportunistic STARTTLS are not permitted for production delivery.
       tls_options = [
+        # gen_smtp's socket wrapper otherwise supplies depth: 0, which
+        # rejects Gmail's intermediate CA certificate chain.
+        versions: [:"tlsv1.2", :"tlsv1.3"],
+        depth: 10,
         verify: :verify_peer,
         cacerts: :public_key.cacerts_get(),
         server_name_indication: String.to_charlist(smtp_host),
