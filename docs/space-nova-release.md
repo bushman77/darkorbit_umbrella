@@ -102,6 +102,51 @@ Production deployment is a separate, deliberate operation after backups,
 migration review and compatibility checks. Running this GitHub publishing
 workflow alone does not deploy the server.
 
+## Option 9 — deploy the EC2 server
+
+From your Pop!_OS checkout on the existing `sbs` branch, run:
+
+```sh
+cd ~/darkorbit_umbrella
+git pull --ff-only origin sbs
+./scripts/space-nova      # choose 9
+# Or: ./scripts/space-nova deploy
+```
+
+This option fetches the current `origin/sbs` commit, finds its Ubuntu 24.04
+server build from `space-nova-server-build.yml`, and requests/waits for a
+build if needed. It refuses non-successful or mismatched builds. It downloads
+the GitHub artifact and verifies `SHA256SUMS` before any SSH operations and
+again on EC2. The operator must explicitly type `DEPLOY`.
+
+The default SSH destination is `ubuntu@54.200.202.235` using
+`~/Downloads/space-mmo-dev.pem`, adjustable without editing the repository:
+
+```sh
+SPACE_NOVA_DEPLOY_HOST=ubuntu@your-ec2-address \
+SPACE_NOVA_DEPLOY_SSH_KEY=/path/to/your.pem \
+./scripts/space-nova deploy
+```
+
+The remote update uses only a *temporary* folder inside
+`/home/ubuntu/deploy`. It stops `space-mmo`, moves the existing OTP release
+aside (no copy), installs the new release at the **same**
+`/home/ubuntu/deploy/space_mmo` location, runs `Darkorbit.Release.migrate()`,
+restarts systemd and checks the local Phoenix login endpoint. On failure it
+tries to restore the prior executable and start the previous service. On
+success it removes the temporary folder and the previous executable. It
+does **not** modify the external PostgreSQL database contents other than
+running declared schema migrations, the private environment file, or Caddy.
+There are no permanent backup directories.
+
+**Caution:** Deployment causes a brief outage. Automatic executable rollback
+cannot undo a database migration. This option is for the current development
+deployment; back up important production player data before using it in a
+non-disposable environment. If SSH disconnects during the swap or rollback
+fails, inspect the remote staging folder and `systemctl status space-mmo`
+before retrying. The SSH key must already be authorized and `sudo -n
+systemctl` must work for `ubuntu`.
+
 ## Desktop and updates
 
 Windows uses signed NSIS updater bundles. Linux AppImage supports signed

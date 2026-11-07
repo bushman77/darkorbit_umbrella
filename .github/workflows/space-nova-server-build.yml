@@ -5,6 +5,8 @@ on:
     branches: [sbs]
     paths:
       - ".github/workflows/space-nova-server-build.yml"
+      - "scripts/space-nova"
+      - "scripts/test_space_nova_deploy.py"
   workflow_dispatch:
 
 permissions:
@@ -38,6 +40,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+      - name: Validate deployment menu and safety checks
+        run: python3 -m unittest discover -s scripts -p 'test_space_nova_deploy.py'
       - name: Build production Elixir release with bundled assets
         run: |
           npm ci --prefix apps/darkorbit_web/assets
