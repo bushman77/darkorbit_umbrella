@@ -3,14 +3,15 @@ name: Build Space Nova EC2 server package
 on:
   push:
     branches: [sbs]
-    paths:
-      - ".github/workflows/space-nova-server-build.yml"
-      - "scripts/space-nova"
-      - "scripts/test_space_nova_deploy.py"
   workflow_dispatch:
 
 permissions:
   contents: read
+
+# Only the newest sbs revision needs an EC2 package.
+concurrency:
+  group: space-nova-ec2-server-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   server:
