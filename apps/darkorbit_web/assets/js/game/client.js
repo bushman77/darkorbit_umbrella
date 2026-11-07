@@ -22,6 +22,7 @@ import {HelmetAlignmentKeyGate} from "./helmet_alignment_keys.mjs"
 import {NavigationComputer} from "./navigation_computer.mjs"
 import {FlightControls} from "./flight_controls.mjs"
 import {WorldStreamDelta} from "./world_stream_delta.mjs"
+import {gameSocketEndpoint} from "./socket_endpoint.mjs"
 import {
   MouseSteering, validMouseSensitivity, MOUSE_STEERING_IDLE_MS,
 } from "./mouse_steering.mjs"
@@ -351,8 +352,7 @@ class SpaceClient {
   connect() {
     // For native installed builds the game document is local but the
     // authoritative Channel socket lives at the chosen HTTPS server.
-    const endpoint = this.root.dataset.serverOrigin
-      ? this.root.dataset.serverOrigin + "/socket" : "/socket"
+    const endpoint = gameSocketEndpoint(this.root.dataset.serverOrigin)
     this.socket = new Socket(endpoint, {params: () => ({token: this.root.dataset.socketToken})})
     this.socket.onOpen(() => this.setConnection("Relay connected", "online"))
     this.socket.onError(() => this.setConnection("Relay interrupted", "error"))
