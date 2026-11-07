@@ -9,6 +9,7 @@ const error = document.querySelector("#error")
 const local = document.querySelector("#use-local")
 const register = document.querySelector("#register-pilot")
 const homepage = document.querySelector("#visit-home")
+const preview = document.querySelector("#preview-local")
 const storageKey = "sbs-space-server-origin"
 
 try {
@@ -49,3 +50,6 @@ form.addEventListener("submit", event => {
 })
 register.addEventListener("click", () => navigateTo(registrationUrl))
 homepage.addEventListener("click", () => navigateTo(homeUrl))
+
+// Explicit offline smoke check; no remote navigation or pilot credentials.
+preview.addEventListener("click", () => window.location.assign("./preview.html"))

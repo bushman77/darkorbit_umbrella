@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "tauri dev",
     "build": "tauri build",
-    "test": "node --test tests/*.test.mjs"
+    "test": "node --test tests/*.test.mjs",
+    "predev": "node scripts/stage-client.mjs",
+    "prebuild": "node scripts/stage-client.mjs"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.9.0"

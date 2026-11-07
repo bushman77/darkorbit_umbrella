@@ -64,7 +64,7 @@ The default development listener is HTTP-only. The current EC2 deployment uses C
 
 ## Easy desktop build and release manager
 
-From the root of the `sbs` checkout on Pop!_OS:
+From the root of the `native_client` checkout on Pop!_OS:
 
 ```sh
 cd ~/darkorbit_umbrella
@@ -99,7 +99,7 @@ is still building, inspect `status` and retry `download` after success.
 
 For signed updates, run `version X.Y.Z` and follow the printed test, commit,
 and push instructions before running `publish X.Y.Z`. This second command
-checks for uncommitted tracked edits, is synchronized to `origin/sbs`, and
+checks for uncommitted tracked edits, is synchronized to `origin/native_client`, and
 has no existing release of the same version. It asks you to type `PUBLISH`
 before triggering the signed workflow. Configure `TAURI_SIGNING_PRIVATE_KEY`
 and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` **only as GitHub Actions secrets**.
@@ -157,7 +157,7 @@ The dedicated GitHub Actions workflow at
 `Space Nova_*_x64-setup.exe` on a hosted Windows runner.
 The Linux workflow and its `.deb` / `.AppImage` outputs remain unchanged.
 
-1. Push changes to the existing `sbs` branch, or manually run the
+1. Push changes to the existing `native_client` branch, or manually run the
    **Build Space Nova Windows installer** workflow from the GitHub Actions tab.
 2. Wait for **Test launcher** and **Build Windows NSIS installer** to pass.
 3. Download the `space-nova-windows-x86_64` artifact from the workflow run.
@@ -218,11 +218,11 @@ receives the signing secrets and enables the optional
 
 To publish a version:
 
-1. Confirm both normal Linux and Windows jobs are green on `sbs`.
+1. Confirm both normal Linux and Windows jobs are green on `native_client`.
 2. Bump `version` together in `tauri.conf.json`, `Cargo.toml` and
    `package.json`. Change the verification test if needed.
 3. In GitHub Actions, run **Publish signed Space Nova desktop release**
-   on branch `sbs` and enter the matching version (for example `0.3.0`).
+   on branch `native_client` and enter the matching version (for example `0.3.0`).
 4. The workflow signs Windows NSIS `.exe` and Linux `.AppImage`
    independently, generates a single manifest with the literal `.sig` contents,
    then atomically publishes the bundles, signatures and `latest.json` to
@@ -283,3 +283,32 @@ SPACE_NOVA_USE_SOCKS_TUNNEL=1 space-nova-client
 
 Do not pass `--insecure` or trust arbitrary TLS certificates. This feature
 requires reinstalling a client build that includes the native proxy option.
+
+## Native asset staging and local render check (migration milestone 1)
+
+The desktop build now stages the existing renderer modules from
+`apps/darkorbit_web/assets/js/game`, the version-locked Three.js ES modules,
+and game image assets under `clients/tauri/dist/ui`. This generated tree is
+ignored by Git and bundled into the installer. It does not use a CDN.
+
+Install locked Three.js dependencies before running the Tauri build or dev client:
+
+```sh
+cd ~/darkorbit_umbrella
+npm ci --prefix apps/darkorbit_web/assets
+cd clients/tauri
+npm ci
+npm test
+npm run build
+```
+
+The launcher now exposes **Test locally bundled Atlas / 3D / SBS graphics**.
+That self-contained visual smoke check works without EC2 or login and uses
+our real Solar Atlas and Three.js cockpit renderer against **synthetic fixture
+state**. It does not simulate gameplay or send commands to the server.
+
+**Migration limitation:** The playable `/play` page, its Phoenix-generated
+markup, bundled CSS, and authenticated socket bootstrap still come from EC2.
+The local render check does not replace that route yet. We retain it until an
+authenticated native protocol/asset version boundary can be introduced safely.
+No change to the SSH SOCKS5 tunnel or TLS validation is required.

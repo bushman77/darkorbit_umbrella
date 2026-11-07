@@ -5,6 +5,9 @@ on:
     branches: [native_client]
     paths:
       - "clients/tauri/**"
+      - "apps/darkorbit_web/assets/js/game/**"
+      - "apps/darkorbit_web/assets/package-lock.json"
+      - "apps/darkorbit_web/priv/static/images/game/**"
       - ".github/workflows/sbs-tauri-linux.yml"
   workflow_dispatch:
 
@@ -35,6 +38,9 @@ jobs:
       - name: Install Tauri CLI
         working-directory: clients/tauri
         run: npm install
+
+      - name: Install shared renderer dependencies
+        run: npm ci --prefix apps/darkorbit_web/assets
 
       - name: Test launcher URL validation
         working-directory: clients/tauri

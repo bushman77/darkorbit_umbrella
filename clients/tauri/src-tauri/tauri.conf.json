@@ -4,7 +4,7 @@
   "version": "0.3.1",
   "identifier": "game.sbs.space",
   "build": {
-    "frontendDist": "../ui"
+    "frontendDist": "../dist/ui"
   },
   "app": {
     "withGlobalTauri": false,

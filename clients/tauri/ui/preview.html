@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#020914">
+  <title>Space Nova — Native Render Check</title>
+  <link rel="stylesheet" href="./launcher.css">
+  <link rel="stylesheet" href="./preview.css">
+  <script type="module" src="./preview.mjs"></script>
+</head>
+<body>
+  <main class="render-check">
+    <header class="render-check-header">
+      <a class="render-back" href="./index.html">← Return to launcher</a>
+      <span>SPACE NOVA / LOCAL RENDER CHECK</span>
+      <span id="offline-indicator">NO SERVER REQUIRED</span>
+    </header>
+    <section class="render-check-main">
+      <div class="render-toolbar" role="group" aria-label="Rendering mode">
+        <button data-render-mode="atlas" aria-pressed="true">Solar Atlas</button>
+        <button data-render-mode="3d" aria-pressed="false">3D Cockpit</button>
+        <button data-render-mode="sbs" aria-pressed="false">Stereo SBS</button>
+      </div>
+      <div class="render-surface">
+        <svg id="preview-atlas" viewBox="0 0 1000 600"
+          aria-label="Local Solar System chart" role="img"><g id="nav-solar-content"></g></svg>
+        <canvas id="preview-cockpit" aria-label="Local Three.js cockpit" hidden></canvas>
+        <div id="render-error" role="alert" hidden></div>
+      </div>
+      <footer class="render-footer">
+        <span>RENDERER: INSTALLED FILES</span>
+        <span>TEST FIXTURE ONLY · NO ACCOUNT OR GAME ACTIONS</span>
+      </footer>
+    </section>
+  </main>
+</body>
+</html>
