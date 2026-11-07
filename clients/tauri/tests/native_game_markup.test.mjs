@@ -41,3 +41,7 @@ test("native bootstrap uses authenticated API without persisting pilot tokens", 
   assert.match(js, /import\("\.\/native_game\.js"\)/)
   assert.doesNotMatch(js, /localStorage\.setItem\(.*token/)
 })
+
+test("native markup generation is identical with Windows CRLF and Unix LF", () => {
+  assert.equal(convertGameMarkup(template.replace(/\n/g, "\r\n")), markup)
+})

@@ -25,6 +25,8 @@ function nativeHotbar() {
 }
 
 export function convertGameMarkup(template) {
+  // Windows checkout uses CRLF; normalize before locating HEEx delimiters.
+  template = template.replace(/\r\n?/g, "\n")
   if (!template.includes('<div\n  id="game-client"') ||
       !template.includes("<%= for slot <- @action_hotbar do %>")) {
     throw Error("Game template structure changed; review native markup conversion before shipping.")
