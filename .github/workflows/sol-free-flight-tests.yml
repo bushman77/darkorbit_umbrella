@@ -45,6 +45,9 @@ on:
       - "apps/darkorbit/test/darkorbit/pilot_location_test.exs"
       - "apps/darkorbit_web/lib/darkorbit_web/channels/world_channel.ex"
       - "apps/darkorbit_web/lib/darkorbit_web/channels/helmet_channel.ex"
+      - "apps/darkorbit_web/lib/darkorbit_web/native_client_cors.ex"
+      - "apps/darkorbit_web/test/darkorbit_web/native_client_cors_test.exs"
+      - "config/dev.exs"
       - "apps/darkorbit_web/lib/darkorbit_web/controllers/helmet_html/show.html.heex"
       - "apps/darkorbit_web/test/darkorbit_web/channels/helmet_channel_test.exs"
       - "apps/darkorbit_web/assets/js/game/helmet_client.mjs"
@@ -138,6 +141,7 @@ jobs:
         run: |
           mix test apps/darkorbit_web/test/darkorbit_web/channels/world_channel_test.exs
           mix test apps/darkorbit_web/test/darkorbit_web/channels/helmet_channel_test.exs
+          mix test apps/darkorbit_web/test/darkorbit_web/native_client_cors_test.exs
       - name: Test navigation controls and map ID validation
         run: |
           node --test apps/darkorbit_web/assets/js/game/solar_atlas_view_test.mjs

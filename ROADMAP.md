@@ -901,6 +901,10 @@ Source: [Symbrella `symbolic_generation`](https://github.com/bushman77/Symbrella
 - [x] NAV, CLOSE and RECENTER are local headset controls only. Mouse steering,
   lasers, SOL course authority, docking and Phoenix channel contracts remain
   unchanged. No new assets, packages or database schema required.
+- [x] Add optional trusted LAN HTTPS on port 4443 alongside the desktop
+  loopback HTTP :4000, with strict exact-origin socket allowance. The HMD
+  sensor requires a certificate valid for the laptop's LAN IP and trusted
+  by the phone; no CA private keys or certificates are committed.
 - [ ] Verify trusted HTTPS from Galaxy S21 on the local network, head sensor
   yaw/pitch/roll sign and neutral calibration. Untrusted HTTP origin typically
   blocks device-orientation permission in modern browsers.

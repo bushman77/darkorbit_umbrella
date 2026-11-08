@@ -49,6 +49,30 @@ if System.get_env("DARKORBIT_DEV_HTTPS") == "1" do
     ]
 end
 
+# Optional private-LAN HMD HTTPS on a SEPARATE port. Keep the Tauri
+# localhost HTTP listener on :4000 so the native launcher is unaffected.
+# Only enable on a trusted LAN with a certificate signed by a CA trusted by
+# the Android phone. Never transfer the CA private key to the device.
+if System.get_env("DARKORBIT_DEV_LAN_HTTPS") == "1" do
+  host = System.fetch_env!("DARKORBIT_DEV_LAN_HOST")
+  case :inet.parse_address(String.to_charlist(host)) do
+    {:ok, {a, b, c, d}} when a in 1..255 and b in 0..255 and
+                             c in 0..255 and d in 1..254 -> :ok
+    _ -> raise "DARKORBIT_DEV_LAN_HOST must be an explicit valid LAN IPv4 address"
+  end
+  cert_dir = Path.expand("../apps/darkorbit_web/priv/cert", __DIR__)
+
+  config :darkorbit_web, DarkorbitWeb.Endpoint,
+    https: [
+      ip: {0, 0, 0, 0}, port: 4443, cipher_suite: :strong,
+      certfile: Path.join(cert_dir, "localhost.pem"),
+      keyfile: Path.join(cert_dir, "localhost-key.pem")
+    ]
+
+  config :darkorbit_web, :helmet_dev_lan_https_origin,
+    "https://" <> host <> ":4443"
+end
+
 # Reload browser tabs when matching files change.
 config :darkorbit_web, DarkorbitWeb.Endpoint,
   live_reload: [

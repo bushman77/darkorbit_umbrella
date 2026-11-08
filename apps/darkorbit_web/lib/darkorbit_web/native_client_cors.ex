@@ -65,7 +65,12 @@ defmodule DarkorbitWeb.NativeClientCors do
     # on Pop!_OS). Accept only explicitly configured origins in development;
     # production never configures this allowlist.
     tauri_dev? = URI.to_string(uri) in dev_origins
+    # Explicit opt-in for trusted phone-only LAN TLS. This is absent in
+    # production and allows only the exact configured host and port.
+    helmet_lan? =
+      URI.to_string(uri) ==
+        Application.get_env(:darkorbit_web, :helmet_dev_lan_https_origin, "")
 
-    native? or public? or dev? or tauri_dev?
+    native? or public? or dev? or tauri_dev? or helmet_lan?
   end
 end
