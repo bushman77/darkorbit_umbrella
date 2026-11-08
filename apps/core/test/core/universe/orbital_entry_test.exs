@@ -30,7 +30,8 @@ defmodule Core.Universe.OrbitalEntryTest do
     end
     earth_station = OrbitalEntry.space_base("earth")
     assert earth_station.collision_radius_km == 600.0
-    assert earth_station.position_3d.x > maps |> Enum.find(&(&1.id == "sol:earth")) |> then(& &1.planet.center.x)
+    earth_map = Enum.find(maps, &(&1.id == "sol:earth"))
+    assert earth_station.position_3d.x > earth_map.planet.center.x
     assert OrbitalEntry.map_id("earth") == "sol:earth"
     assert OrbitalEntry.map_id("venus") == "sol:venus"
     assert OrbitalEntry.map_id("sun") == nil
