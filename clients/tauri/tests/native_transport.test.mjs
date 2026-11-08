@@ -1,6 +1,6 @@
 import test from "node:test"
 import assert from "node:assert/strict"
-import {isLocalNativeServer, nativePostJson} from "../ui/native_transport.mjs"
+import {isLocalNativeServer, nativePostJson, nativeErrorMessage} from "../ui/native_transport.mjs"
 
 test("native transport recognizes only loopback HTTP port 4000", () => {
   assert.equal(isLocalNativeServer("http://127.0.0.1:4000"), true)
@@ -60,5 +60,19 @@ test("route whitelist prevents arbitrary backend access", async () => {
       invoke: () => { throw Error("IPC must not be called") },
     }),
     /Unsupported native JSON route/
+  )
+})
+
+// Tauri's rejected IPC promises may contain strings rather than Error objects.
+test("native bridge exposes permission and network failures from string rejections", async () => {
+  assert.equal(nativeErrorMessage("command not allowed"), "command not allowed")
+  assert.equal(nativeErrorMessage({message: "Connection refused"}), "Connection refused")
+  assert.equal(nativeErrorMessage({code: "EHOSTUNREACH"}), '{"code":"EHOSTUNREACH"}')
+
+  await assert.rejects(
+    nativePostJson("http://127.0.0.1:4000", "/api/native/probe", {}, null, {
+      invoke: async () => { throw "Command native_loopback_post not allowed by ACL" },
+    }),
+    /Native loopback bridge: Command native_loopback_post not allowed by ACL/
   )
 })

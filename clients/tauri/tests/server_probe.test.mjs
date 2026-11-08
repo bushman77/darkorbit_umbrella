@@ -56,3 +56,12 @@ test("probe uses the native Rust loopback bridge when Tauri IPC is present", asy
   assert.equal(received.args.route, "/api/native/probe")
   assert.deepEqual(received.args.payload, {})
 })
+
+// The probe must not replace actionable Tauri string failures with generic text.
+test("probe displays the underlying Tauri IPC rejection", async () => {
+  const result = await probeNativeServer("http://127.0.0.1:4000",
+    async () => { throw Error("fetch must not run") },
+    async () => { throw "permissions denied by Tauri capability" })
+  assert.equal(result.ok, false)
+  assert.match(result.message, /permissions denied by Tauri capability/)
+})

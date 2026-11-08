@@ -1,5 +1,5 @@
 import {serverOrigin} from "./server_url.mjs"
-import {nativePostJson} from "./native_transport.mjs"
+import {nativePostJson, nativeErrorMessage} from "./native_transport.mjs"
 
 // Probe is intentionally unauthenticated and contains no pilot information.
 // POST with JSON exercises the CORS preflight as well as the Phoenix API route.
@@ -26,8 +26,7 @@ export async function probeNativeServer(rawOrigin, request = fetch,
       : "Native webview JSON API reachable at ") + origin +
       ". You can now test pilot login."}
   } catch (error) {
-    const reason = error?.name === "AbortError" ? "Request timed out" :
-      (error?.message || "Unknown webview network error")
+    const reason = nativeErrorMessage(error)
     return {ok: false, message: "Native client cannot reach " + origin + ": " +
       reason + ". Check Network settings (disable SOCKS5 for local testing), " +
       "and select http://127.0.0.1:4000 for IPv4-only Phoenix."}

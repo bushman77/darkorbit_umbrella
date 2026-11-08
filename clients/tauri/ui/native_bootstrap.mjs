@@ -1,7 +1,7 @@
 // The game runs from packaged local assets. Only signed credentials,
 // world-state and pilot commands cross the network; no remote HTML is loaded.
 import {DEFAULT_SERVER_URL, serverOrigin} from "./server_url.mjs"
-import {nativePostJson} from "./native_transport.mjs"
+import {nativePostJson, nativeErrorMessage} from "./native_transport.mjs"
 
 const login = document.querySelector("#native-login")
 const form = document.querySelector("#native-login-form")
@@ -81,7 +81,7 @@ form.addEventListener("submit", async event => {
   } catch (cause) {
     resetToLogin(cause?.name === "AbortError"
       ? "Connection timed out. Check your SOCKS5 proxy and try again."
-      : (cause?.message || "Unable to sign in."))
+      : nativeErrorMessage(cause))
   } finally {
     busy.disabled = false
     busy.textContent = "Sign in and launch"
