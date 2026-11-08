@@ -8,7 +8,7 @@ defmodule Darkorbit.PilotLocation do
   """
   alias Core.Universe.Navigation.Checkpoint, as: VoyageCheckpoint
   alias Core.Universe.{FreeFlightRegion, OrbitalEntry}
-  alias Core.World.{Movement, PlanetaryCollision, Position, StationSafety}
+  alias Core.World.{GreenStarbaseDocking, Movement, PlanetaryCollision, Position, StationSafety}
   alias Darkorbit.PilotLocation.Checkpoint
   alias Darkorbit.Repo
 
@@ -47,14 +47,14 @@ defmodule Darkorbit.PilotLocation do
   def save_pose(player_id, map_id,
                 %{status: :idle, location_id: body_id,
                   voyage_number: voyage_number} = navigation,
-                %{ship_instance_id: ship_id, position: position, attitude: attitude})
+                %{ship_instance_id: ship_id, position: position, attitude: attitude} = report)
       when is_integer(player_id) and player_id > 0 and
            is_integer(ship_id) and ship_id > 0 and
            is_integer(voyage_number) and voyage_number >= 0 and is_binary(body_id) do
     if map_id == OrbitalEntry.map_id(body_id) and
          valid_pose?(player_id, map_id, position, attitude) do
       save_pose_row(player_id, map_id, navigation, voyage_number, ship_id,
-        position, attitude)
+        position, attitude, Map.get(report, :docked, false) == true)
     else
       :ok
     end
@@ -64,7 +64,7 @@ defmodule Darkorbit.PilotLocation do
   def save_pose(player_id, map_id,
                 %{status: status, location_id: location_id, free_flight: free_flight,
                   voyage_number: voyage_number, tactical_encounter: nil} = navigation,
-                %{ship_instance_id: ship_id, position: position, attitude: attitude})
+                %{ship_instance_id: ship_id, position: position, attitude: attitude} = report)
       when is_integer(player_id) and player_id > 0 and
            is_integer(ship_id) and ship_id > 0 and
            is_integer(voyage_number) and voyage_number >= 0 and
@@ -73,7 +73,7 @@ defmodule Darkorbit.PilotLocation do
     if map_id == FreeFlightRegion.map_id(player_id) and
          valid_pose?(player_id, map_id, position, attitude) do
       save_pose_row(player_id, map_id, navigation, voyage_number, ship_id,
-        position, attitude)
+        position, attitude, Map.get(report, :docked, false) == true)
     else
       :ok
     end
@@ -84,9 +84,12 @@ defmodule Darkorbit.PilotLocation do
   def save_pose(_player_id, _map_id, _navigation, _report), do: :ok
 
   defp save_pose_row(player_id, map_id, navigation, voyage_number, ship_id,
-         position, attitude) do
+         position, attitude, docked?) do
     now = DateTime.utc_now()
     location = xyz(position)
+    location = if docked? and map_id == FreeFlightRegion.map_id(player_id) and
+        GreenStarbaseDocking.inside_bay?(position),
+      do: Map.put(location, "docked", true), else: location
     heading = angles(attitude)
     fields = [
       pose_map_id: map_id, pose_voyage_number: voyage_number,
@@ -111,12 +114,19 @@ defmodule Darkorbit.PilotLocation do
       %Checkpoint{
         pose_map_id: map_id, pose_voyage_number: ^voyage_number,
         pose_ship_instance_id: ^ship_id,
-        pose_position: position, pose_attitude: attitude
+        pose_position: position_data, pose_attitude: attitude
       } when map_id == entry.map_id ->
-        case parse_pose(position, attitude) do
+        case parse_pose(position_data, attitude) do
           {:ok, position, attitude} ->
             if valid_pose?(player_id, map_id, position, attitude) do
-              %{entry | position: position, attitude: attitude}
+              updated = %{entry | position: position, attitude: attitude}
+              if map_id == FreeFlightRegion.map_id(player_id) and
+                   Map.get(position_data, "docked") == true and
+                   GreenStarbaseDocking.inside_bay?(position) do
+                Map.put(updated, :docked, true)
+              else
+                updated
+              end
             else
               entry
             end
