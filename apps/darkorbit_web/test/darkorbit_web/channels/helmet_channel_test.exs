@@ -16,6 +16,26 @@ defmodule DarkorbitWeb.HelmetChannelTest do
     :ok
   end
 
+  test "standalone pilot control advertises opt-in secure phone pairing address" do
+    account = verified_player_account_fixture()
+    old = Application.get_env(:darkorbit_web, :helmet_dev_lan_https_origin)
+    on_exit(fn ->
+      if is_nil(old) do
+        Application.delete_env(:darkorbit_web, :helmet_dev_lan_https_origin)
+      else
+        Application.put_env(:darkorbit_web, :helmet_dev_lan_https_origin, old)
+      end
+    end)
+    Application.put_env(:darkorbit_web, :helmet_dev_lan_https_origin,
+      "https://192.168.0.48:4443")
+
+    {:ok, pilot} = connect(UserSocket, %{"token" => GameAuth.socket_token(account)})
+    assert {:ok, %{helmet_https_origin: "https://192.168.0.48:4443"},
+            control} =
+      subscribe_and_join(pilot, HelmetChannel, "helmet:control:#{account.id}")
+    leave(control)
+  end
+
   test "the Atlas pairing code authorizes exactly one persistent read-only helmet" do
     account = verified_player_account_fixture()
     {:ok, pilot} = connect(UserSocket, %{"token" => GameAuth.socket_token(account)})

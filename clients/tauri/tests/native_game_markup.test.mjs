@@ -9,7 +9,8 @@ const document = nativeGameDocument(markup)
 
 test("standalone markup contains the real Atlas and 3D/SBS cockpit", () => {
   for (const id of ["game-client", "space-viewport-3d", "navigation-computer",
-    "nav-solar-chart", "display-mode", "action-hotbar", "pilot-logout-form"]) {
+    "nav-solar-chart", "display-mode", "action-hotbar", "pilot-logout-form",
+    "nav-helmet-open", "helmet-panel", "helmet-host", "helmet-qr"]) {
     assert.match(document, new RegExp('id="' + id + '"'))
   }
   assert.match(document, /data-native-client="true"/)
