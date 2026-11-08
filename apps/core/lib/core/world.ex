@@ -34,7 +34,8 @@ defmodule Core.World do
   @doc "Dock the authenticated pilot's stopped ship inside Green Starbase."
   def dock(session_id, opts \\ []) do
     with {:ok, session} <- fetch_session(
-           Keyword.get(opts, :sessions, SessionManager), session_id) do
+           Keyword.get(opts, :sessions, SessionManager), session_id),
+         :ok <- require_undocked(session, opts) do
       MapServer.dock(Keyword.get(opts, :registry, Core.World.Registry),
         session.map_id, session.id, session.entity_id)
     end
@@ -43,7 +44,8 @@ defmodule Core.World do
   @doc "Launch the authenticated docked ship from a server-owned safe position."
   def launch(session_id, opts \\ []) do
     with {:ok, session} <- fetch_session(
-           Keyword.get(opts, :sessions, SessionManager), session_id) do
+           Keyword.get(opts, :sessions, SessionManager), session_id),
+         :ok <- require_at_green_starbase(session, opts) do
       MapServer.launch(Keyword.get(opts, :registry, Core.World.Registry),
         session.map_id, session.id, session.entity_id)
     end
@@ -119,6 +121,7 @@ defmodule Core.World do
   @spec solar_set_course(pos_integer(), term(), keyword()) :: {:ok, map()} | {:error, term()}
   def solar_set_course(session_id, destination_id, opts \\ []) do
     with {:ok, session} <- fetch_session(Keyword.get(opts, :sessions, SessionManager), session_id),
+         :ok <- require_undocked(session, opts),
          {:ok, navigation} <-
            SolarNavigation.set_course(solar_navigation_server(opts), session.player_id, destination_id) do
       # Solar cruise is a separate propulsion regime. Clear any local course
@@ -287,6 +290,27 @@ defmodule Core.World do
       fun when is_function(fun, 4) ->
         fun.(player_id, encounter_id, outcome, verified)
       _ -> {:error, :invalid_tactical_effect_callback}
+    end
+  end
+
+  defp require_undocked(session, opts) do
+    registry = Keyword.get(opts, :registry, Core.World.Registry)
+    case MapServer.docking_status(registry, session.map_id, session.id, session.entity_id) do
+      {:ok, %{docked: true}} -> {:error, :ship_docked}
+      {:ok, %{docked: false}} -> :ok
+      error -> error
+    end
+  end
+
+  defp require_at_green_starbase(session, opts) do
+    if session.map_id != FreeFlightRegion.map_id(session.player_id) do
+      {:error, :not_at_starbase}
+    else
+      case SolarNavigation.snapshot(solar_navigation_server(opts), session.player_id) do
+        {:ok, %{green_starbase_nearby: true, status: :idle,
+                location_id: nil, tactical_encounter: nil}} -> :ok
+        _ -> {:error, :not_at_starbase}
+      end
     end
   end
 
