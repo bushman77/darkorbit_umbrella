@@ -120,14 +120,14 @@ export class StereoSpaceView {
     this.refineryTraffic = new AmbientRefineryTraffic(THREE, this.scene)
     this.greenStarbase = new GreenStarbaseVisual(THREE, this.scene)
     this.encounterShip = new EncounterShipVisual(THREE, this.scene)
-    this.addCockpit()
-    // The HMD alone enables these opt-in local controls. Desktop pointer
-    // picking and laptop mouse/keyboard ship steering stay unchanged.
+    // These must be initialized BEFORE addCockpit builds the VR meshes:
+    // Three.js treats visible=undefined as visible, not hidden.
     this.helmetGazeEnabled = false
     this.helmetNavOpen = false
     this.helmetHeadRotation = null
     this.onHelmetGaze = null
     this.lastGazeArcProgress = -1
+    this.addCockpit()
     this.beamGroup = new THREE.Group()
     this.scene.add(this.beamGroup)
     this.lastHudAt = -Infinity
@@ -220,25 +220,27 @@ export class StereoSpaceView {
         transparent: true, depthTest: false,
       }),
     )
-    this.navSwitch.position.set(1.39, -0.69, -2.46)
+    // Within the narrower per-eye SBS field of view; turn right/down slightly.
+    this.navSwitch.position.set(0.95, -0.64, -2.46)
     this.navSwitch.renderOrder = 68
     framing.add(this.navSwitch)
 
     // A simple read-only navigation display inside the same ship-fixed
     // cockpit space. Mission planning and flight remain laptop-authorized.
     this.helmetNavPanel = new THREE.Mesh(
-      new THREE.PlaneGeometry(2.92, 1.72),
+      new THREE.PlaneGeometry(2.00, 1.08),
       new THREE.MeshBasicMaterial({
         map: cockpitLabel([
-          "SOL / NAVIGATION COMPUTER",
+          "SOL / NAV",
           "HMD GAZE PROTOTYPE",
-          "Ship control remains on laptop",
-          "Look at CLOSE to return",
+          "FLIGHT: LAPTOP",
+          "LOOK AT CLOSE",
         ], {width: 1024, height: 600}),
         transparent: true, depthTest: false,
       }),
     )
-    this.helmetNavPanel.position.set(0, 0.12, -2.12)
+    // Comfortable phone SBS panel, not a giant full-screen desktop billboard.
+    this.helmetNavPanel.position.set(0, 0.07, -2.46)
     this.helmetNavPanel.renderOrder = 70
     framing.add(this.helmetNavPanel)
     this.helmetNavClose = new THREE.Mesh(
@@ -248,7 +250,7 @@ export class StereoSpaceView {
         transparent: true, depthTest: false,
       }),
     )
-    this.helmetNavClose.position.set(1.02, 0.71, -2.05)
+    this.helmetNavClose.position.set(0.70, 0.49, -2.40)
     this.helmetNavClose.renderOrder = 71
     framing.add(this.helmetNavClose)
     this.helmetNavRecenter = new THREE.Mesh(
@@ -258,7 +260,7 @@ export class StereoSpaceView {
         transparent: true, depthTest: false,
       }),
     )
-    this.helmetNavRecenter.position.set(-0.95, -0.55, -2.05)
+    this.helmetNavRecenter.position.set(-0.60, -0.36, -2.40)
     this.helmetNavRecenter.renderOrder = 71
     framing.add(this.helmetNavRecenter)
 
@@ -283,6 +285,18 @@ export class StereoSpaceView {
     this.gazeArc.position.set(0, 0, -1.65)
     this.gazeArc.renderOrder = 91
     this.camera.add(this.gazeArc)
+    // Display an actionable reason in SBS when orientation sensors are not
+    // usable. No such warning or gaze mesh appears in the Tauri cockpit.
+    this.helmetTrackingHint = new THREE.Mesh(
+      new THREE.PlaneGeometry(1.70, 0.29),
+      new THREE.MeshBasicMaterial({
+        map: cockpitLabel(["ENABLE HEAD TRACKING"], {width: 800, height: 138}),
+        transparent: true, depthTest: false, depthWrite: false,
+      }),
+    )
+    this.helmetTrackingHint.position.set(0, 0.88, -2.5)
+    this.helmetTrackingHint.renderOrder = 72
+    framing.add(this.helmetTrackingHint)
     this.setHelmetNavOpen(false)
     this.setHelmetHeadRotation(null)
   }
@@ -292,6 +306,7 @@ export class StereoSpaceView {
     // Reapply visibility even when enabling: initial construction hides
     // these physical meshes until the HMD explicitly opts into gaze mode.
     this.setHelmetNavOpen(this.helmetGazeEnabled && this.helmetNavOpen)
+    this.setHelmetHeadRotation(this.helmetHeadRotation)
     this.updateGazeFeedback({target: null, armed: false, progress: 0})
   }
 
@@ -301,20 +316,22 @@ export class StereoSpaceView {
       ? new THREE.Quaternion(quaternion.x, quaternion.y, quaternion.z,
         quaternion.w).normalize() : null
     if (this.gazeReticle) this.gazeReticle.visible =
-      this.helmetGazeEnabled && this.helmetHeadRotation !== null
+      Boolean(this.helmetGazeEnabled && this.helmetHeadRotation !== null)
+    if (this.helmetTrackingHint) this.helmetTrackingHint.visible =
+      Boolean(this.helmetGazeEnabled && this.helmetHeadRotation === null)
     if (!this.helmetHeadRotation && this.gazeArc) this.gazeArc.visible = false
   }
 
   setHelmetNavOpen(open) {
     this.helmetNavOpen = open === true
     if (this.navSwitch) this.navSwitch.visible =
-      this.helmetGazeEnabled && !this.helmetNavOpen
+      Boolean(this.helmetGazeEnabled && !this.helmetNavOpen)
     if (this.helmetNavPanel) this.helmetNavPanel.visible =
-      this.helmetGazeEnabled && this.helmetNavOpen
+      Boolean(this.helmetGazeEnabled && this.helmetNavOpen)
     if (this.helmetNavClose) this.helmetNavClose.visible =
-      this.helmetGazeEnabled && this.helmetNavOpen
+      Boolean(this.helmetGazeEnabled && this.helmetNavOpen)
     if (this.helmetNavRecenter) this.helmetNavRecenter.visible =
-      this.helmetGazeEnabled && this.helmetNavOpen
+      Boolean(this.helmetGazeEnabled && this.helmetNavOpen)
   }
 
   gazeTarget() {
