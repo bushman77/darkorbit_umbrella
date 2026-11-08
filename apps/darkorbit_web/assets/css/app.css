@@ -842,6 +842,10 @@ body {
 /* Phone HMD: HTML hidden state must win over Tailwind's .flex/.block display
    utilities or the setup overlay can cover both eye images permanently. */
 #helmet-client [hidden] { display: none !important; }
+
+/* Recovery must stay invisible during normal flight. Tailwind's .flex
+   display utility can override the browser's native [hidden] rule. */
+#pilot-respawn-panel[hidden] { display: none !important; }
 #helmet-client {
   height: 100vh;
   height: 100dvh;

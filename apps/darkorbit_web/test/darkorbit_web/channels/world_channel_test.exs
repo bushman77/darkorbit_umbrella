@@ -28,6 +28,76 @@ defmodule DarkorbitWeb.WorldChannelTest do
     :ok
   end
 
+  test "real Venus collision leads to authenticated Earth recovery and flight-ready rejoin" do
+    account = verified_player_account_fixture()
+    {:ok, auth} = authenticated_socket(account)
+    {:ok, _state, from_earth} =
+      subscribe_and_join(auth, WorldChannel, "world:1-1")
+
+    course = push(from_earth, "solar_set_course", %{"body_id" => "venus"})
+    assert_reply course, :ok, %{navigation: %{duration_ms: duration_ms}}
+    solar = Module.concat(SessionManager, Core.Universe.Navigation)
+
+    for _ <- 1..(ceil(duration_ms / 1_000) + 12) do
+      assert :ok = Core.Universe.Navigation.tick(solar)
+      {:ok, navigation} = Core.Universe.Navigation.snapshot(solar, account.id)
+      if navigation.pending_encounter do
+        assert {:ok, _} = Core.Universe.Navigation.resolve_encounter(
+          solar, account.id, navigation.pending_encounter.id, :continue)
+      end
+    end
+    assert_push "world_region_changed", %{map_id: "sol:venus"}
+    leave_and_wait(from_earth)
+
+    {:ok, auth} = authenticated_socket(account)
+    {:ok, _planet, cockpit} =
+      subscribe_and_join(auth, WorldChannel, "world:sol:venus")
+
+    # Move the actual map-owned ship next to the planet and thrust inward.
+    # The MapServer tick, not test injection, must cause the lethal damage.
+    assert [{pid, _}] = Registry.lookup(Core.World.Registry, {:world_map, "sol:venus"})
+    planet = Enum.find(Core.Universe.OrbitalEntry.planet_maps(),
+      &(&1.id == "sol:venus")).planet
+    :sys.replace_state(pid, fn state ->
+      ship = Map.fetch!(state.entities, account.id)
+      attitude = %{yaw: -:math.pi() / 2, pitch: 0.0, roll: 0.0}
+      position = %Core.World.Position{
+        x: planet.center.x + planet.exclusion_radius + 4.0,
+        y: planet.center.y, z: 0.0
+      }
+      updated = %{ship | position: position, attitude: attitude,
+        orientation: Core.World.Orientation.from_angles(attitude)}
+      %{state | entities: Map.put(state.entities, account.id, updated)}
+    end)
+
+    thrust = push(cockpit, "flight_controls", %{"mode" => "newtonian", "throttle" => 1.0})
+    assert_reply thrust, :ok, %{entity: %{kind: :player}}
+    assert {:ok, impact} = Core.World.tick("sol:venus")
+    assert Enum.find(impact.entities, &(&1.id == account.id)).status == :destroyed
+    assert_push "entity_destroyed",
+      %{entity: %{id: player_id, status: :destroyed},
+        reason: :planetary_collision, planet_id: "venus"}
+    assert player_id == account.id
+
+    respawn = push(cockpit, "respawn", %{"map_id" => "sol:pluto"})
+    assert_reply respawn, :ok, %{map_id: "1-1", location_id: "earth"}
+    assert :error = SessionManager.fetch_player(SessionManager, account.id)
+    leave_and_wait(cockpit)
+
+    {:ok, auth} = authenticated_socket(account)
+    {:ok, response, returned} =
+      subscribe_and_join(auth, WorldChannel, "world:1-1")
+    assert response.solar_navigation.location_id == "earth"
+    alive = Enum.find(response.map.entities, &(&1.id == account.id))
+    assert alive.status == :alive
+    assert alive.hull == response.player.stats.hit_points
+    assert alive.shields == response.player.stats.shields
+    refute response.solar_navigation.tactical_encounter
+    control = push(returned, "flight_controls", %{"throttle" => 0.25})
+    assert_reply control, :ok, %{entity: %{kind: :player}}
+    leave_and_wait(returned)
+  end
+
   test "death verification controls Earth respawn, not a client-selected destination" do
     account = verified_player_account_fixture()
     {:ok, socket} = authenticated_socket(account)

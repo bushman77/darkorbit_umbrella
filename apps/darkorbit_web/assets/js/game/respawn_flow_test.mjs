@@ -7,6 +7,11 @@ const markup = readFileSync(new URL(
   "../../../lib/darkorbit_web/controllers/game_html/show.html.heex", import.meta.url),
 "utf8")
 
+test("Tailwind flex utilities cannot unhide the death modal during normal flight", () => {
+  const css = readFileSync(new URL("../../css/app.css", import.meta.url), "utf8")
+  assert.match(css, /#pilot-respawn-panel\[hidden\]\s*\{\s*display:\s*none\s*!important/)
+})
+
 test("destroyed pilots get an actionable Earth recovery prompt, including after reconnect", () => {
   assert.match(markup, /id="pilot-respawn-panel"/)
   assert.match(markup, /id="pilot-respawn-button"/)

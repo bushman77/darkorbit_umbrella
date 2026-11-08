@@ -10,7 +10,8 @@ const document = nativeGameDocument(markup)
 test("standalone markup contains the real Atlas and 3D/SBS cockpit", () => {
   for (const id of ["game-client", "space-viewport-3d", "navigation-computer",
     "nav-solar-chart", "display-mode", "action-hotbar", "pilot-logout-form",
-    "nav-helmet-open", "helmet-panel", "helmet-host", "helmet-qr"]) {
+    "nav-helmet-open", "helmet-panel", "helmet-host", "helmet-qr",
+    "pilot-respawn-panel", "pilot-respawn-message", "pilot-respawn-button"]) {
     assert.match(document, new RegExp('id="' + id + '"'))
   }
   assert.match(document, /data-native-client="true"/)
@@ -18,6 +19,12 @@ test("standalone markup contains the real Atlas and 3D/SBS cockpit", () => {
   assert.match(document, /native_game.css/)
   assert.match(document, /native_bootstrap.mjs/)
   assert.match(document, /native-login-form/)
+})
+
+test("native game includes an initially hidden Earth recovery overlay", () => {
+  assert.match(markup, /id="pilot-respawn-panel" hidden/)
+  assert.match(markup, /RESPAWN AT EARTH/)
+  assert.match(markup, /id="pilot-respawn-button" type="button"/)
 })
 
 test("native renderer has exactly ten server-populated hotbar placeholders", () => {

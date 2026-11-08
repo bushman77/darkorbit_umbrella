@@ -913,6 +913,19 @@ Source: [Symbrella `symbolic_generation`](https://github.com/bushman77/Symbrella
 - [ ] Extend the same independent VR camera and gaze framework into ship and
   Green Starbase interiors after this prototype is validated.
 
+### Earth respawn recovery: native verification (2026-11-08)
+
+- [x] Authenticate respawn against a map-owned destroyed ship and restore its
+  durable hull/shields, voyage and Earth position; reject client teleport requests.
+- [x] Keep the death overlay included in installed Tauri markup and ensure it
+  cannot be revealed during normal flight by Tailwind display precedence.
+- [x] Add a whole-channel Venus-planet collision -> destroyed -> Earth reset ->
+  fresh authenticated cockpit join -> flight-command acceptance regression.
+- [ ] Run full ExUnit and JS/native test suites and manually playtest desktop
+  destruction, respawn, Earth return and paired SBS viewer continuity.
+- [ ] After live confirmation, proceed to Green Starbase Stage 6 services,
+  beginning with repair pricing and credit-backed settlement.
+
 ### Green Starbase Stage 4–7 — physical entry and launch (2026-11-08)
 
 - [x] Allow docking only for a live authenticated pilot at the SOL Green
