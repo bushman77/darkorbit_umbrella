@@ -56,6 +56,8 @@ defmodule Core.World.Supervisor do
         {SessionManager, name: sessions},
         {SolarNavigation, name: solar_navigation_server, event_sink: event_sink,
          auto_tick: auto_tick?, tick_ms: 1_000,
+         voyage_loader: Keyword.get(opts, :voyage_loader),
+         voyage_saver: Keyword.get(opts, :voyage_saver),
          # Shared traffic departs on the SOL clock even without connected pilots.
          # Course clicks (including named planets) never mint special ships.
          scheduled_trader_interval_ms: Keyword.get(opts,

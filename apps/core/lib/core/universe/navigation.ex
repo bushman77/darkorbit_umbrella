@@ -10,10 +10,9 @@ defmodule Core.Universe.Navigation do
   is connected; close passes are held against shared, server-owned vessels,
   with exclusive tactical leases and damage reconciliation on settlement.
 
-  Voyages and traffic persist within the supervised server runtime and
-  advance independently of player sessions. Database persistence across
-  restarts, live orbital positions and shared tactical arenas remain
-  future milestones. Never accept player_id from a browser payload.
+  Voyages advance independently of player sessions. The production supervisor
+  loads and checkpoints pilot voyages via a PostgreSQL adapter. Shared
+  commercial traffic remains runtime-owned. Never trust browser-supplied IDs.
   """
 
   use GenServer
@@ -22,6 +21,9 @@ defmodule Core.Universe.Navigation do
   # another combat choice immediately when a tactical encounter is settled.
   @post_encounter_clearance_ms 15_000
 
+  require Logger
+
+  alias Core.Universe.Navigation.Checkpoint
   alias Core.Universe.Sol
   alias Core.Universe.PlanetaryView
   alias Core.Universe.EncounterDirector
@@ -149,6 +151,9 @@ defmodule Core.Universe.Navigation do
 
     state = %{
       voyages: %{},
+      saved_voyages: %{},
+      voyage_loader: Keyword.get(opts, :voyage_loader),
+      voyage_saver: Keyword.get(opts, :voyage_saver),
       traffic: Keyword.get(opts, :traffic, Traffic.seed()),
       bases: Keyword.get(opts, :bases, SpaceBases.seed()),
       encountered: %{},
@@ -578,8 +583,16 @@ defmodule Core.Universe.Navigation do
     case Map.fetch(state.voyages, player_id) do
       {:ok, voyage} -> {voyage, state}
       :error ->
-        voyage = idle("earth")
-        {voyage, put_voyage(state, player_id, voyage)}
+        case load_checkpoint(state, player_id) do
+          {:ok, voyage} ->
+            {voyage, %{state |
+              voyages: Map.put(state.voyages, player_id, voyage),
+              saved_voyages: Map.put(state.saved_voyages, player_id, voyage)
+            }}
+          :new ->
+            voyage = idle("earth")
+            {voyage, put_voyage(state, player_id, voyage)}
+        end
     end
   end
 
@@ -607,8 +620,58 @@ defmodule Core.Universe.Navigation do
       voyage_number: voyage.voyage_number}
   end
 
-  defp put_voyage(state, player_id, voyage),
-    do: %{state | voyages: Map.put(state.voyages, player_id, voyage)}
+  @checkpoint_interval_ms 10_000
+  @checkpoint_changed_fields [
+    :status, :location_id, :origin_id, :destination_id, :arrival_origin_id,
+    :voyage_number, :free_flight
+  ]
+
+  defp load_checkpoint(%{voyage_loader: nil}, _player_id), do: :new
+  defp load_checkpoint(%{voyage_loader: loader}, player_id) do
+    case loader.(player_id) do
+      nil -> :new
+      data ->
+        case Checkpoint.load(data) do
+          {:ok, voyage} -> {:ok, voyage}
+          {:error, reason} ->
+            # Fail closed: a damaged checkpoint must not teleport an
+            # established pilot to Earth on reconnect.
+            raise "Invalid stored SOL location for pilot #{player_id}: #{inspect(reason)}"
+        end
+    end
+  end
+
+  defp put_voyage(state, player_id, voyage) do
+    state = %{state | voyages: Map.put(state.voyages, player_id, voyage)}
+    saved = Map.get(state.saved_voyages, player_id)
+    if is_function(state.voyage_saver, 2) and checkpoint_due?(saved, voyage) do
+      # No SQL I/O in the 100 ms tactical physics tick. SOL travel writes
+      # at a maximum of once per ten seconds, plus explicit state changes.
+      try do
+        case state.voyage_saver.(player_id, Checkpoint.dump(voyage)) do
+          :ok -> %{state | saved_voyages: Map.put(state.saved_voyages, player_id, voyage)}
+          {:error, reason} ->
+            Logger.warning("SOL location checkpoint failed: #{inspect(reason)}")
+            state
+        end
+      rescue
+        error ->
+          Logger.warning("SOL checkpoint unavailable: " <> Exception.message(error))
+          state
+      end
+    else
+      state
+    end
+  end
+
+  defp checkpoint_due?(nil, _voyage), do: true
+  defp checkpoint_due?(saved, voyage) do
+    Enum.any?(@checkpoint_changed_fields, fn key ->
+      Map.get(saved, key) != Map.get(voyage, key)
+    end) or
+      (voyage.status == :traveling and
+        abs(voyage.elapsed_ms - saved.elapsed_ms) >= @checkpoint_interval_ms)
+  end
 
   defp advance(state) do
     old_traffic = state.traffic

@@ -5,6 +5,7 @@ on:
     branches: [native_client]
     paths:
       - "apps/core/lib/core/universe/navigation.ex"
+      - "apps/core/lib/core/universe/navigation/checkpoint.ex"
       - "apps/core/lib/core/universe/trade_lanes.ex"
       - "apps/core/lib/core/universe/traffic.ex"
       - "apps/core/lib/core/factions.ex"

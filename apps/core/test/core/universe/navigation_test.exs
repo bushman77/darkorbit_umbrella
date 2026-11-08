@@ -24,6 +24,53 @@ defmodule Core.Universe.NavigationTest do
     end
   end
 
+  test "a rebooted Navigation process restores the same planet and SOL voyage" do
+    {:ok, store} = Agent.start_link(fn -> %{} end)
+    loader = fn pilot -> Agent.get(store, &Map.get(&1, pilot)) end
+    saver = fn pilot, checkpoint ->
+      Agent.update(store, &Map.put(&1, pilot, checkpoint))
+      :ok
+    end
+    base = [auto_tick: false, tick_ms: 1_000,
+      procedural_contact_chance: 0.0, voyage_loader: loader,
+      voyage_saver: saver, event_sink: fn _, _, _ -> :ok end]
+
+    name1 = :"#{__MODULE__}.P1#{System.unique_integer([:positive])}"
+    start_supervised!(%{id: name1, start: {Navigation, :start_link, [[name: name1] ++ base]}})
+    assert {:ok, _} = Navigation.set_course(name1, 4901, "venus")
+    for _ <- 1..11, do: assert(:ok = Navigation.tick(name1))
+    assert {:ok, traveling} = Navigation.snapshot(name1, 4901)
+    assert traveling.status == :traveling
+
+    name2 = :"#{__MODULE__}.P2#{System.unique_integer([:positive])}"
+    start_supervised!(%{id: name2, start: {Navigation, :start_link, [[name: name2] ++ base]}})
+    assert {:ok, restored} = Navigation.snapshot(name2, 4901)
+    assert restored.destination_id == "venus"
+    assert restored.elapsed_ms >= 10_000
+    assert restored.voyage_number == traveling.voyage_number
+    assert {:ok, %{location_id: "earth"}} = Navigation.snapshot(name2, 4902)
+
+    for _ <- 1..(div(traveling.duration_ms, 1_000) + 2) do
+      assert :ok = Navigation.tick(name1)
+      {:ok, nav} = Navigation.snapshot(name1, 4901)
+      if nav.pending_encounter do
+        assert {:ok, _} =
+          Navigation.resolve_encounter(name1, 4901, nav.pending_encounter.id, :continue)
+      end
+    end
+    assert {:ok, %{status: :idle, location_id: "venus", voyage_number: voyage}} =
+      Navigation.snapshot(name1, 4901)
+
+    name3 = :"#{__MODULE__}.P3#{System.unique_integer([:positive])}"
+    start_supervised!(%{id: name3, start: {Navigation, :start_link, [[name: name3] ++ base]}})
+    assert {:ok, resumed} = Navigation.snapshot(name3, 4901)
+    assert resumed.location_id == "venus"
+    assert resumed.voyage_number == voyage
+    assert resumed.arrival_origin_id == "earth"
+    assert {:error, :invalid_checkpoint} =
+      Core.Universe.Navigation.Checkpoint.load(%{"version" => 1, "status" => "idle"})
+  end
+
   test "scheduled merchant traffic exists without players and waypoint clicks do not spawn ships" do
     name = :"#{__MODULE__}.Shipping#{System.unique_integer([:positive])}"
     start_supervised!(%{

@@ -1828,6 +1828,8 @@ defmodule Core.World.MapServer do
     %{
       player_id: ship.player_id,
       ship_instance_id: ship.ship_instance_id,
+      position: ship.position,
+      attitude: ship.attitude,
       combat: player_combat_condition(ship)
     }
   end
