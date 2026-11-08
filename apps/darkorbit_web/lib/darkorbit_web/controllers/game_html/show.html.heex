@@ -17,6 +17,34 @@
 
   <canvas id="space-viewport-3d" class="pointer-events-none absolute inset-0 size-full" aria-hidden="true"></canvas>
 
+  <%!-- Green Starbase bay access. Server validates the physical approach;
+       this display never provides positional authority. --%>
+  <div id="starbase-docking-prompt" style="display: none"
+       class="absolute bottom-40 left-1/2 z-[65] w-72 -translate-x-1/2 rounded-xl border border-emerald-400/60 bg-slate-950/95 p-3 text-center font-mono shadow-2xl">
+    <p class="text-xs font-bold tracking-wider text-emerald-300">GREEN STARBASE · OPEN BAY</p>
+    <p class="my-2 text-xs text-slate-300">Enter the illuminated central hangar and stop completely.</p>
+    <button id="starbase-dock" type="button" class="nav-button nav-primary w-full">Request docking</button>
+    <p id="starbase-dock-feedback" role="status" aria-live="polite" class="mt-2 text-xs text-emerald-200">Docking available inside bay at low speed.</p>
+  </div>
+
+  <section id="starbase-docked-panel" style="display: none" role="dialog"
+           aria-modal="true" aria-labelledby="starbase-docked-title"
+           class="absolute inset-0 z-[100] place-items-center bg-[#030c08]/95 p-6">
+    <div class="w-full max-w-xl rounded-2xl border border-emerald-500/55 bg-slate-950 p-7 font-mono shadow-2xl">
+      <div class="mb-4 text-xs font-semibold tracking-[0.25em] text-emerald-400">SPACE NOVA / STATION INTERIOR</div>
+      <h2 id="starbase-docked-title" class="text-2xl font-bold tracking-wide text-emerald-200">GREEN STARBASE</h2>
+      <p class="mt-2 text-sm text-slate-300">Docking clamps engaged. Your ship is secured inside the station and removed from active flight.</p>
+      <div class="mt-7 grid grid-cols-2 gap-3">
+        <div class="rounded-lg border border-emerald-700/40 p-4 text-center text-sm text-slate-400">Ship repairs <span class="block text-xs">Coming soon</span></div>
+        <div class="rounded-lg border border-emerald-700/40 p-4 text-center text-sm text-slate-400">Equipment &amp; resupply <span class="block text-xs">Coming soon</span></div>
+        <div class="rounded-lg border border-emerald-700/40 p-4 text-center text-sm text-slate-400">Station trading <span class="block text-xs">Coming soon</span></div>
+        <div class="rounded-lg border border-emerald-700/40 p-4 text-center text-sm text-slate-400">Missions <span class="block text-xs">Coming soon</span></div>
+      </div>
+      <p id="starbase-launch-feedback" role="status" aria-live="polite" class="mt-6 text-xs text-emerald-300">Ready for departure.</p>
+      <button id="starbase-launch" type="button" class="nav-button nav-primary mt-3 w-full">Launch from Green Starbase</button>
+    </div>
+  </section>
+
   <%!-- Encounter decisions are authoritative and survive reconnection.
        SBS repeats each panel per eye to avoid an uncomfortable binocular overlay. --%>
   <section id="solar-encounter-panel" hidden role="dialog" aria-modal="true"
