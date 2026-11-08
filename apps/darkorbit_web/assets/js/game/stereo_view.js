@@ -289,7 +289,9 @@ export class StereoSpaceView {
 
   setHelmetGazeEnabled(enabled) {
     this.helmetGazeEnabled = enabled === true
-    if (!this.helmetGazeEnabled) this.setHelmetNavOpen(false)
+    // Reapply visibility even when enabling: initial construction hides
+    // these physical meshes until the HMD explicitly opts into gaze mode.
+    this.setHelmetNavOpen(this.helmetGazeEnabled && this.helmetNavOpen)
     this.updateGazeFeedback({target: null, armed: false, progress: 0})
   }
 
