@@ -95,6 +95,7 @@ class SpaceClient {
     this.beams = []
     this.lastLaserFeedback = null
     this.lastFrame = performance.now()
+    this.docked = false
   }
 
   inSystemCruise() {
@@ -121,7 +122,7 @@ class SpaceClient {
       getDestination: () => this.commandDestination,
     }).start()
     this.flightControls = new FlightControls({
-      active: () => !this.navComputer?.isOpen && !this.inSystemCruise() &&
+      active: () => !this.docked && !this.navComputer?.isOpen && !this.inSystemCruise() &&
         this.channel?.state === "joined" &&
         this.entities.get(this.selfId)?.status !== "destroyed",
       send: input => this.sendFlightControls(input),
@@ -326,7 +327,7 @@ class SpaceClient {
       if (!this.navComputer?.isOpen) event.preventDefault()
     })
     this.spaceLaser = new SpaceLaserTrigger({
-      active: () => !this.navComputer?.isOpen && !this.inSystemCruise() &&
+      active: () => !this.docked && !this.navComputer?.isOpen && !this.inSystemCruise() &&
         this.channel?.state === "joined" &&
         this.entities.get(this.selfId)?.status !== "destroyed",
       worldTick: () => this.worldTick,
@@ -347,6 +348,10 @@ class SpaceClient {
     // Atlas can safely own focus even before the world socket joins.
     // Closing it hands focus back to the existing 3D / SBS cockpit.
     this.navComputer.open()
+    this.root.querySelector("#starbase-dock")?.addEventListener("click",
+      () => this.requestStarbaseDock())
+    this.root.querySelector("#starbase-launch")?.addEventListener("click",
+      () => this.launchFromStarbase())
     this.connect()
     requestAnimationFrame(time => this.frame(time))
   }
@@ -455,6 +460,12 @@ class SpaceClient {
         if (event.entity) this.upsertEntity(event.entity, true)
       }
     })
+    channel.on("station_docked", event => {
+      if (entityKey(event.entity_id) === this.selfId) this.setDocked(true)
+    })
+    channel.on("station_launched", event => {
+      if (entityKey(event.entity_id) === this.selfId) this.setDocked(false)
+    })
     channel.onError(() => {
       if (this.channel === channel) this.setConnection("Sector channel lost", "error")
     })
@@ -555,6 +566,8 @@ class SpaceClient {
     for (const entity of response.map.entities) this.upsertEntity(entity, true)
     this.applyPlanetaryWarning(ownPlanetaryWarning(response.map, this.selfId))
     this.applyStationWarning(ownStationWarning(response.map, this.selfId))
+    this.setDocked(Boolean(response.map.docked_pilots?.some(id =>
+      entityKey(id) === this.selfId)))
     this.syncOwnCombatState()
 
     this.flightControls.resetThrottle()
@@ -606,6 +619,9 @@ class SpaceClient {
 
     this.applyPlanetaryWarning(ownPlanetaryWarning(state, this.selfId))
     this.applyStationWarning(ownStationWarning(state, this.selfId))
+    if (Array.isArray(state.docked_pilots)) {
+      this.setDocked(state.docked_pilots.some(id => entityKey(id) === this.selfId))
+    }
     this.syncOwnCombatState()
     this.updateCombatHud()
     this.showSolarTactical()
@@ -1296,6 +1312,61 @@ class SpaceClient {
     this.planetaryWarningPlanet = nextPlanet
   }
 
+  requestStarbaseDock() {
+    if (this.docked || this.channel?.state !== "joined") return
+    const feedback = this.root.querySelector("#starbase-dock-feedback")
+    if (feedback) feedback.textContent = "Requesting docking clearance…"
+    this.channel.push("station_dock", {}, 5000)
+      .receive("ok", () => this.setDocked(true))
+      .receive("error", response => {
+        const messages = {
+          outside_docking_bay: "Enter the glowing hangar opening before docking.",
+          stop_navigation_first: "Cancel local autopilot before docking.",
+          reduce_speed_to_dock: "Stop your ship and reduce throttle to zero.",
+          disengage_combat_first: "Disengage weapons before docking.",
+          not_at_starbase: "You must arrive at Green Starbase's actual SOL position.",
+          ship_destroyed: "Destroyed ships cannot dock.",
+        }
+        if (feedback) feedback.textContent =
+          messages[response.reason] || "Docking rejected: " + response.reason
+      })
+      .receive("timeout", () => {
+        if (feedback) feedback.textContent = "Docking request timed out."
+      })
+  }
+
+  launchFromStarbase() {
+    if (!this.docked || this.channel?.state !== "joined") return
+    const feedback = this.root.querySelector("#starbase-launch-feedback")
+    if (feedback) feedback.textContent = "Opening launch corridor…"
+    this.channel.push("station_launch", {}, 5000)
+      .receive("ok", response => {
+        if (response.entity) this.upsertEntity(response.entity, true)
+        this.setDocked(false)
+        this.setCombatMessage("GREEN STARBASE · LAUNCH COMPLETE")
+      })
+      .receive("error", response => {
+        if (feedback) feedback.textContent = "Launch rejected: " + response.reason
+      })
+      .receive("timeout", () => {
+        if (feedback) feedback.textContent = "Launch request timed out."
+      })
+  }
+
+  setDocked(docked) {
+    this.docked = Boolean(docked)
+    const panel = this.root.querySelector("#starbase-docked-panel")
+    if (panel) panel.style.display = this.docked ? "grid" : "none"
+    const prompt = this.root.querySelector("#starbase-docking-prompt")
+    if (this.docked) {
+      if (prompt) prompt.style.display = "none"
+      this.exitMouseSteering({silent: true})
+      this.flightControls?.release({silent: true})
+      this.spaceLaser?.release()
+      this.navigation?.cancel()
+    }
+  }
+
   applyStationWarning(warning, {announce = true} = {}) {
     const view = stationWarningView(warning)
     const nextLevel = view?.level || "clear"
@@ -1317,6 +1388,10 @@ class SpaceClient {
       announcement.textContent = view?.announcement || "Station clearance restored."
     }
     this.stationWarningLevel = nextLevel
+    const prompt = this.root.querySelector("#starbase-docking-prompt")
+    if (prompt) prompt.style.display =
+      !this.docked && warning?.station_id === "sol:starbase:green" &&
+      nextLevel === "approach" ? "block" : "none"
   }
 
   entityDestroyed(destruction) {
