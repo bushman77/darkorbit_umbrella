@@ -21,6 +21,12 @@ fn route_allowed(route: &str) -> bool {
     )
 }
 
+// Tauri's local-only permission controls origin. This is a separate
+// defense-in-depth check for which window is invoking the command.
+fn main_window_allowed(label: &str) -> bool {
+    label == "main"
+}
+
 #[tauri::command]
 pub async fn native_loopback_post(
     window: WebviewWindow,
@@ -28,7 +34,13 @@ pub async fn native_loopback_post(
     payload: serde_json::Value,
     bearer: Option<String>,
 ) -> Result<NativeJsonResponse, String> {
-    super::network::require_local(&window)?;
+    // The command's Tauri capability is local-only and excludes remote origins.
+    // Do not reuse network::require_local here: that launcher-settings check
+    // rejects the local game.html document on some WebKitGTK installations.
+    // Still restrict this bridge to the application's single main webview.
+    if !main_window_allowed(window.label()) {
+        return Err("Native loopback requests require the Space Nova main window.".into());
+    }
     if !route_allowed(&route) {
         return Err("Native request route is not permitted.".into());
     }
@@ -81,7 +93,15 @@ pub async fn native_loopback_post(
 
 #[cfg(test)]
 mod tests {
-    use super::route_allowed;
+    use super::{main_window_allowed, route_allowed};
+
+    #[test]
+    fn bridge_requires_the_main_application_window() {
+        assert!(main_window_allowed("main"));
+        assert!(!main_window_allowed("remote"));
+        assert!(!main_window_allowed("popup"));
+        assert!(!main_window_allowed(""));
+    }
 
     #[test]
     fn only_four_native_json_routes_are_whitelisted() {
