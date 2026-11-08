@@ -11,6 +11,7 @@ import {helmetPlanetaryNavigation} from "./helmet_planetary_navigation.mjs"
 import {HelmetScreenWake} from "./helmet_screen_wake.mjs"
 import {HelmetHeadTracking} from "./helmet_head_tracking.mjs"
 import {HelmetGazeDwell} from "./helmet_gaze_dwell.mjs"
+import {headsetScreenTapRecenterAllowed} from "./helmet_screen_recenter.mjs"
 
 const STORAGE_KEY = "darkorbit:pilot_hmd_credential"
 const GAP_KEY = "darkorbit:pilot_hmd_eye_gap"
@@ -57,6 +58,7 @@ export class HelmetClient {
     })
     this.running = false
     this.frameCount = 0
+    this.lastScreenRecenterAt = -Infinity
   }
 
   async start() {
@@ -266,6 +268,29 @@ export class HelmetClient {
     const hint = this.root.querySelector("#helmet-fullscreen-hint")
     const fullscreen = this.root.querySelector("#helmet-fullscreen")
     const windowed = this.root.querySelector("#helmet-windowed")
+
+    // The mechanical VR button presses the phone display like a finger.
+    // Capture touchscreen/pen presses at the root so an encounter overlay
+    // cannot block the button. Click also supports synthesized tap-only
+    // browsers. Debounce their two event paths into one recenter action.
+    const recenterFromScreenTap = event => {
+      if (event.type === "pointerdown" &&
+          event.pointerType !== "touch" && event.pointerType !== "pen") return
+      if (!headsetScreenTapRecenterAllowed({
+        mode: this.mode,
+        immersiveReady: this.immersiveReady,
+        running: this.running,
+        setupVisible: !setup?.hidden,
+        target: event.target,
+      })) return
+      const now = performance.now()
+      if (now - this.lastScreenRecenterAt < 400) return
+      this.lastScreenRecenterAt = now
+      this.recenterFromPilot()
+    }
+    this.root.addEventListener("pointerdown", recenterFromScreenTap, true)
+    this.root.addEventListener("click", recenterFromScreenTap, true)
+
     // Dedicated gesture ensures sensor permission and fullscreen each get
     // their own user activation on restrictive mobile browsers.
     this.root.querySelector("#helmet-enable-tracking")?.addEventListener(
