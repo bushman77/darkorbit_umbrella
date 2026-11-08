@@ -48,7 +48,9 @@ export class StationWalkingControls {
   flushLook(now) {
     if (Math.abs(this.pendingLook) < 0.00001) return
     const delta = Math.max(-0.35, Math.min(0.35, this.pendingLook))
-    this.pendingLook -= delta
+    // Discard any excess instead of replaying old mouse motion on future
+    // frames. The camera stops as soon as the pointer stops moving.
+    this.pendingLook = 0
     this.lastLookAt = now
     this.sendLook({delta_yaw: delta})
   }

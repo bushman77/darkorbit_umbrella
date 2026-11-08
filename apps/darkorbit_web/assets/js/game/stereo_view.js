@@ -126,6 +126,8 @@ export class StereoSpaceView {
     this.hangarScene.background = new THREE.Color(0x03140e)
     this.hangar = new GreenStarbaseInterior(THREE, this.hangarScene)
     this.interiorActive = false
+    this.stationViewPose = null
+    this.stationLastFrameAt = null
     this.encounterShip = new EncounterShipVisual(THREE, this.scene)
     // These must be initialized BEFORE addCockpit builds the VR meshes:
     // Three.js treats visible=undefined as visible, not hidden.
@@ -668,16 +670,31 @@ export class StereoSpaceView {
       // The headset still adds its own local, recentered head quaternion.
       if (this.camera.parent !== this.hangarScene) this.hangarScene.add(this.camera)
       const position = client.stationPosition
-      const x = Number.isFinite(position?.x) ? position.x : 0
-      const z = Number.isFinite(position?.z) ? position.z : 43
-      const yaw = Number.isFinite(position?.yaw) ? position.yaw : 0
-      this.camera.position.set(x, 2.6, z)
+      const targetX = Number.isFinite(position?.x) ? position.x : 0
+      const targetZ = Number.isFinite(position?.z) ? position.z : 43
+      const targetYaw = Number.isFinite(position?.yaw) ? position.yaw : 0
+      if (!this.stationViewPose) {
+        this.stationViewPose = {x: targetX, z: targetZ, yaw: targetYaw}
+      } else {
+        const dt = this.stationLastFrameAt == null ? 0 :
+          Math.max(0, Math.min(100, time - this.stationLastFrameAt))
+        const blend = 1 - Math.exp(-dt / 75)
+        this.stationViewPose.x += (targetX - this.stationViewPose.x) * blend
+        this.stationViewPose.z += (targetZ - this.stationViewPose.z) * blend
+        // Shortest angular rotation: no snap when yaw wraps past 180 degrees.
+        const diff = Math.atan2(Math.sin(targetYaw - this.stationViewPose.yaw),
+          Math.cos(targetYaw - this.stationViewPose.yaw))
+        this.stationViewPose.yaw += diff * blend
+      }
+      this.stationLastFrameAt = time
+      this.camera.position.set(this.stationViewPose.x, 2.6, this.stationViewPose.z)
       this.camera.up.set(0, 1, 0)
-      // The person's viewpoint moves, while the real ship stays parked.
-      // Head tracking then adds a local quaternion for the SBS phone only.
-      this.camera.rotation.set(0, -yaw, 0, "YXZ")
+      // Only the person's camera moves. HMD head rotation applies below.
+      this.camera.rotation.set(0, -this.stationViewPose.yaw, 0, "YXZ")
       this.camera.updateMatrixWorld(true)
     } else {
+      this.stationViewPose = null
+      this.stationLastFrameAt = null
       if (this.camera.parent !== this.scene) this.scene.add(this.camera)
       this.setCamera(ownShip)
       // Ship-fixed cockpit surfaces stay separate from headset head motion.

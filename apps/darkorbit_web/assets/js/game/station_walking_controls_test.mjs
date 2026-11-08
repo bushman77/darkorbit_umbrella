@@ -36,7 +36,7 @@ test("mouse look sends bounded yaw increments, not coordinates", () => {
   controls.pendingLook = 0.9
   controls.flushLook(100)
   assert.equal(turns[0].delta_yaw, 0.35)
-  assert.ok(controls.pendingLook > 0.5)
+  assert.equal(controls.pendingLook, 0)
   controls.flushLook(200)
-  assert.equal(turns[1].delta_yaw, 0.35)
+  assert.equal(turns.length, 1)
 })

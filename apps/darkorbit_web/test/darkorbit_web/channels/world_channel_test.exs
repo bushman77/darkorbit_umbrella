@@ -141,6 +141,24 @@ defmodule DarkorbitWeb.WorldChannelTest do
     leave_and_wait(fresh)
   end
 
+  test "station walking is refused before a pilot has physically docked" do
+    account = verified_player_account_fixture()
+    {:ok, socket} = authenticated_socket(account)
+    {:ok, _reply, joined} =
+      subscribe_and_join(socket, WorldChannel, "world:1-1")
+
+    ref = push(joined, "station_walk", %{
+      "forward" => 1.0, "strafe" => 0.0, "turn" => 0.0,
+      "position" => %{"x" => 999_999, "z" => -999_999}
+    })
+    assert_reply ref, :error, %{reason: "not_docked"}
+
+    look = push(joined, "station_look", %{"delta_yaw" => 0.1})
+    assert_reply look, :error, %{reason: "not_docked"}
+
+    leave_and_wait(joined)
+  end
+
   test "socket authentication rejects missing, tampered, and stale credentials" do
     account = verified_player_account_fixture()
     token = GameAuth.socket_token(account)

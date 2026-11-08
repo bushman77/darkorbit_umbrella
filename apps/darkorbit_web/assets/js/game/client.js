@@ -320,6 +320,7 @@ class SpaceClient {
       solarResumeCruise: done => this.solarResumeCruise(done),
       solarHail: (contactId, done) => this.solarHail(contactId, done),
       onOpen: () => {
+        this.stationWalking?.release()
         this.exitMouseSteering({silent: true})
         this.helmet?.setCombat(false)
         this.navigation?.cancel()
