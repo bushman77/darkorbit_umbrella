@@ -165,14 +165,14 @@ defmodule Core.World.GreenStarbaseSafety do
       {_gap, normal} =
         planes
         |> Enum.map(fn {normal, limit} ->
-          {(limit - dot(normal, start)) / length(normal), normal}
+          {(limit - dot(normal, start)) / vector_length(normal), normal}
         end)
         |> Enum.min_by(&elem(&1, 0))
       push_out = @collision_separation_scene +
         max(0.0, Enum.min(Enum.map(planes, fn {n, d} ->
-          (d - dot(n, start)) / length(n)
+          (d - dot(n, start)) / vector_length(n)
         end)))
-      {0.0, add(start, multiply(normal, push_out / length(normal)))}
+      {0.0, add(start, multiply(normal, push_out / vector_length(normal)))}
     else
       delta = subtract(finish, start)
       case Enum.reduce_while(planes, {0.0, 1.0, nil},
@@ -203,7 +203,7 @@ defmodule Core.World.GreenStarbaseSafety do
           # inflict repeated contact damage.
           {max(0.0, t),
            add(impact, multiply(normal,
-             @collision_separation_scene / length(normal)))}
+             @collision_separation_scene / vector_length(normal)))}
         _ -> nil
       end
     end
@@ -228,7 +228,7 @@ defmodule Core.World.GreenStarbaseSafety do
   defp subtract({ax, ay, az}, {bx, by, bz}), do: {ax-bx, ay-by, az-bz}
   defp add({ax, ay, az}, {bx, by, bz}), do: {ax+bx, ay+by, az+bz}
   defp multiply({x, y, z}, s), do: {x*s, y*s, z*s}
-  defp length({x, y, z}), do: :math.sqrt(x*x + y*y + z*z)
+  defp vector_length({x, y, z}), do: :math.sqrt(x*x + y*y + z*z)
   defp distance(a, b) do
     dx = a.x - b.x
     dy = a.y - b.y
