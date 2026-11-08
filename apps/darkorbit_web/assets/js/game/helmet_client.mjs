@@ -9,6 +9,8 @@ import {renderHelmetEncounter} from "./helmet_encounter_view.mjs"
 import {renderHelmetSurrender, helmetSurrenderFromEntities} from "./helmet_surrender_view.mjs"
 import {helmetPlanetaryNavigation} from "./helmet_planetary_navigation.mjs"
 import {HelmetScreenWake} from "./helmet_screen_wake.mjs"
+import {HelmetHeadTracking} from "./helmet_head_tracking.mjs"
+import {HelmetGazeDwell} from "./helmet_gaze_dwell.mjs"
 
 const STORAGE_KEY = "darkorbit:pilot_hmd_credential"
 const GAP_KEY = "darkorbit:pilot_hmd_eye_gap"
@@ -17,7 +19,8 @@ const CALIBRATION_DIRTY_KEY = "darkorbit:pilot_hmd_calibration_unsynced"
 const CALIBRATION_SAVE_DELAY_MS = 350
 const key = value => String(value)
 
-// Display-only companion. Never joins WorldChannel or sends flight commands.
+// Read-only Phoenix companion. Head tracking and navigation gaze act only on
+// locally rendered headset UI; no server flight/combat commands are sent.
 export class HelmetClient {
   constructor(root) {
     this.root = root
@@ -48,6 +51,10 @@ export class HelmetClient {
     this.navComputer = {solarNavigation: {planetary_view: null}}
     this.orbitalBase = null
     this.screenWake = new HelmetScreenWake()
+    this.gaze = new HelmetGazeDwell()
+    this.headTracking = new HelmetHeadTracking({
+      onStatus: status => this.showHeadTrackingStatus(status),
+    })
     this.running = false
     this.frameCount = 0
   }
@@ -150,6 +157,8 @@ export class HelmetClient {
     document.addEventListener("visibilitychange", () => {
       this.screenWake.onVisibilityChange()
       if (document.hidden) {
+        this.gaze.reset()
+        this.view?.setHelmetHeadRotation(null)
         // Best-effort write before the OS backgrounds the browser.
         this.persistCalibration()
         this.running = false
@@ -161,6 +170,7 @@ export class HelmetClient {
     window.addEventListener("pagehide", () => {
       this.persistCalibration()
       this.screenWake.disable()
+      this.headTracking.stop()
     })
     window.addEventListener("pageshow", () => {
       if (this.immersiveReady) this.screenWake.enable()
@@ -252,6 +262,17 @@ export class HelmetClient {
     const hint = this.root.querySelector("#helmet-fullscreen-hint")
     const fullscreen = this.root.querySelector("#helmet-fullscreen")
     const windowed = this.root.querySelector("#helmet-windowed")
+    // Dedicated gesture ensures sensor permission and fullscreen each get
+    // their own user activation on restrictive mobile browsers.
+    this.root.querySelector("#helmet-enable-tracking")?.addEventListener(
+      "click", () => this.headTracking.startFromGesture())
+    this.root.querySelector("#helmet-recenter-tracking")?.addEventListener(
+      "click", () => {
+        if (this.headTracking.recenter()) {
+          this.showHeadTrackingStatus("recentered")
+          this.gaze.reset()
+        }
+      })
     fullscreen?.addEventListener("click", async () => {
       if (!this.root.requestFullscreen) {
         if (hint) hint.textContent = "Fullscreen is unavailable in this browser. Try Chrome or Samsung Internet, or continue windowed."
@@ -425,6 +446,8 @@ export class HelmetClient {
       try {
         this.view = new StereoSpaceView(this.canvas)
         this.view.setMode("sbs")
+        this.view.setHelmetGazeEnabled(true)
+        this.view.onHelmetGaze = (target, time) => this.updateHelmetGaze(target, time)
         this.applyAlignment()
       } catch (_error) {
         this.message("This phone's browser could not initialize WebGL.")
@@ -440,6 +463,9 @@ export class HelmetClient {
   }
 
   stop() {
+    this.gaze.reset()
+    this.view?.setHelmetHeadRotation(null)
+    this.view?.setHelmetNavOpen(false)
     this.running = false
     this.frameCount = 0
     renderHelmetEncounter(this.encounterNode, null)
@@ -527,6 +553,7 @@ export class HelmetClient {
     if (!this.running || this.mode !== "combat" || document.hidden) return
     try {
       this.beams = this.beams.filter(beam => beam.expiresAt > time)
+      this.view.setHelmetHeadRotation(this.headTracking.rotation(time))
       this.view.render(this, time)
       this.frameCount++
       if (this.frameCount === 1) this.report(true)
@@ -536,6 +563,41 @@ export class HelmetClient {
       return
     }
     requestAnimationFrame(next => this.frame(next))
+  }
+
+  updateHelmetGaze(target, time) {
+    const enabled = this.running && this.immersiveReady &&
+      !document.hidden && this.headTracking.ready(time)
+    const update = this.gaze.update(target, time, enabled)
+    this.view?.updateGazeFeedback(update)
+    if (update.activated === "nav_open") {
+      this.view?.setHelmetNavOpen(true)
+      this.gaze.reset()
+    } else if (update.activated === "nav_close") {
+      this.view?.setHelmetNavOpen(false)
+      this.gaze.reset()
+    } else if (update.activated === "recenter") {
+      if (this.headTracking.recenter()) {
+        this.gaze.reset()
+        // The new head-neutral orientation will apply on the next frame.
+        this.showHeadTrackingStatus("recentered")
+      }
+    }
+  }
+
+  showHeadTrackingStatus(status) {
+    const label = this.root.querySelector("#helmet-tracking-status")
+    if (!label) return
+    const descriptions = {
+      off: "Head tracking disabled; SBS remains available.",
+      waiting: "Motion sensor enabled. Move the phone gently to calibrate.",
+      tracking: "Head tracking active. Face forward when entering VR.",
+      recentered: "Head direction recalibrated.",
+      denied: "Motion sensor permission denied; SBS remains available.",
+      unsupported: "This browser does not expose orientation sensors.",
+      "https-required": "Head tracking needs HTTPS on the phone. SBS still works on HTTP.",
+    }
+    label.textContent = descriptions[status] || "Head tracking unavailable."
   }
 
   report(rendering) {
