@@ -138,6 +138,18 @@ defmodule Core.Universe.Navigation do
     GenServer.call(server, {:hail, player_id, contact_id})
   end
 
+  @doc """
+  Hold the exact server-owned SOL location while a pilot is logged out.
+  Unlike an NPC, an absent player's cruise is paused until reconnect.
+  The hold is committed to PostgreSQL before acknowledging disconnect.
+  """
+  def pause_for_logout(server, player_id) when is_integer(player_id) and player_id > 0,
+    do: GenServer.call(server, {:logout_pause, player_id})
+
+  @doc "Resume the same voyage only after an authenticated world join succeeds."
+  def resume_after_login(server, player_id) when is_integer(player_id) and player_id > 0,
+    do: GenServer.call(server, {:login_resume, player_id})
+
   @doc "Deterministic server test hook; never exposed to client channels."
   @spec tick(GenServer.server()) :: :ok
   def tick(server), do: GenServer.call(server, :tick)
@@ -183,6 +195,28 @@ defmodule Core.Universe.Navigation do
   end
 
   @impl true
+  def handle_call({:logout_pause, player_id}, _from, state) do
+    {voyage, state} = ensure_player(state, player_id)
+    if voyage.tactical_encounter do
+      {:reply, {:error, :tactical_cleanup_pending}, state}
+    else
+      updated = Map.put(voyage, :logout_paused, true)
+      case persist_connection_change(state, player_id, updated) do
+        {:ok, state} -> {:reply, :ok, state}
+        {:error, error} -> {:reply, {:error, error}, state}
+      end
+    end
+  end
+
+  def handle_call({:login_resume, player_id}, _from, state) do
+    {voyage, state} = ensure_player(state, player_id)
+    updated = Map.put(voyage, :logout_paused, false)
+    case persist_connection_change(state, player_id, updated) do
+      {:ok, state} -> {:reply, :ok, state}
+      {:error, error} -> {:reply, {:error, error}, state}
+    end
+  end
+
   def handle_call({:snapshot, player_id}, _from, state) do
     {voyage, state} = ensure_player(state, player_id)
     {:reply, {:ok, public(voyage, state, player_id)}, state}
@@ -598,7 +632,8 @@ defmodule Core.Universe.Navigation do
 
   defp idle(location_id) do
     {:ok, position_km} = Sol.game_position_km(location_id)
-    %{system_id: @system_id, status: :idle, location_id: location_id,
+    %{system_id: @system_id, status: :idle, logout_paused: false,
+      location_id: location_id,
       origin_id: location_id, destination_id: nil,
       arrival_origin_id: nil, voyage_number: 0,
       propulsion_mode: :conventional,
@@ -623,7 +658,7 @@ defmodule Core.Universe.Navigation do
   @checkpoint_interval_ms 10_000
   @checkpoint_changed_fields [
     :status, :location_id, :origin_id, :destination_id, :arrival_origin_id,
-    :voyage_number, :free_flight
+    :voyage_number, :free_flight, :logout_paused
   ]
 
   defp load_checkpoint(%{voyage_loader: nil}, _player_id), do: :new
@@ -638,6 +673,34 @@ defmodule Core.Universe.Navigation do
             # established pilot to Earth on reconnect.
             raise "Invalid stored SOL location for pilot #{player_id}: #{inspect(reason)}"
         end
+    end
+  end
+
+  # A logout must not appear successful if the DB checkpoint wasn't written.
+  # Keep this separate from best-effort periodic checkpoints.
+  defp persist_connection_change(state, player_id, updated) do
+    if Map.get(state.voyages, player_id) == updated do
+      {:ok, state}
+    else
+      result =
+        case state.voyage_saver do
+          nil -> :ok
+          saver when is_function(saver, 2) ->
+            try do
+              saver.(player_id, Checkpoint.dump(updated))
+            rescue
+              error -> {:error, {:checkpoint_exception, Exception.message(error)}}
+            end
+        end
+
+      case result do
+        :ok ->
+          {:ok, %{state |
+            voyages: Map.put(state.voyages, player_id, updated),
+            saved_voyages: Map.put(state.saved_voyages, player_id, updated)
+          }}
+        {:error, reason} -> {:error, reason}
+      end
     end
   end
 
@@ -686,7 +749,8 @@ defmodule Core.Universe.Navigation do
     Enum.reduce(state.voyages, state, fn
       {player_id, %{status: :traveling} = voyage}, current ->
         updated =
-          if voyage.pending_encounter != nil or voyage.free_flight do
+          if voyage.pending_encounter != nil or voyage.free_flight or
+               Map.get(voyage, :logout_paused, false) do
             # Only this pilot's voyage is stopped. The shared clock, other
             # pilots and independent NPC traffic continue moving.
             voyage
@@ -772,7 +836,8 @@ defmodule Core.Universe.Navigation do
         state.traffic_time_ms < Map.get(voyage, :encounter_clearance_until_ms, 0) -> nil
         true -> EncounterDirector.evaluate(traffic, voyage, reputations_for(state, player_id))
       end,
-      cruise_paused: voyage.pending_encounter != nil or voyage.free_flight,
+      cruise_paused: voyage.pending_encounter != nil or voyage.free_flight or
+        Map.get(voyage, :logout_paused, false),
       # Tactical combat currently takes place in the pilot's existing
       # orbital map. Show that map's ACTUAL planet and collision geometry,
       # not the approaching destination (which would be misleading).
@@ -879,6 +944,7 @@ defmodule Core.Universe.Navigation do
   # A real traffic vessel can pass multiple pilots. The flyby is published
   # only on a pilot's first proximity crossing for that vessel/voyage;
   # repeated SOL snapshots still carry its current relative position.
+  defp announce_encounter(state, _player_id, %{logout_paused: true}), do: state
   defp announce_encounter(state, _player_id, %{free_flight: true}), do: state
 
   defp announce_encounter(state, _player_id,

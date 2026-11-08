@@ -14,6 +14,7 @@ defmodule Core.Universe.Navigation.Checkpoint do
       "arrival_origin_id" => v.arrival_origin_id,
       "destination_id" => v.destination_id,
       "voyage_number" => v.voyage_number, "free_flight" => v.free_flight,
+      "logout_paused" => Map.get(v, :logout_paused, false),
       "position_km" => v.position_km, "origin_position_km" => v.origin_position_km,
       "destination_position_km" => v.destination_position_km,
       "cruise_speed_km_s" => v.cruise_speed_km_s,
@@ -38,6 +39,9 @@ defmodule Core.Universe.Navigation.Checkpoint do
     to = point(data["destination_position_km"])
     voyage = data["voyage_number"]
     free? = data["free_flight"]
+    # Older V1 checkpoints remain compatible; only explicit logout holds
+    # keep strategic travel frozen while the pilot is disconnected.
+    logout_paused? = Map.get(data, "logout_paused", false)
     speed = data["cruise_speed_km_s"]
     distance = data["travel_distance_km"]
     travelled = data["distance_travelled_km"]
@@ -48,6 +52,7 @@ defmodule Core.Universe.Navigation.Checkpoint do
       Enum.all?([location, origin, arrival, destination], &body_or_nil?/1) and
       is_map(position) and is_map(from) and
       is_integer(voyage) and voyage >= 0 and is_boolean(free?) and
+      is_boolean(logout_paused?) and
       Enum.all?([speed, distance, travelled], &nonnegative?/1) and
       is_integer(elapsed) and elapsed >= 0 and
       is_integer(duration) and duration >= 0 and
@@ -61,6 +66,7 @@ defmodule Core.Universe.Navigation.Checkpoint do
         system_id: "sol", status: status, location_id: location,
         origin_id: origin, arrival_origin_id: arrival, destination_id: destination,
         voyage_number: voyage, free_flight: free?,
+        logout_paused: logout_paused?,
         propulsion_mode: if(status == :traveling and not free?,
           do: :interplanetary_cruise, else: :conventional),
         position_km: position, origin_position_km: from,

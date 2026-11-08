@@ -71,6 +71,62 @@ defmodule Core.Universe.NavigationTest do
       Core.Universe.Navigation.Checkpoint.load(%{"version" => 1, "status" => "idle"})
   end
 
+  test "logout holds precise mid-course progress and login resumes from it" do
+    {:ok, store} = Agent.start_link(fn -> %{} end)
+    saver = fn player, data ->
+      Agent.update(store, &Map.put(&1, player, data))
+      :ok
+    end
+    loader = fn player -> Agent.get(store, &Map.get(&1, player)) end
+    opts = [auto_tick: false, tick_ms: 1_000, voyage_loader: loader,
+      voyage_saver: saver, event_sink: fn _, _, _ -> :ok end]
+    original = :"#{__MODULE__}.OfflineA#{System.unique_integer([:positive])}"
+    rebooted = :"#{__MODULE__}.OfflineB#{System.unique_integer([:positive])}"
+    start_supervised!(%{id: original,
+      start: {Navigation, :start_link, [[name: original] ++ opts]}})
+    assert {:ok, _} = Navigation.set_course(original, 731, "mars")
+    for _ <- 1..3, do: assert(:ok = Navigation.tick(original))
+    assert {:ok, before} = Navigation.snapshot(original, 731)
+    assert before.elapsed_ms == 3_000
+    assert :ok = Navigation.pause_for_logout(original, 731)
+
+    # The shared traffic clock still ticks, but this pilot stays in place.
+    for _ <- 1..25, do: assert(:ok = Navigation.tick(original))
+    assert {:ok, held} = Navigation.snapshot(original, 731)
+    assert held.logout_paused
+    assert held.elapsed_ms == before.elapsed_ms
+    assert held.position_km == before.position_km
+
+    start_supervised!(%{id: rebooted,
+      start: {Navigation, :start_link, [[name: rebooted] ++ opts]}})
+    assert {:ok, saved} = Navigation.snapshot(rebooted, 731)
+    assert saved.logout_paused
+    assert saved.position_km == before.position_km
+    assert :ok = Navigation.tick(rebooted)
+    assert {:ok, unchanged} = Navigation.snapshot(rebooted, 731)
+    assert unchanged.elapsed_ms == before.elapsed_ms
+
+    assert :ok = Navigation.resume_after_login(rebooted, 731)
+    assert :ok = Navigation.tick(rebooted)
+    assert {:ok, ongoing} = Navigation.snapshot(rebooted, 731)
+    assert ongoing.elapsed_ms == before.elapsed_ms + 1_000
+    refute ongoing.logout_paused
+
+    # Old rows from before logout support still roundtrip.
+    old = Map.delete(Agent.get(store, &Map.fetch!(&1, 731)), "logout_paused")
+    assert {:ok, %{logout_paused: false}} = Navigation.Checkpoint.load(old)
+  end
+
+  test "no logout confirmation if the durable voyage checkpoint fails" do
+    name = :"#{__MODULE__}.FailedSave#{System.unique_integer([:positive])}"
+    saver = fn _, _ -> {:error, :db_offline} end
+    start_supervised!(%{id: name, start: {Navigation, :start_link,
+      [[name: name, auto_tick: false, voyage_saver: saver,
+        event_sink: fn _, _, _ -> :ok end]]}})
+    assert {:error, :db_offline} = Navigation.pause_for_logout(name, 51)
+    assert {:ok, %{logout_paused: false}} = Navigation.snapshot(name, 51)
+  end
+
   test "scheduled merchant traffic exists without players and waypoint clicks do not spawn ships" do
     name = :"#{__MODULE__}.Shipping#{System.unique_integer([:positive])}"
     start_supervised!(%{
