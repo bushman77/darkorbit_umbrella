@@ -130,6 +130,57 @@ defmodule Darkorbit.WorldTest do
     assert running.position_km == held.position_km
   end
 
+  test "real authenticated Green Starbase docking survives logout and relogin" do
+    account = player_account_fixture()
+    solar = Module.concat(Core.World.SessionManager, Core.Universe.Navigation)
+    {:ok, _} = Core.Universe.Navigation.snapshot(solar, account.id)
+    position = Core.Universe.GreenStarbase.position_km()
+    :sys.replace_state(solar, fn state ->
+      voyage = Map.fetch!(state.voyages, account.id)
+      at_base = %{voyage |
+        status: :idle, location_id: nil, origin_id: nil,
+        arrival_origin_id: nil, destination_id: nil,
+        position_km: position, origin_position_km: position,
+        destination_position_km: nil}
+      %{state | voyages: Map.put(state.voyages, account.id, at_base)}
+    end)
+
+    map_id = Core.Universe.FreeFlightRegion.map_id(account.id)
+    assert {:ok, first} = World.connect(account.id)
+    assert first.map_id == map_id
+    # The actual ship position is owned by MapServer, not a client payload.
+    [{map_pid, _}] = Registry.lookup(Core.World.Registry, {:world_map, map_id})
+    site = Core.Universe.GreenStarbase.local_site()
+    :sys.replace_state(map_pid, fn state ->
+      ship = Map.fetch!(state.entities, account.id)
+      stopped = %{ship |
+        position: %Core.World.Position{x: site.x, y: site.y - 100.0, z: site.z},
+        throttle: 0.0, cruise_speed: 0.0,
+        destination: nil, route_waypoints: [], navigation_mode: :manual}
+      %{state | entities: Map.put(state.entities, account.id, stopped)}
+    end)
+
+    assert {:ok, %{docked: true}} = World.dock(first.id)
+    assert {:ok, inside} = World.snapshot(map_id)
+    assert inside.docked_pilots == [account.id]
+    refute Enum.any?(inside.entities, &(&1.id == account.id))
+    assert :ok = World.disconnect(first.id)
+
+    assert {:ok, second} = World.connect(account.id)
+    assert second.map_id == map_id
+    assert {:ok, returned} = World.snapshot(map_id)
+    assert returned.docked_pilots == [account.id]
+    refute Enum.any?(returned.entities, &(&1.id == account.id))
+    assert {:error, :ship_docked} = World.solar_set_course(second.id, "venus")
+
+    assert {:ok, %{docked: false, entity: ship}} = World.launch(second.id)
+    assert ship.hull > 0
+    assert {:ok, after_launch} = World.snapshot(map_id)
+    assert after_launch.docked_pilots == []
+    assert Enum.any?(after_launch.entities, &(&1.id == account.id))
+    assert :ok = World.disconnect(second.id)
+  end
+
   test "rejects a second live session for the same player" do
     account = player_account_fixture()
     assert {:ok, session} = World.connect(account.id)
