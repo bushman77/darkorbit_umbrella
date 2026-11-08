@@ -9,9 +9,26 @@ export function ownStationWarning(snapshot, pilotId) {
 }
 
 export function stationWarningView(warning) {
-  if (!warning || !["caution", "critical"].includes(warning.level) ||
+  if (!warning || typeof warning.station_id !== "string") return null
+  if (warning.station_id === "sol:starbase:green") {
+    if (!["caution", "critical", "approach"].includes(warning.level) ||
+        !Number.isFinite(warning.distance_km) || warning.distance_km < 0) return null
+    const approach = warning.level === "approach"
+    const critical = warning.level === "critical"
+    return {
+      level: warning.level,
+      label: approach ? "GREEN STARBASE · OPEN BAY APPROACH" :
+        critical ? "CRITICAL · GREEN STARBASE HULL" :
+          "CAUTION · GREEN STARBASE PROXIMITY",
+      detail: Math.round(warning.distance_km).toLocaleString("en-US") +
+        " KM FROM STARBASE CENTER · DOCKING UNAVAILABLE",
+      announcement: approach ? "Green Starbase approach corridor ahead. Docking is not yet active." :
+        critical ? "Critical: Green Starbase hull nearby. Brake or change course." :
+          "Caution: Green Starbase proximity.",
+    }
+  }
+  if (!["caution", "critical"].includes(warning.level) ||
       !Number.isFinite(warning.clearance_km) || warning.clearance_km < 0 ||
-      typeof warning.station_id !== "string" ||
       !/^sol:base:[a-z0-9_-]+$/.test(warning.station_id)) return null
 
   const critical = warning.level === "critical"

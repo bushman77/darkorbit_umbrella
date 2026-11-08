@@ -887,6 +887,23 @@ Source: [Symbrella `symbolic_generation`](https://github.com/bushman77/Symbrella
   restart in addition to the existing Venus reconnect regression.
 - [ ] Persist shared merchant routes and base inventory separately.
 
+### Green Starbase Stage 3 — authoritative collision and proximity (2026-11-08)
+
+- [x] Define the twin green pyramids, industrial struts, hangar frame, floor,
+  and rear wall as swept collision solids in the server's physics coordinates.
+  The central docking aperture remains OPEN: not a false solid sphere.
+- [x] MapServer collision resolves both autopilot and manual thrust, stops
+  unauthorized impacts outside the hull, and applies bounded impact damage
+  without changing planetary refineries or planetary fatal impacts.
+- [x] Activate the independent starbase's hull only when the authenticated
+  pilot is stopped at the real SOL waypoint. Cache Navigation presence at
+  one-second intervals rather than calling another GenServer every tick.
+- [x] Distinct Green Starbase cautions, critical warnings, and the illuminated
+  approach-lane label appear in the cockpit; docking is NOT yet authorized.
+- [ ] Flight-test with 3D desktop and paired SBS: clear center approach,
+  solid sidewalls, solid rear bulkhead, and remote deep-space inertness.
+  Stage 4 adds docking clearance and a safe docked-state transition.
+
 ### SOL forward refinery collision safety V1.1 (2026-11-07)
 
 - [x] Keep planetary fatal proximity independent from station approach telemetry;

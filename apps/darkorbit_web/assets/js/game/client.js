@@ -449,7 +449,9 @@ class SpaceClient {
     channel.on("station_collision", event => {
       if (entityKey(event.entity_id) === this.selfId) {
         const damage = Number(event.damage?.requested_damage) || 0
-        this.setCombatMessage("REFINERY CONTACT · FLIGHT STOPPED · " + damage + " IMPACT DAMAGE")
+        const location = event.station_id === "sol:starbase:green" ?
+          "GREEN STARBASE CONTACT" : "REFINERY CONTACT"
+        this.setCombatMessage(location + " · FLIGHT STOPPED · " + damage + " IMPACT DAMAGE")
         if (event.entity) this.upsertEntity(event.entity, true)
       }
     })
@@ -1312,7 +1314,7 @@ class SpaceClient {
       if (detail) detail.textContent = view.detail
     }
     if (announce && changed && announcement) {
-      announcement.textContent = view?.announcement || "Refinery clearance restored."
+      announcement.textContent = view?.announcement || "Station clearance restored."
     }
     this.stationWarningLevel = nextLevel
   }

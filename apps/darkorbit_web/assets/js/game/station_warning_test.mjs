@@ -29,3 +29,19 @@ test("only authoritative station warnings render; no planetary impact text", () 
     assert.equal(stationWarningView(bad), null)
   }
 })
+
+test("Green Starbase warning reflects the open approach and no docking permission", () => {
+  const base = {entity_id: 19, station_id: "sol:starbase:green",
+    distance_km: 480, clearance_km: 0}
+  const own = ownStationWarning({station_warnings: [
+    {...base, level: "approach"}]}, 19)
+  assert.equal(own.level, "approach")
+  const view = stationWarningView(own)
+  assert.match(view.label, /OPEN BAY APPROACH/)
+  assert.match(view.detail, /480 KM FROM STARBASE CENTER/)
+  assert.match(view.detail, /DOCKING UNAVAILABLE/)
+  assert.match(stationWarningView({...base, level: "critical"}).label, /STARBASE HULL/)
+  assert.match(stationWarningView({...base, level: "caution"}).label, /PROXIMITY/)
+  assert.equal(stationWarningView({...base, level: "clear"}), null)
+  assert.equal(stationWarningView({...base, distance_km: Infinity, level: "approach"}), null)
+})

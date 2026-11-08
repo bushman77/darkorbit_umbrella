@@ -69,6 +69,7 @@ defmodule Core.World.StationSafety do
         previous_level: before,
         level: after_level,
         clearance_km: if(current, do: current.clearance_km, else: nil),
+        distance_km: if(current, do: Map.get(current, :distance_km), else: nil),
         tick: tick
       }
     end
