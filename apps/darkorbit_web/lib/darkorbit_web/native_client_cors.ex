@@ -43,7 +43,10 @@ defmodule DarkorbitWeb.NativeClientCors do
 
   # Phoenix Socket requires its own Origin validation. Explicitly allow the
   # bundled Tauri origins as well as the configured HTTPS host and local dev.
-  def socket_origin_allowed?(%URI{} = uri) do
+  def socket_origin_allowed?(
+        %URI{} = uri,
+        dev_origins \\ Application.get_env(:darkorbit_web, :native_dev_socket_origins, [])
+      ) do
     native? =
       (uri.scheme == "tauri" and uri.host == "localhost") or
         (uri.scheme in ["http", "https"] and uri.host == "tauri.localhost")
@@ -58,6 +61,11 @@ defmodule DarkorbitWeb.NativeClientCors do
       uri.host in ["localhost", "127.0.0.1"] and
         uri.scheme in ["http", "https"] and uri.port == 4000
 
-    native? or public? or dev?
+    # Tauri dev runs the packaged UI on its own loopback origin (port 1430
+    # on Pop!_OS). Accept only explicitly configured origins in development;
+    # production never configures this allowlist.
+    tauri_dev? = URI.to_string(uri) in dev_origins
+
+    native? or public? or dev? or tauri_dev?
   end
 end

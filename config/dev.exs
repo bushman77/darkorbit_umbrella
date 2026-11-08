@@ -68,6 +68,11 @@ config :darkorbit_web, DarkorbitWeb.Endpoint,
 config :darkorbit_web, registration_email_enabled: true,
   registration_from: "noreply@localhost"
 
+# The Tauri development webview uses its own local origin while Phoenix
+# listens on 4000. Keep this allowlist development-only and exact-match.
+# Production does not load config/dev.exs.
+config :darkorbit_web, native_dev_socket_origins: ["http://127.0.0.1:1430"]
+
 # Enable dev routes for dashboard and mailbox
 config :darkorbit_web, dev_routes: true
 

@@ -88,4 +88,15 @@ defmodule DarkorbitWeb.NativeClientControllerTest do
     assert NativeClientCors.socket_origin_allowed?(URI.parse("http://tauri.localhost"))
     refute NativeClientCors.socket_origin_allowed?(URI.parse("https://attacker.example"))
   end
+
+  test "Tauri loopback WebSocket origin is only allowed by explicit dev configuration" do
+    dev_origin = URI.parse("http://127.0.0.1:1430")
+    allowed = ["http://127.0.0.1:1430"]
+
+    assert NativeClientCors.socket_origin_allowed?(dev_origin, allowed)
+    refute NativeClientCors.socket_origin_allowed?(dev_origin, [])
+    refute NativeClientCors.socket_origin_allowed?(URI.parse("http://127.0.0.1:1431"), allowed)
+    refute NativeClientCors.socket_origin_allowed?(URI.parse("http://localhost:1430"), allowed)
+    refute NativeClientCors.socket_origin_allowed?(URI.parse("https://attacker.example"), allowed)
+  end
 end
