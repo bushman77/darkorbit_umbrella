@@ -35,3 +35,29 @@ test("helmet has explicit sensor permission, read-only local controls and recent
   assert.match(gaze, /GAZE_CONFIRM_MS = 800/)
   assert.doesNotMatch(helmet, /channel\.push\("station_dock"|"station_launch"|"flight_controls"/)
 })
+
+test("native desktop starts with ALL headset-only meshes hidden", () => {
+  // Three.js treats visible=undefined as visible. Initialize opt-in state
+  // BEFORE addCockpit creates/synchronizes its meshes, not afterwards.
+  const constructor = view.slice(view.indexOf("constructor(canvas)"), view.indexOf("  addStars()"))
+  assert.ok(constructor.indexOf("this.helmetGazeEnabled = false") >= 0)
+  assert.ok(constructor.indexOf("this.helmetGazeEnabled = false") <
+    constructor.indexOf("this.addCockpit()"))
+  assert.ok(constructor.indexOf("this.helmetNavOpen = false") <
+    constructor.indexOf("this.addCockpit()"))
+  assert.ok(constructor.indexOf("this.helmetHeadRotation = null") <
+    constructor.indexOf("this.addCockpit()"))
+  for (const mesh of ["navSwitch", "helmetNavPanel", "helmetNavClose",
+    "helmetNavRecenter", "gazeReticle", "helmetTrackingHint"]) {
+    assert.match(view, new RegExp("this\\." + mesh + "\\.visible =\\s*\\n?\\s*Boolean\\("))
+  }
+  assert.match(view, /this\.setHelmetNavOpen\(false\)/)
+  assert.match(view, /this\.setHelmetHeadRotation\(null\)/)
+})
+
+test("the phone renders an accessible NAV target and explains missing gyro", () => {
+  assert.match(view, /this\.navSwitch\.position\.set\(0\.95, -0\.64, -2\.46\)/)
+  assert.match(view, /new THREE\.PlaneGeometry\(2\.00, 1\.08\)/)
+  assert.match(view, /ENABLE HEAD TRACKING/)
+  assert.match(view, /this\.helmetGazeEnabled && this\.helmetHeadRotation === null/)
+})
