@@ -31,6 +31,41 @@ defmodule Core.World do
     end
   end
 
+  @doc "Dock the authenticated pilot's stopped ship inside Green Starbase."
+  def dock(session_id, opts \\ []) do
+    with {:ok, session} <- fetch_session(
+           Keyword.get(opts, :sessions, SessionManager), session_id) do
+      MapServer.dock(Keyword.get(opts, :registry, Core.World.Registry),
+        session.map_id, session.id, session.entity_id)
+    end
+  end
+
+  @doc "Launch the authenticated docked ship from a server-owned safe position."
+  def launch(session_id, opts \\ []) do
+    with {:ok, session} <- fetch_session(
+           Keyword.get(opts, :sessions, SessionManager), session_id) do
+      MapServer.launch(Keyword.get(opts, :registry, Core.World.Registry),
+        session.map_id, session.id, session.entity_id)
+    end
+  end
+
+  @doc "Server-side restore of an already-verified saved docked state."
+  def restore_dock(session_id, opts \\ []) do
+    with {:ok, session} <- fetch_session(
+           Keyword.get(opts, :sessions, SessionManager), session_id) do
+      MapServer.restore_dock(Keyword.get(opts, :registry, Core.World.Registry),
+        session.map_id, session.id, session.entity_id)
+    end
+  end
+
+  def docking_status(session_id, opts \\ []) do
+    with {:ok, session} <- fetch_session(
+           Keyword.get(opts, :sessions, SessionManager), session_id) do
+      MapServer.docking_status(Keyword.get(opts, :registry, Core.World.Registry),
+        session.map_id, session.id, session.entity_id)
+    end
+  end
+
   @doc "Server-only capture of an authenticated player entity's current combat condition."
   def ship_condition(session_id, opts \\ []) do
     registry = Keyword.get(opts, :registry, Core.World.Registry)
