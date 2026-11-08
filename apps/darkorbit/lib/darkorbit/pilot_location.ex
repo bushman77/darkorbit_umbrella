@@ -7,7 +7,7 @@ defmodule Darkorbit.PilotLocation do
   physical ship, map, and voyage, never a subsequent visit to the same planet.
   """
   alias Core.Universe.Navigation.Checkpoint, as: VoyageCheckpoint
-  alias Core.Universe.OrbitalEntry
+  alias Core.Universe.{FreeFlightRegion, OrbitalEntry}
   alias Core.World.{Movement, PlanetaryCollision, Position, StationSafety}
   alias Darkorbit.PilotLocation.Checkpoint
   alias Darkorbit.Repo
@@ -38,34 +38,59 @@ defmodule Darkorbit.PilotLocation do
                 %{ship_instance_id: ship_id, position: position, attitude: attitude})
       when is_integer(player_id) and player_id > 0 and
            is_integer(ship_id) and ship_id > 0 and
-           is_integer(voyage_number) and voyage_number >= 0 do
-    if map_id == OrbitalEntry.map_id(body_id) and valid_pose?(map_id, position, attitude) do
-      now = DateTime.utc_now()
-      location = xyz(position)
-      heading = angles(attitude)
-      fields = [
-        pose_map_id: map_id, pose_voyage_number: voyage_number,
-        pose_ship_instance_id: ship_id,
-        pose_position: location, pose_attitude: heading,
-        updated_at: now
-      ]
-      row = %Checkpoint{
-        player_id: player_id, navigation: VoyageCheckpoint.dump(navigation),
-        pose_map_id: map_id, pose_voyage_number: voyage_number,
-        pose_ship_instance_id: ship_id,
-        pose_position: location, pose_attitude: heading
-      }
-      case Repo.insert(row, on_conflict: [set: fields], conflict_target: [:player_id]) do
-        {:ok, _} -> :ok
-        {:error, error} -> {:error, error}
-      end
+           is_integer(voyage_number) and voyage_number >= 0 and is_binary(body_id) do
+    if map_id == OrbitalEntry.map_id(body_id) and
+         valid_pose?(player_id, map_id, position, attitude) do
+      save_pose_row(player_id, map_id, navigation, voyage_number, ship_id,
+        position, attitude)
     else
       :ok
     end
   end
-  # During interplanetary transit or isolated tactical combat, do not
-  # replace a previous planet's orbital checkpoint.
+  # A suspended conventional cockpit in free space has a local pose too.
+  # Its authoritative SOL position is stored independently in navigation.
+  def save_pose(player_id, map_id,
+                %{status: status, location_id: location_id, free_flight: free_flight,
+                  voyage_number: voyage_number, tactical_encounter: nil} = navigation,
+                %{ship_instance_id: ship_id, position: position, attitude: attitude})
+      when is_integer(player_id) and player_id > 0 and
+           is_integer(ship_id) and ship_id > 0 and
+           is_integer(voyage_number) and voyage_number >= 0 and
+           ((status == :traveling and free_flight == true) or
+              (status == :idle and is_nil(location_id))) do
+    if map_id == FreeFlightRegion.map_id(player_id) and
+         valid_pose?(player_id, map_id, position, attitude) do
+      save_pose_row(player_id, map_id, navigation, voyage_number, ship_id,
+        position, attitude)
+    else
+      :ok
+    end
+  end
+
+  # In automated cruise there is no conventional ship pose to retain.
+  # An ongoing tactical encounter must be settled first.
   def save_pose(_player_id, _map_id, _navigation, _report), do: :ok
+
+  defp save_pose_row(player_id, map_id, navigation, voyage_number, ship_id,
+         position, attitude) do
+    now = DateTime.utc_now()
+    location = xyz(position)
+    heading = angles(attitude)
+    fields = [
+      pose_map_id: map_id, pose_voyage_number: voyage_number,
+      pose_ship_instance_id: ship_id, pose_position: location,
+      pose_attitude: heading, updated_at: now
+    ]
+    record = %Checkpoint{player_id: player_id,
+      navigation: VoyageCheckpoint.dump(navigation), pose_map_id: map_id,
+      pose_voyage_number: voyage_number, pose_ship_instance_id: ship_id,
+      pose_position: location, pose_attitude: heading}
+    case Repo.insert(record, on_conflict: [set: fields],
+           conflict_target: [:player_id]) do
+      {:ok, _} -> :ok
+      {:error, error} -> {:error, error}
+    end
+  end
 
   def restore_entry(player_id, ship_id, %{map_id: "sol:" <> _} = entry, voyage_number)
       when is_integer(player_id) and player_id > 0 and
@@ -78,7 +103,7 @@ defmodule Darkorbit.PilotLocation do
       } when map_id == entry.map_id ->
         case parse_pose(position, attitude) do
           {:ok, position, attitude} ->
-            if valid_pose?(map_id, position, attitude) do
+            if valid_pose?(player_id, map_id, position, attitude) do
               %{entry | position: position, attitude: attitude}
             else
               entry
@@ -90,7 +115,16 @@ defmodule Darkorbit.PilotLocation do
   end
   def restore_entry(_player_id, _ship_id, entry, _voyage), do: entry
 
-  defp valid_pose?(map_id, %Position{} = position, attitude) do
+  defp valid_pose?(player_id, map_id, %Position{} = position, attitude)
+       when map_id == "sol:free_" <> Integer.to_string(player_id) do
+    # The private SOL cockpit has no planetary collision sphere. Validate
+    # against its exact server-owned 3D boundaries, including altitude.
+    match?({:ok, _},
+      Movement.destination(FreeFlightRegion.definition(player_id), position)) and
+      valid_angles?(attitude)
+  end
+
+  defp valid_pose?(_player_id, map_id, %Position{} = position, attitude) do
     case Enum.find(OrbitalEntry.planet_maps(), &(&1.id == map_id)) do
       %{planet: planet} = map ->
         match?({:ok, _}, Movement.destination(map, position)) and
@@ -101,7 +135,7 @@ defmodule Darkorbit.PilotLocation do
       _ -> false
     end
   end
-  defp valid_pose?(_, _, _), do: false
+  defp valid_pose?(_, _, _, _), do: false
 
   defp inside_station?(position, map) do
     case StationSafety.warning(position, map) do

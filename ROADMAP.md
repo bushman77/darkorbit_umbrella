@@ -849,6 +849,13 @@ Source: [Symbrella `symbolic_generation`](https://github.com/bushman77/Symbrella
   after OTP/server restart. Do not recreate stale NPC encounter leases.
 - [ ] Run database migration and verify Venus reconnect, longer voyages,
   forced client termination and full Phoenix restart.
+- [x] Extend checkpointing to manual deep-space regions and genuine empty-
+  space waypoints, with the same map/ship/voyage checks and map bounds.
+- [x] On logout, freeze the pilot's strategic cruise at the precise saved
+  point; continue shared merchant traffic, then resume the player's voyage
+  only after the next authenticated world join.
+- [ ] Verify desktop manual free-flight logout/relogin and forced server
+  restart in addition to the existing Venus reconnect regression.
 - [ ] Persist shared merchant routes and base inventory separately.
 
 ### SOL forward refinery collision safety V1.1 (2026-11-07)

@@ -87,6 +87,49 @@ defmodule Darkorbit.WorldTest do
     assert returned.attitude == heading
   end
 
+  test "reconnect in manual SOL free flight retains the same local XYZ and heading" do
+    account = player_account_fixture()
+    {:ok, ship} = Darkorbit.Fleet.get_active_ship(account.id)
+    server = Module.concat(Core.World.SessionManager, Core.Universe.Navigation)
+    {:ok, starting} = Core.Universe.Navigation.set_course(server, account.id, "mars")
+    assert {:ok, manual} = Core.Universe.Navigation.enter_free_flight(server, account.id)
+    assert manual.status == :traveling
+    assert manual.free_flight
+    assert manual.voyage_number == starting.voyage_number
+
+    {:ok, first} = World.connect(account.id)
+    assert first.map_id == Core.Universe.FreeFlightRegion.map_id(account.id)
+    assert {:ok, initial} = World.snapshot(first.map_id)
+    pilot = Enum.find(initial.entities, &(&1.id == account.id))
+    assert pilot
+
+    position = %Core.World.Position{x: 13_650.0, y: 14_200.0, z: 625.0}
+    orientation = %{yaw: 0.32, pitch: -0.17, roll: 0.08}
+    [{pid, _}] = Registry.lookup(Core.World.Registry, {:world_map, first.map_id})
+    :sys.replace_state(pid, fn state ->
+      ship_entity = Map.fetch!(state.entities, account.id)
+      updated = %{ship_entity | position: position, attitude: orientation}
+      %{state | entities: Map.put(state.entities, account.id, updated)}
+    end)
+
+    assert :ok = World.disconnect(first.id)
+    assert {:ok, held} = Core.Universe.Navigation.snapshot(server, account.id)
+    assert held.logout_paused
+    assert held.position_km == starting.position_km
+
+    assert {:ok, second} = World.connect(account.id)
+    on_exit(fn -> World.disconnect(second.id) end)
+    assert second.map_id == Core.Universe.FreeFlightRegion.map_id(account.id)
+    assert {:ok, restored} = World.snapshot(second.map_id)
+    after_login = Enum.find(restored.entities, &(&1.id == account.id))
+    assert after_login.position_3d == Map.from_struct(position)
+    assert after_login.attitude == orientation
+    assert after_login.ship_instance_id == ship.id
+    assert {:ok, running} = Core.Universe.Navigation.snapshot(server, account.id)
+    refute running.logout_paused
+    assert running.position_km == held.position_km
+  end
+
   test "rejects a second live session for the same player" do
     account = player_account_fixture()
     assert {:ok, session} = World.connect(account.id)

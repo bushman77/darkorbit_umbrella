@@ -76,8 +76,15 @@ defmodule Darkorbit.World do
          {:ok, entry} <- region_for_player(user_id),
          {:ok, navigation} <- SolarNavigation.snapshot(
            Module.concat(SessionManager, SolarNavigation), user_id) do
-      entry = PilotLocation.restore_entry(
-        user_id, player_ship.id, entry, navigation.voyage_number)
+      # While automated cruise is active, the saved strategic position is
+      # authoritative; a previous manual cockpit pose must not override it.
+      entry =
+        if navigation.status == :traveling and not navigation.free_flight do
+          entry
+        else
+          PilotLocation.restore_entry(
+            user_id, player_ship.id, entry, navigation.voyage_number)
+        end
       requested_map = Keyword.get(opts, :map_id, entry.map_id)
 
       if requested_map == entry.map_id do
@@ -91,7 +98,13 @@ defmodule Darkorbit.World do
               :ok = SolarNavigation.set_faction_standing(
                 server, user_id, faction, standing)
             end)
-            success
+            case SolarNavigation.resume_after_login(server, user_id) do
+              :ok -> success
+              {:error, reason} ->
+                # Never leave a live world entity attached to a rejected join.
+                _ = Simulation.disconnect(elem(success, 1).id)
+                {:error, {:location_resume_failed, reason}}
+            end
 
           error ->
             error
@@ -108,7 +121,9 @@ defmodule Darkorbit.World do
          {:ok, %{player_id: player_id, ship_instance_id: ship_id,
                   combat: condition} = report} <- Simulation.prepare_disconnect(session_id),
          :ok <- ShipCondition.save_verified(player_id, ship_id, condition),
-         :ok <- persist_verified_pose(session_id, report) do
+         :ok <- persist_verified_pose(session_id, report),
+         :ok <- SolarNavigation.pause_for_logout(
+           Module.concat(SessionManager, SolarNavigation), player_id) do
       Simulation.disconnect(session_id)
     end
   end
