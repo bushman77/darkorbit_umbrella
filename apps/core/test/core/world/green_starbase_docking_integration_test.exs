@@ -74,7 +74,7 @@ defmodule Core.World.GreenStarbaseDockingIntegrationTest do
     refute Enum.any?(state.entities, &(&1.id == @pilot))
     assert {:error, :entity_not_found} =
       World.flight_controls(session.id, %{throttle: 1.0}, ctx.opts)
-    assert {:error, :not_docked} =
+    assert {:error, :ship_docked} =
       World.dock(session.id, ctx.opts)
 
     assert {:ok, %{docked: false, entity: entity}} =
