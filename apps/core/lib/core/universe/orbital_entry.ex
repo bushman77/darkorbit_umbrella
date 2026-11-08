@@ -19,6 +19,11 @@ defmodule Core.Universe.OrbitalEntry do
   @minimum_region_size 400_000
   @entry_distance_multiplier 1.861
   @exclusion_multiplier 1.08
+  # Conservative V1 collision hull for the low-poly orbital refinery.
+  # Three.js draws about 35 scene units from its center at WORLD_SCALE 0.06;
+  # the 600 km server radius covers that model and ship clearance.
+  # This is not a dockable berth radius; approved approach corridors come later.
+  @base_collision_radius_km 600.0
 
   @spec map_id(String.t()) :: String.t() | nil
   def map_id(id) when is_binary(id) do
@@ -66,6 +71,7 @@ defmodule Core.Universe.OrbitalEntry do
           z: radius * 0.14
         },
         berth_count: 3,
+        collision_radius_km: @base_collision_radius_km,
         model: :orbital_refinery_v1
       }
     else

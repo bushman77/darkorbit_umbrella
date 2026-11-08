@@ -751,6 +751,20 @@
   <p id="planetary-proximity-announcement" role="status" aria-live="polite"
      class="sr-only"></p>
 
+  <%!-- Separate refinery safety alert. This uses actual orbital geometry,
+       never the visual long-range projection used by the renderer. --%>
+  <div id="station-proximity-warning" hidden data-level="clear"
+       class="pointer-events-none absolute left-1/2 top-[30%] z-40 w-max max-w-[min(28rem,90vw)] -translate-x-1/2 rounded-xl border border-cyan-400/60 bg-slate-950/90 px-4 py-2 text-center font-mono shadow-lg backdrop-blur-sm">
+    <p id="station-proximity-level" class="text-sm font-black tracking-widest text-cyan-100">
+      REFINERY · APPROACH ZONE
+    </p>
+    <p id="station-proximity-detail" class="mt-1 text-xs font-semibold text-cyan-200">
+      Maintain clearance
+    </p>
+  </div>
+  <p id="station-proximity-announcement" role="status" aria-live="polite"
+     class="sr-only"></p>
+
   <p id="combat-status" role="status" aria-live="polite"
      class="pointer-events-none absolute bottom-24 left-4 z-30 max-w-[min(22rem,40vw)] font-mono text-xs text-rose-200 drop-shadow-md">
     RMB red laser · T nearest target · L autofire

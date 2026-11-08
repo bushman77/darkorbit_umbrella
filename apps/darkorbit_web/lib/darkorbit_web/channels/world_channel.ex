@@ -453,6 +453,8 @@ defmodule DarkorbitWeb.WorldChannel do
              :combat_disengaged,
              :laser_fired,
              :planetary_proximity_changed,
+             :station_proximity_changed,
+             :station_collision,
              :entity_destroyed
            ] do
     :ok = push(socket, Atom.to_string(event), payload)

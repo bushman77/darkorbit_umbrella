@@ -37,6 +37,7 @@ import {planetaryImpactMessage} from "./planetary_impact.mjs"
 import {
   ownPlanetaryWarning, proximityEventWarning, planetaryWarningView,
 } from "./planetary_warning.mjs"
+import {ownStationWarning, stationWarningView} from "./station_warning.mjs"
 import {validOrbitalMapId, shouldEnterOrbitalRegion} from "./orbital_regions.mjs"
 import {tacticalEncounterAction} from "./solar_encounter_actions.mjs"
 
@@ -78,6 +79,7 @@ class SpaceClient {
     this.selfId = null
     this.planetaryWarningLevel = "clear"
     this.planetaryWarningPlanet = null
+    this.stationWarningLevel = "clear"
     this.solarEncounter = null
     this.encounterDisplayedId = null
     this.encounterResolving = false
@@ -439,6 +441,18 @@ class SpaceClient {
     })
     channel.on("entity_destroyed", destruction => this.entityDestroyed(destruction))
     channel.on("planetary_proximity_changed", event => this.planetaryProximityChanged(event))
+    channel.on("station_proximity_changed", event => {
+      if (entityKey(event.entity_id) === this.selfId) {
+        this.applyStationWarning(event.level === "clear" ? null : event)
+      }
+    })
+    channel.on("station_collision", event => {
+      if (entityKey(event.entity_id) === this.selfId) {
+        const damage = Number(event.damage?.requested_damage) || 0
+        this.setCombatMessage("REFINERY CONTACT · FLIGHT STOPPED · " + damage + " IMPACT DAMAGE")
+        if (event.entity) this.upsertEntity(event.entity, true)
+      }
+    })
     channel.onError(() => {
       if (this.channel === channel) this.setConnection("Sector channel lost", "error")
     })
@@ -505,6 +519,7 @@ class SpaceClient {
     this.beams = []
     this.setSolarEncounter(null)
     this.applyPlanetaryWarning(null, {announce: false})
+    this.applyStationWarning(null, {announce: false})
     this.stereoView?.planetaryBody?.dispose()
     const previous = this.channel
     const enter = () => {
@@ -537,6 +552,7 @@ class SpaceClient {
     if(response.solar_navigation)this.applySolarNavigation(response.solar_navigation)
     for (const entity of response.map.entities) this.upsertEntity(entity, true)
     this.applyPlanetaryWarning(ownPlanetaryWarning(response.map, this.selfId))
+    this.applyStationWarning(ownStationWarning(response.map, this.selfId))
     this.syncOwnCombatState()
 
     this.flightControls.resetThrottle()
@@ -587,6 +603,7 @@ class SpaceClient {
     }
 
     this.applyPlanetaryWarning(ownPlanetaryWarning(state, this.selfId))
+    this.applyStationWarning(ownStationWarning(state, this.selfId))
     this.syncOwnCombatState()
     this.updateCombatHud()
     this.showSolarTactical()
@@ -1277,6 +1294,29 @@ class SpaceClient {
     this.planetaryWarningPlanet = nextPlanet
   }
 
+  applyStationWarning(warning, {announce = true} = {}) {
+    const view = stationWarningView(warning)
+    const nextLevel = view?.level || "clear"
+    const changed = nextLevel !== this.stationWarningLevel
+    const banner = this.root.querySelector("#station-proximity-warning")
+    const announcement = this.root.querySelector("#station-proximity-announcement")
+
+    if (banner) {
+      banner.hidden = !view
+      banner.dataset.level = nextLevel
+    }
+    if (view) {
+      const title = this.root.querySelector("#station-proximity-level")
+      const detail = this.root.querySelector("#station-proximity-detail")
+      if (title) title.textContent = view.label
+      if (detail) detail.textContent = view.detail
+    }
+    if (announce && changed && announcement) {
+      announcement.textContent = view?.announcement || "Refinery clearance restored."
+    }
+    this.stationWarningLevel = nextLevel
+  }
+
   entityDestroyed(destruction) {
     const id = entityKey(destruction.entity.id)
     const isNpc = destruction.entity.kind === "npc"
@@ -1293,7 +1333,10 @@ class SpaceClient {
       // defeat. A fresh session recreates a ship at the departure region.
       this.exitMouseSteering({silent: true})
       this.applyPlanetaryWarning(null, {announce: false})
-      this.showError(impact || "Ship destroyed. Reconnect to respawn at your departure region.")
+      this.applyStationWarning(null, {announce: false})
+      this.showError(impact || (destruction.reason === "station_collision"
+        ? "Ship destroyed by refinery collision. Reconnect to respawn."
+        : "Ship destroyed. Reconnect to respawn at your departure region."))
     }
     this.updateCombatHud()
   }

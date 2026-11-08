@@ -18,6 +18,11 @@ on:
       - "apps/core/lib/core/world.ex"
       - "apps/core/lib/core/world/supervisor.ex"
       - "apps/core/lib/core/world/map_server.ex"
+      - "apps/core/lib/core/world/station_safety.ex"
+      - "apps/core/lib/core/universe/orbital_entry.ex"
+      - "apps/core/test/core/world/station_safety_test.exs"
+      - "apps/core/test/core/world/station_impact_integration_test.exs"
+      - "apps/darkorbit_web/assets/js/game/station_warning*.mjs"
       - "apps/core/test/core/universe/navigation_test.exs"
       - "apps/core/test/core/universe/free_flight_region_test.exs"
       - "apps/core/test/core/world/world_test.exs"
@@ -90,6 +95,8 @@ jobs:
           mix test apps/core/test/core/universe/navigation_test.exs
           mix test apps/core/test/core/universe/free_flight_region_test.exs
           mix test apps/core/test/core/world/world_test.exs
+          mix test apps/core/test/core/world/station_safety_test.exs
+          mix test apps/core/test/core/world/station_impact_integration_test.exs
       - name: Test authenticated Phoenix handoffs
         run: |
           mix test apps/darkorbit_web/test/darkorbit_web/channels/world_channel_test.exs
@@ -106,3 +113,4 @@ jobs:
           node --test apps/darkorbit_web/assets/js/game/helmet_planetary_navigation_test.mjs
           node --test apps/darkorbit_web/assets/js/game/helmet_encounter_view_test.mjs
           node --test apps/darkorbit_web/assets/js/game/planetary_body_test.mjs
+          node --test apps/darkorbit_web/assets/js/game/station_warning_test.mjs

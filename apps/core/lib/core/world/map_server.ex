@@ -26,6 +26,7 @@ defmodule Core.World.MapServer do
   alias Core.World.PlanetaryProximity
   alias Core.World.Position
   alias Core.World.Session
+  alias Core.World.StationSafety
 
   @default_tactical_spawn_distance 520.0
   # Leaves a 40-unit turret margin for the first 100 ms cruise/evasion tick.
@@ -979,10 +980,11 @@ defmodule Core.World.MapServer do
     # Apply one authoritative swept planet test after either manual thrust
     # OR plotted autopilot movement. Even a single fast tick that enters and
     # exits the sphere must register a fatal impact.
-    {entities, impacts, proximity_changes} =
+    {entities, impacts, proximity_changes, station_changes} =
       state.entities
       |> Enum.sort_by(fn {id, _} -> inspect(id) end)
-      |> Enum.reduce({%{}, [], []}, fn {entity_id, entity}, {entities, impacts, changes} ->
+      |> Enum.reduce({%{}, [], [], []},
+           fn {entity_id, entity}, {entities, impacts, changes, station_changes} ->
         moved =
           cond do
             not Combat.alive?(entity) -> entity
@@ -991,25 +993,47 @@ defmodule Core.World.MapServer do
           end
 
         case PlanetaryCollision.resolve(entity, moved, state.definition) do
-          {:ok, safe} ->
-            change =
+          {:ok, planet_safe} ->
+            # Station geometry is distinct from lethal planetary geometry.
+            # Both manual flight and autopilot receive swept collision checks.
+            {safe, station_impact} =
+              case StationSafety.resolve(entity, planet_safe, state.definition, distance_factor) do
+                {:ok, safe} -> {safe, nil}
+                {:impact, stopped, report} -> {stopped, {entity, stopped, report}}
+              end
+
+            {change, station_change} =
               if Combat.alive?(safe) do
-                PlanetaryProximity.transition(
-                  entity_id,
-                  PlanetaryProximity.warning(entity.position, state.definition),
-                  PlanetaryProximity.warning(safe.position, state.definition),
-                  next_tick
-                )
+                {
+                  PlanetaryProximity.transition(
+                    entity_id,
+                    PlanetaryProximity.warning(entity.position, state.definition),
+                    PlanetaryProximity.warning(safe.position, state.definition),
+                    next_tick
+                  ),
+                  StationSafety.transition(
+                    entity_id,
+                    StationSafety.warning(entity.position, state.definition),
+                    StationSafety.warning(safe.position, state.definition),
+                    next_tick
+                  )
+                }
+              else
+                {nil, nil}
               end
 
             changes = if change, do: [change | changes], else: changes
-            {Map.put(entities, entity_id, safe), impacts, changes}
+            station_changes = if station_change,
+              do: [station_change | station_changes], else: station_changes
+            impacts = if station_impact, do: [{:station, station_impact} | impacts],
+              else: impacts
+
+            {Map.put(entities, entity_id, safe), impacts, changes, station_changes}
 
           {:crashed, destroyed} ->
-            # A fatal collision is announced by :entity_destroyed, not an
-            # inaccurate 'all clear' or intermediate caution signal.
+            # Planet impacts remain immediately fatal and take precedence.
             {Map.put(entities, entity_id, destroyed),
-             [{entity, destroyed} | impacts], changes}
+             [{:planet, {entity, destroyed}} | impacts], changes, station_changes}
         end
       end)
 
@@ -1020,11 +1044,45 @@ defmodule Core.World.MapServer do
     Enum.each(Enum.reverse(proximity_changes), fn change ->
       broadcast(state, :planetary_proximity_changed, change)
     end)
+    Enum.each(Enum.reverse(station_changes), fn change ->
+      broadcast(state, :station_proximity_changed, change)
+    end)
 
     state =
       impacts
       |> Enum.reverse()
-      |> Enum.reduce(state, fn {previous, destroyed}, current ->
+      |> Enum.reduce(state, fn
+        {:station, {previous, stopped, report}}, current ->
+          broadcast(current, :station_collision, Map.merge(report, %{
+            entity: public_entity(stopped), tick: next_tick
+          }))
+
+          if stopped.status == :destroyed do
+            {npcs, _cleared} = clear_npc_targets(current.npcs, stopped.id)
+            current = %{current | npcs: npcs}
+
+            if not is_nil(previous.engaged_target_id) do
+              broadcast(current, :combat_disengaged,
+                disengagement_payload(previous, :player_destroyed, next_tick))
+            end
+
+            if not is_nil(previous.target_id) do
+              broadcast(current, :target_cleared, %{
+                player_id: previous.id, target_id: nil, tick: next_tick
+              })
+            end
+
+            broadcast(current, :entity_destroyed, %{
+              entity: public_entity(stopped),
+              reason: :station_collision,
+              station_id: report.station_id,
+              attacker_id: nil, tick: next_tick, respawn_tick: nil
+            })
+          end
+
+          current
+
+        {:planet, {previous, destroyed}}, current ->
         {npcs, _cleared} = clear_npc_targets(current.npcs, destroyed.id)
         current = %{current | npcs: npcs}
 
@@ -1877,6 +1935,20 @@ defmodule Core.World.MapServer do
         end
       end)
 
+    station_warnings =
+      state.entities
+      |> Enum.sort_by(fn {id, _entity} -> inspect(id) end)
+      |> Enum.flat_map(fn {id, entity} ->
+        if Combat.alive?(entity) do
+          case StationSafety.warning(entity.position, state.definition) do
+            nil -> []
+            warning -> [Map.put(warning, :entity_id, id)]
+          end
+        else
+          []
+        end
+      end)
+
     entities =
       (Map.values(state.entities) ++ Map.values(state.npcs))
       |> Enum.sort_by(fn entity -> {entity_sort_order(entity), to_string(entity.id)} end)
@@ -1892,6 +1964,7 @@ defmodule Core.World.MapServer do
       tick: state.tick,
       tick_ms: state.tick_ms,
       planetary_warnings: proximity_warnings,
+      station_warnings: station_warnings,
       # Stable planet-local station geometry; shared by 3D and read-only SBS.
       orbital_base: if(state.definition.planet,
         do: Core.Universe.OrbitalEntry.space_base(state.definition.planet.body_id),
