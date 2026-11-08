@@ -155,6 +155,7 @@ jobs:
           node --test apps/darkorbit_web/assets/js/game/helmet_alignment_test.mjs
           node --check apps/darkorbit_web/assets/js/game/stereo_view.js
           node --check apps/darkorbit_web/assets/js/game/helmet_client.mjs
+          node --test clients/tauri/tests/native_game_markup.test.mjs
           node --test apps/darkorbit_web/assets/js/game/helmet_network_test.mjs
           node --test apps/darkorbit_web/assets/js/game/helmet_head_tracking_test.mjs
           node --test apps/darkorbit_web/assets/js/game/helmet_gaze_dwell_test.mjs
