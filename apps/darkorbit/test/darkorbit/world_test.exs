@@ -35,6 +35,58 @@ defmodule Darkorbit.WorldTest do
     assert_receive {:world_state, %{tick: ^second_tick_number}}
   end
 
+  test "Venus orbital XYZ and heading survive a real authenticated disconnect/rejoin" do
+    account = player_account_fixture()
+    {:ok, ship} = Darkorbit.Fleet.get_active_ship(account.id)
+    navigation_server = Module.concat(Core.World.SessionManager, Core.Universe.Navigation)
+    {:ok, venus} = Core.Universe.Sol.game_position_km("venus")
+
+    saved_navigation = %{
+      "version" => 1, "status" => "idle", "location_id" => "venus",
+      "origin_id" => "venus", "destination_id" => nil,
+      "arrival_origin_id" => "earth", "voyage_number" => 1,
+      "free_flight" => false,
+      "position_km" => venus, "origin_position_km" => venus,
+      "destination_position_km" => nil, "cruise_speed_km_s" => 0.0,
+      "travel_distance_km" => 0.0, "distance_travelled_km" => 0.0,
+      "elapsed_ms" => 0, "duration_ms" => 0
+    }
+    assert :ok = Darkorbit.PilotLocation.save_navigation(account.id, saved_navigation)
+    assert {:ok, live_voyage} =
+      Core.Universe.Navigation.Checkpoint.load(saved_navigation)
+
+    :sys.replace_state(navigation_server, fn state ->
+      %{state | voyages: Map.put(state.voyages, account.id, live_voyage)}
+    end)
+
+    {:ok, entry} = Core.Universe.OrbitalEntry.entry("earth", "venus", account.id, 1)
+    saved_position = %Core.World.Position{
+      x: entry.position.x + 45.0,
+      y: entry.position.y - 10.0,
+      z: entry.position.z + 25.0
+    }
+    heading = %{yaw: 0.15, pitch: 0.05, roll: -0.15}
+    assert :ok = Darkorbit.PilotLocation.save_pose(account.id, "sol:venus", live_voyage, %{
+      ship_instance_id: ship.id, position: saved_position, attitude: heading
+    })
+
+    assert {:ok, first} = World.connect(account.id)
+    assert first.map_id == "sol:venus"
+    assert {:ok, snapshot} = World.snapshot("sol:venus")
+    pilot = Enum.find(snapshot.entities, &(&1.id == account.id))
+    assert pilot.position_3d == Map.from_struct(saved_position)
+    assert pilot.attitude == heading
+    assert :ok = World.disconnect(first.id)
+
+    assert {:ok, second} = World.connect(account.id)
+    on_exit(fn -> World.disconnect(second.id) end)
+    assert second.map_id == "sol:venus"
+    assert {:ok, restored} = World.snapshot("sol:venus")
+    returned = Enum.find(restored.entities, &(&1.id == account.id))
+    assert returned.position_3d == Map.from_struct(saved_position)
+    assert returned.attitude == heading
+  end
+
   test "rejects a second live session for the same player" do
     account = player_account_fixture()
     assert {:ok, session} = World.connect(account.id)
