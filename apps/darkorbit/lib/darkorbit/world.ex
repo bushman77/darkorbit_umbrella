@@ -21,6 +21,7 @@ defmodule Darkorbit.World do
   alias Darkorbit.ShipStats
   alias Darkorbit.ShipCondition
   alias Darkorbit.Piracy
+  alias Darkorbit.PilotLocation
   alias Darkorbit.World.PubSub
 
   @legacy_test_earth_sector Application.compile_env(:darkorbit, :legacy_test_earth_sector, false)
@@ -72,7 +73,11 @@ defmodule Darkorbit.World do
          {:ok, stats} <- ShipStats.calculate(user_id, player_ship.id, config_no),
          {:ok, condition} <-
            ShipCondition.load_or_initialize(user_id, player_ship.id, stats),
-         {:ok, entry} <- region_for_player(user_id) do
+         {:ok, entry} <- region_for_player(user_id),
+         {:ok, navigation} <- SolarNavigation.snapshot(
+           Module.concat(SessionManager, SolarNavigation), user_id) do
+      entry = PilotLocation.restore_entry(
+        user_id, player_ship.id, entry, navigation.voyage_number)
       requested_map = Keyword.get(opts, :map_id, entry.map_id)
 
       if requested_map == entry.map_id do
@@ -100,10 +105,29 @@ defmodule Darkorbit.World do
   @doc "Settle any live combat and persist map-owned damage before disconnecting."
   def disconnect(session_id) do
     with :ok <- settle_on_disconnect(session_id),
-         {:ok, %{player_id: player_id, ship_instance_id: ship_id, combat: condition}} <-
-           Simulation.prepare_disconnect(session_id),
-         :ok <- ShipCondition.save_verified(player_id, ship_id, condition) do
+         {:ok, %{player_id: player_id, ship_instance_id: ship_id,
+                  combat: condition} = report} <- Simulation.prepare_disconnect(session_id),
+         :ok <- ShipCondition.save_verified(player_id, ship_id, condition),
+         :ok <- persist_verified_pose(session_id, report) do
       Simulation.disconnect(session_id)
+    end
+  end
+
+  @doc "Periodic server-only pose checkpoint, independent of client input."
+  def checkpoint_location(session_id) do
+    with {:ok, report} <- Simulation.ship_condition(session_id) do
+      persist_verified_pose(session_id, report)
+    end
+  end
+
+  defp persist_verified_pose(session_id, report) do
+    with {:ok, session} <- SessionManager.fetch(SessionManager, session_id),
+         {:ok, navigation} <- SolarNavigation.snapshot(
+           Module.concat(SessionManager, SolarNavigation), session.player_id) do
+      PilotLocation.save_pose(session.player_id, session.map_id, navigation, report)
+    else
+      :error -> {:error, :session_not_found}
+      {:error, _} = error -> error
     end
   end
 

@@ -1,5 +1,6 @@
 defmodule DarkorbitWeb.WorldChannel do
   use DarkorbitWeb, :channel
+  require Logger
 
   alias Darkorbit.World
 
@@ -461,6 +462,20 @@ defmodule DarkorbitWeb.WorldChannel do
     {:noreply, socket}
   end
 
+  # A low-frequency authoritative pose checkpoint protects against killed
+  # clients/VMs. MapServer's fast simulation tick never performs SQL I/O.
+  @impl true
+  def handle_info(:pilot_location_checkpoint, socket) do
+    if session_id = socket.assigns[:world_session_id] do
+      case World.checkpoint_location(session_id) do
+        :ok -> :ok
+        {:error, reason} -> Logger.warning("Pilot pose checkpoint: #{inspect(reason)}")
+      end
+      Process.send_after(self(), :pilot_location_checkpoint, 10_000)
+    end
+    {:noreply, socket}
+  end
+
   @impl true
   def terminate(_reason, socket) do
     case socket.assigns[:world_session_id] do
@@ -489,6 +504,8 @@ defmodule DarkorbitWeb.WorldChannel do
 
         delta? = Map.get(payload, "stream") == "delta_v1"
         response = if delta?, do: Map.put(response, :stream, "delta_v1"), else: response
+
+        Process.send_after(self(), :pilot_location_checkpoint, 10_000)
 
         {:ok, response,
          socket

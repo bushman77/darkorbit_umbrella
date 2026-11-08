@@ -831,10 +831,25 @@ Source: [Symbrella `symbolic_generation`](https://github.com/bushman77/Symbrella
   port fees, faction-based access, purchase/sale pricing and warehouse
   transaction APIs.
 - [ ] Persist refinery reserves, berth leases, production clocks and
-  strategic voyages across OTP/server restarts. V1 station state is
+  shared merchant state across OTP/server restarts. V1 station state is
   supervised RAM state; account cargo/standing already has its own
   PostgreSQL persistence boundary.
 
+
+### Pilot location continuity (2026-11-08)
+
+- [x] Add PostgreSQL pilot checkpoints for SOL planet, voyage number,
+  destination, mid-flight position, and interplanetary progress.
+- [x] Persist the ship's authoritative local XYZ position and orientation on
+  disconnect and every ten seconds while the game channel is connected.
+- [x] Only restore an orbital pose when map ID, ship ID, voyage number and
+  physical geometry all match. Ignore stale poses from earlier planetary visits;
+  a new pilot still starts at Earth.
+- [x] Rebuild SOL Navigation from the last versioned, validated checkpoint
+  after OTP/server restart. Do not recreate stale NPC encounter leases.
+- [ ] Run database migration and verify Venus reconnect, longer voyages,
+  forced client termination and full Phoenix restart.
+- [ ] Persist shared merchant routes and base inventory separately.
 
 ### SOL forward refinery collision safety V1.1 (2026-11-07)
 

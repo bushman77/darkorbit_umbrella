@@ -39,6 +39,9 @@ config :bcrypt_elixir, log_rounds: 4
 # Tests drive deterministic ticks synchronously; no wall-clock sleeps are
 # needed and automatic timers cannot race assertions.
 config :core, Core.World, auto_tick: false
+# The global test supervisor has no Ecto sandbox owner. DB behavior is tested
+# in DataCase; independent Core tests supply in-memory callbacks as needed.
+config :darkorbit, :persist_pilot_locations, false
 
 # Initialize plugs at runtime for faster test compilation
 config :phoenix, :plug_init_mode, :runtime

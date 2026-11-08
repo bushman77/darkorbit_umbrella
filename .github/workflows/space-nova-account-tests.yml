@@ -5,6 +5,10 @@ on:
     branches: [native_client]
     paths:
       - "apps/darkorbit/lib/darkorbit/accounts/**"
+      - "apps/darkorbit/lib/darkorbit/pilot_location.ex"
+      - "apps/darkorbit/lib/darkorbit/pilot_location/**"
+      - "apps/darkorbit/priv/repo/migrations/20261108010000_create_pilot_location_checkpoints.exs"
+      - "apps/darkorbit/test/darkorbit/pilot_location_test.exs"
       - "apps/darkorbit/lib/darkorbit/accounts.ex"
       - "apps/darkorbit/lib/darkorbit/mailer.ex"
       - "apps/darkorbit/lib/darkorbit/email/**"
@@ -64,6 +68,7 @@ jobs:
         run: |
           mix test apps/darkorbit/test/darkorbit/email/probe_test.exs
           mix test apps/darkorbit/test/darkorbit/accounts_test.exs
+          mix test apps/darkorbit/test/darkorbit/pilot_location_test.exs
           mix test apps/darkorbit_web/test/darkorbit_web/controllers/registration_controller_test.exs
           mix test apps/darkorbit_web/test/darkorbit_web/controllers/session_controller_test.exs
           mix test apps/darkorbit_web/test/darkorbit_web/controllers/native_client_controller_test.exs
