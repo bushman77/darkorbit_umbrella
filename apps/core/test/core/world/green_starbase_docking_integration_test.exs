@@ -95,6 +95,53 @@ defmodule Core.World.GreenStarbaseDockingIntegrationTest do
     assert :ok = World.disconnect(session.id, ctx.opts)
   end
 
+  test "staying stopped inside the real hangar auto-docks after five seconds", ctx do
+    at_starbase!()
+    session = connect!(ctx, at(0, 0, -10))
+    map_id = ctx.opts[:map_id]
+
+    assert {:ok, %{docked: false}} = World.docking_status(session.id, ctx.opts)
+    assert {:ok, first} = World.tick(map_id, ctx.opts)
+    assert [%{entity_id: @pilot, remaining_ms: 5_000}] = first.docking_holds
+    assert_receive {^map_id, :station_docking_started,
+      %{entity_id: @pilot, duration_ms: 5_000}}
+
+    for _ <- 1..49 do
+      assert {:ok, snapshot} = World.tick(map_id, ctx.opts)
+      assert snapshot.docked_pilots == []
+    end
+
+    assert {:ok, complete} = World.tick(map_id, ctx.opts)
+    assert complete.docked_pilots == [@pilot]
+    assert complete.docking_holds == []
+    assert_receive {^map_id, :station_docked, %{entity_id: @pilot}}
+    assert {:ok, %{docked: true}} = World.docking_status(session.id, ctx.opts)
+    assert {:error, :entity_not_found} =
+      World.flight_controls(session.id, %{throttle: 1.0}, ctx.opts)
+    assert :ok = World.disconnect(session.id, ctx.opts)
+  end
+
+  test "moving before five seconds cancels instead of auto-docking", ctx do
+    at_starbase!()
+    session = connect!(ctx, at(0, 0, -10))
+    map_id = ctx.opts[:map_id]
+    assert {:ok, %{docking_holds: [_]}} = World.tick(map_id, ctx.opts)
+    assert_receive {^map_id, :station_docking_started, %{entity_id: @pilot}}
+
+    # The real throttle channel changes the map-owned ship. A stationary
+    # client countdown must not bypass this authoritative movement state.
+    assert {:ok, _} = World.flight_controls(
+      session.id, %{throttle: 0.75}, ctx.opts)
+    assert {:ok, cancelled} = World.tick(map_id, ctx.opts)
+    assert cancelled.docking_holds == []
+    assert_receive {^map_id, :station_docking_cancelled, %{entity_id: @pilot}}
+    for _ <- 1..55 do
+      assert {:ok, _} = World.tick(map_id, ctx.opts)
+    end
+    assert {:ok, %{docked: false}} = World.docking_status(session.id, ctx.opts)
+    assert :ok = World.disconnect(session.id, ctx.opts)
+  end
+
   test "a persisted docked pilot can be reparked after a fresh map join", ctx do
     at_starbase!()
     session = connect!(ctx, at(0, 0, 0))

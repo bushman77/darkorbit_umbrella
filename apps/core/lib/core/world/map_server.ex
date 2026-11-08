@@ -34,6 +34,7 @@ defmodule Core.World.MapServer do
   @default_tactical_spawn_distance 520.0
   # Leaves a 40-unit turret margin for the first 100 ms cruise/evasion tick.
   @scow_tactical_spawn_distance 340.0
+  @automatic_docking_hold_ms 5_000
 
   def child_spec(opts) do
     definition = opts |> Keyword.fetch!(:definition) |> MapDefinition.new()
@@ -253,6 +254,7 @@ defmodule Core.World.MapServer do
       definition: definition,
       entities: %{},
       docked_ships: %{},
+      docking_holds: %{},
       # An Atlas session begins peacefully. Definitions remain dormant.
       npcs: if(Keyword.get(opts, :initial_npcs?, false),
         do: spawn_npcs(npc_definitions, tick_ms), else: %{}),
@@ -368,13 +370,7 @@ defmodule Core.World.MapServer do
     with {:ok, ship} <- authorized_entity(state, session_id, entity_id),
          :ok <- authorize_green_starbase(state, ship.player_id),
          :ok <- GreenStarbaseDocking.ready?(ship) do
-      parked = GreenStarbaseDocking.park(ship)
-      updated = %{state |
-        entities: Map.delete(state.entities, ship.id),
-        docked_ships: Map.put(state.docked_ships, ship.id, parked)}
-      broadcast(updated, :entity_left, public_entity(ship))
-      broadcast(updated, :station_docked, %{entity_id: ship.id,
-        station_id: GreenStarbase.id(), docked: true})
+      updated = park_green_starbase_ship(state, ship)
       {:reply, {:ok, %{docked: true, station_id: GreenStarbase.id()}}, updated}
     else
       error -> {:reply, error, state}
@@ -388,7 +384,8 @@ defmodule Core.World.MapServer do
       parked = GreenStarbaseDocking.park(ship)
       updated = %{state |
         entities: Map.delete(state.entities, ship.id),
-        docked_ships: Map.put(state.docked_ships, ship.id, parked)}
+        docked_ships: Map.put(state.docked_ships, ship.id, parked),
+        docking_holds: Map.delete(state.docking_holds, ship.id)}
       broadcast(updated, :entity_left, public_entity(ship))
       {:reply, :ok, updated}
     else
@@ -406,6 +403,7 @@ defmodule Core.World.MapServer do
           attitude: attitude, orientation: Orientation.from_angles(attitude)}
         updated = %{state |
           docked_ships: Map.delete(state.docked_ships, entity_id),
+          docking_holds: Map.delete(state.docking_holds, entity_id),
           entities: Map.put(state.entities, entity_id, ship)}
         broadcast(updated, :entity_joined, public_entity(ship))
         broadcast(updated, :station_launched, %{entity_id: ship.id,
@@ -712,6 +710,7 @@ defmodule Core.World.MapServer do
         new_state = %{state |
           entities: Map.delete(state.entities, entity.id),
           docked_ships: Map.delete(state.docked_ships, entity.id),
+          docking_holds: Map.delete(state.docking_holds, entity.id),
           departures: Map.delete(state.departures, session_id),
           npcs: npcs
         }
@@ -1117,6 +1116,80 @@ defmodule Core.World.MapServer do
   end
   defp refresh_green_starbase_presence(state, _tick), do: state
 
+  # Hold entirely in the map process: no client timer is trusted to dock.
+  # The first eligible simulation tick starts a five-second countdown, and
+  # every subsequent tick must still pass the physical bay/speed checks.
+  # SOL authorization is checked again immediately before final docking.
+  defp advance_automatic_docking(state) do
+    state =
+      Enum.reduce(state.docking_holds, state, fn {id, hold}, current ->
+        case Map.get(current.entities, id) do
+          %Entity{session_id: session_id} = ship when session_id == hold.session_id ->
+            if eligible_for_automatic_docking?(current, ship) do
+              elapsed_ticks = current.tick - hold.started_tick
+              needed_ticks = div(@automatic_docking_hold_ms + current.tick_ms - 1,
+                current.tick_ms)
+              if elapsed_ticks >= needed_ticks do
+                case authorize_green_starbase(current, ship.player_id) do
+                  :ok -> park_green_starbase_ship(current, ship)
+                  _ -> cancel_automatic_docking(current, id)
+                end
+              else
+                current
+              end
+            else
+              cancel_automatic_docking(current, id)
+            end
+
+          _ ->
+            cancel_automatic_docking(current, id)
+        end
+      end)
+
+    Enum.reduce(state.entities, state, fn {id, ship}, current ->
+      if not Map.has_key?(current.docking_holds, id) and
+           eligible_for_automatic_docking?(current, ship) do
+        hold = %{session_id: ship.session_id, started_tick: current.tick}
+        next = %{current | docking_holds: Map.put(current.docking_holds, id, hold)}
+        broadcast(next, :station_docking_started, %{
+          entity_id: id, station_id: GreenStarbase.id(),
+          started_tick: current.tick, duration_ms: @automatic_docking_hold_ms,
+          remaining_ms: @automatic_docking_hold_ms
+        })
+        next
+      else
+        current
+      end
+    end)
+  end
+
+  defp eligible_for_automatic_docking?(state, %Entity{} = ship) do
+    state.green_starbase_active? and
+      state.definition.id == FreeFlightRegion.map_id(ship.player_id) and
+      GreenStarbaseDocking.ready?(ship) == :ok
+  end
+
+  defp cancel_automatic_docking(state, id) do
+    updated = %{state | docking_holds: Map.delete(state.docking_holds, id)}
+    broadcast(updated, :station_docking_cancelled, %{
+      entity_id: id, station_id: GreenStarbase.id()
+    })
+    updated
+  end
+
+  defp park_green_starbase_ship(state, ship) do
+    parked = GreenStarbaseDocking.park(ship)
+    updated = %{state |
+      entities: Map.delete(state.entities, ship.id),
+      docked_ships: Map.put(state.docked_ships, ship.id, parked),
+      docking_holds: Map.delete(state.docking_holds, ship.id)}
+    broadcast(updated, :entity_left, public_entity(ship))
+    broadcast(updated, :station_docked, %{
+      entity_id: ship.id, station_id: GreenStarbase.id(), docked: true
+    })
+    updated
+  end
+
   defp station_warning(position, state),
     do: station_warning(position, state, state.green_starbase_active?)
 
@@ -1318,6 +1391,7 @@ defmodule Core.World.MapServer do
 
     state = state |> resolve_player_engagements() |> respawn_due_npcs()
     state = complete_tactical_courses(state, Enum.reverse(finished_courses))
+    state = advance_automatic_docking(state)
     broadcast(state, :world_state, public_state(state))
     state
   end
@@ -2133,6 +2207,16 @@ defmodule Core.World.MapServer do
       planetary_warnings: proximity_warnings,
       station_warnings: station_warnings,
       docked_pilots: state.docked_ships |> Map.keys() |> Enum.sort(),
+      # A late-joining desktop/HMD can display the remaining hold without
+      # restarting the five-second timer. No private ship state is included.
+      docking_holds: state.docking_holds
+        |> Enum.map(fn {id, hold} ->
+          %{entity_id: id, started_tick: hold.started_tick,
+            duration_ms: @automatic_docking_hold_ms,
+            remaining_ms: max(0, @automatic_docking_hold_ms -
+              (state.tick - hold.started_tick) * state.tick_ms)}
+        end)
+        |> Enum.sort_by(& &1.entity_id),
       # Stable planet-local station geometry; shared by 3D and read-only SBS.
       orbital_base: if(state.definition.planet,
         do: Core.Universe.OrbitalEntry.space_base(state.definition.planet.body_id),

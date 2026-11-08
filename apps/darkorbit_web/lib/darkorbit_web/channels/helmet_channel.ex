@@ -212,6 +212,16 @@ defmodule DarkorbitWeb.HelmetChannel do
     {:noreply, socket}
   end
 
+  # Only the paired pilot receives their countdown. The viewer can render
+  # progress but cannot submit any command that completes the hold.
+  def handle_info({event, %{entity_id: id} = payload},
+                  %{assigns: %{helmet_role: :viewer, helmet_active: true,
+                               helmet_player_id: id}} = socket)
+      when event in [:station_docking_started, :station_docking_cancelled] do
+    push(socket, Atom.to_string(event), payload)
+    {:noreply, socket}
+  end
+
   def handle_info({event, payload}, %{assigns: %{helmet_active: true}} = socket)
       when event in [:laser_fired, :npc_spawned, :entity_destroyed] do
     push(socket, Atom.to_string(event), payload)

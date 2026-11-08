@@ -484,6 +484,8 @@ defmodule DarkorbitWeb.WorldChannel do
              :planetary_proximity_changed,
              :station_proximity_changed,
              :station_collision,
+             :station_docking_started,
+             :station_docking_cancelled,
              :station_docked,
              :station_launched,
              :entity_destroyed
