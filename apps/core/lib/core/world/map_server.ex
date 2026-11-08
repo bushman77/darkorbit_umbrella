@@ -354,6 +354,16 @@ defmodule Core.World.MapServer do
     {:reply, result, state}
   end
 
+  def handle_call({:dock, session_id, entity_id}, _from,
+                  %{docked_ships: docked_ships} = state)
+      when is_map_key(docked_ships, entity_id) do
+    case Map.fetch!(docked_ships, entity_id) do
+      %Entity{session_id: ^session_id} ->
+        {:reply, {:error, :already_docked}, state}
+      _ -> {:reply, {:error, :session_mismatch}, state}
+    end
+  end
+
   def handle_call({:dock, session_id, entity_id}, _from, state) do
     with {:ok, ship} <- authorized_entity(state, session_id, entity_id),
          :ok <- authorize_green_starbase(state, ship.player_id),
