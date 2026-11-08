@@ -56,6 +56,30 @@ function shipModel(npc, npcTypeId = null, shipClass = null) {
   return root
 }
 
+// Canvas textures are painted once and reused in both SBS eyes. These are
+// physical cockpit surfaces, not fixed screen overlays: head motion can
+// look away from them naturally.
+function cockpitLabel(lines, {width = 512, height = 256} = {}) {
+  const canvas = document.createElement("canvas")
+  canvas.width = width
+  canvas.height = height
+  const ctx = canvas.getContext("2d")
+  ctx.fillStyle = "#071c22"
+  ctx.fillRect(0, 0, width, height)
+  ctx.strokeStyle = "#53e6ae"
+  ctx.lineWidth = 10
+  ctx.strokeRect(8, 8, width - 16, height - 16)
+  ctx.fillStyle = "#bbffe2"
+  const fontSize = Math.round(Math.min(height / (lines.length + 1.5), width / 13))
+  ctx.font = "bold " + fontSize + "px monospace"
+  ctx.textAlign = "center"
+  lines.forEach((text, i) => ctx.fillText(text, width / 2,
+    height * (i + 1) / (lines.length + 1) + fontSize / 3, width - 38))
+  const texture = new THREE.CanvasTexture(canvas)
+  texture.colorSpace = THREE.SRGBColorSpace
+  return texture
+}
+
 function disposeMesh(root) {
   root.traverse(child => {
     child.geometry?.dispose()
@@ -97,6 +121,13 @@ export class StereoSpaceView {
     this.greenStarbase = new GreenStarbaseVisual(THREE, this.scene)
     this.encounterShip = new EncounterShipVisual(THREE, this.scene)
     this.addCockpit()
+    // The HMD alone enables these opt-in local controls. Desktop pointer
+    // picking and laptop mouse/keyboard ship steering stay unchanged.
+    this.helmetGazeEnabled = false
+    this.helmetNavOpen = false
+    this.helmetHeadRotation = null
+    this.onHelmetGaze = null
+    this.lastGazeArcProgress = -1
     this.beamGroup = new THREE.Group()
     this.scene.add(this.beamGroup)
     this.lastHudAt = -Infinity
@@ -173,9 +204,129 @@ export class StereoSpaceView {
     )
     sight.position.z = -5
     sight.renderOrder = 50
-    framing.add(sight)
+    // A center-screen sight belongs to the headset camera. The cockpit
+    // itself must NOT follow head rotation; it remains ship-fixed below.
+    this.camera.add(sight)
     this.sight = sight
-    this.camera.add(framing)
+
+    this.cockpitFraming = framing
+    this.scene.add(framing)
+
+    // A NAV switch mounted right of the main telemetry instrument.
+    this.navSwitch = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.76, 0.38),
+      new THREE.MeshBasicMaterial({
+        map: cockpitLabel(["NAV"], {width: 512, height: 256}),
+        transparent: true, depthTest: false,
+      }),
+    )
+    this.navSwitch.position.set(1.39, -0.69, -2.46)
+    this.navSwitch.renderOrder = 68
+    framing.add(this.navSwitch)
+
+    // A simple read-only navigation display inside the same ship-fixed
+    // cockpit space. Mission planning and flight remain laptop-authorized.
+    this.helmetNavPanel = new THREE.Mesh(
+      new THREE.PlaneGeometry(2.92, 1.72),
+      new THREE.MeshBasicMaterial({
+        map: cockpitLabel([
+          "SOL / NAVIGATION COMPUTER",
+          "HMD GAZE PROTOTYPE",
+          "Ship control remains on laptop",
+          "Look at CLOSE to return",
+        ], {width: 1024, height: 600}),
+        transparent: true, depthTest: false,
+      }),
+    )
+    this.helmetNavPanel.position.set(0, 0.12, -2.12)
+    this.helmetNavPanel.renderOrder = 70
+    framing.add(this.helmetNavPanel)
+    this.helmetNavClose = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.70, 0.36),
+      new THREE.MeshBasicMaterial({
+        map: cockpitLabel(["CLOSE"], {width: 512, height: 256}),
+        transparent: true, depthTest: false,
+      }),
+    )
+    this.helmetNavClose.position.set(1.02, 0.71, -2.05)
+    this.helmetNavClose.renderOrder = 71
+    framing.add(this.helmetNavClose)
+
+    // Both eyes inherit the same reticle via the central camera. The
+    // arc stays hidden until dwell has armed a genuine interactive target.
+    this.gazeReticle = new THREE.Mesh(
+      new THREE.RingGeometry(0.019, 0.026, 48),
+      new THREE.MeshBasicMaterial({
+        color: 0x81fbc7, transparent: true, opacity: 0.92,
+        depthTest: false, depthWrite: false,
+      }),
+    )
+    this.gazeReticle.position.set(0, 0, -1.65)
+    this.gazeReticle.renderOrder = 90
+    this.camera.add(this.gazeReticle)
+    this.gazeArc = new THREE.Mesh(
+      new THREE.RingGeometry(0.032, 0.041, 48, 1, -Math.PI / 2, 0.0001),
+      new THREE.MeshBasicMaterial({
+        color: 0xffdc82, depthTest: false, depthWrite: false,
+      }),
+    )
+    this.gazeArc.position.set(0, 0, -1.65)
+    this.gazeArc.renderOrder = 91
+    this.camera.add(this.gazeArc)
+    this.setHelmetNavOpen(false)
+    this.setHelmetHeadRotation(null)
+  }
+
+  setHelmetGazeEnabled(enabled) {
+    this.helmetGazeEnabled = enabled === true
+    if (!this.helmetGazeEnabled) this.setHelmetNavOpen(false)
+    this.updateGazeFeedback({target: null, armed: false, progress: 0})
+  }
+
+  setHelmetHeadRotation(quaternion) {
+    this.helmetHeadRotation = quaternion &&
+      [quaternion.x, quaternion.y, quaternion.z, quaternion.w].every(Number.isFinite)
+      ? new THREE.Quaternion(quaternion.x, quaternion.y, quaternion.z,
+        quaternion.w).normalize() : null
+    if (this.gazeReticle) this.gazeReticle.visible =
+      this.helmetGazeEnabled && this.helmetHeadRotation !== null
+    if (!this.helmetHeadRotation && this.gazeArc) this.gazeArc.visible = false
+  }
+
+  setHelmetNavOpen(open) {
+    this.helmetNavOpen = open === true
+    if (this.navSwitch) this.navSwitch.visible =
+      this.helmetGazeEnabled && !this.helmetNavOpen
+    if (this.helmetNavPanel) this.helmetNavPanel.visible =
+      this.helmetGazeEnabled && this.helmetNavOpen
+    if (this.helmetNavClose) this.helmetNavClose.visible =
+      this.helmetGazeEnabled && this.helmetNavOpen
+  }
+
+  gazeTarget() {
+    if (!this.helmetGazeEnabled || !this.helmetHeadRotation) return null
+    const candidate = this.helmetNavOpen ? this.helmetNavClose : this.navSwitch
+    if (!candidate?.visible) return null
+    this.camera.updateMatrixWorld(true)
+    this.cockpitFraming.updateMatrixWorld(true)
+    this.raycaster.set(this.camera.position,
+      new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion))
+    const hits = this.raycaster.intersectObject(candidate, false)
+    return hits.length && hits[0].distance < 6 ?
+      (this.helmetNavOpen ? "nav_close" : "nav_open") : null
+  }
+
+  updateGazeFeedback({target = null, armed = false, progress = 0} = {}) {
+    if (!this.gazeReticle || !this.gazeArc) return
+    this.gazeReticle.material.color.setHex(target ? 0xffdb8a : 0x81fbc7)
+    this.gazeArc.visible = Boolean(target && armed && progress > 0)
+    if (!this.gazeArc.visible) return
+    const clamped = clamp(progress, 0, 1)
+    if (Math.abs(clamped - this.lastGazeArcProgress) < 0.03 && clamped < 1) return
+    this.lastGazeArcProgress = clamped
+    this.gazeArc.geometry.dispose()
+    this.gazeArc.geometry = new THREE.RingGeometry(0.032, 0.041, 48, 1,
+      -Math.PI / 2, Math.max(0.0001, clamped * Math.PI * 2))
   }
 
   setHelmetAlignment({eyeGapPx = this.eyeGapPx, eyeSep = this.stereo.eyeSep} = {}) {
@@ -425,6 +576,17 @@ export class StereoSpaceView {
       feedback.hit ? 0x79ff9b : 0xff7272 : 0x78e6fc)
     const ownShip = client.entities.get(client.selfId)
     this.setCamera(ownShip)
+    // Ship-fixed cockpit surfaces retain their original position/attitude.
+    // Only the HMD view camera receives the recentered local head rotation.
+    this.cockpitFraming.position.copy(this.camera.position)
+    this.cockpitFraming.quaternion.copy(this.camera.quaternion)
+    if (this.helmetGazeEnabled && this.helmetHeadRotation) {
+      this.camera.quaternion.multiply(this.helmetHeadRotation)
+      this.camera.updateMatrixWorld(true)
+    }
+    if (this.helmetGazeEnabled && this.onHelmetGaze) {
+      this.onHelmetGaze(this.gazeTarget(), time)
+    }
     // Keep the distant starfield surrounding the pilot even in large
     // planet-centred maps. Stars are an infinite visual background.
     this.stars?.position.copy(this.camera.position)
