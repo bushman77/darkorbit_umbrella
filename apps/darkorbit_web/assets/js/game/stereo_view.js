@@ -667,9 +667,15 @@ export class StereoSpaceView {
       // Station camera is an anchored viewpoint inside the actual hangar.
       // The headset still adds its own local, recentered head quaternion.
       if (this.camera.parent !== this.hangarScene) this.hangarScene.add(this.camera)
-      this.camera.position.set(0, 2.6, 43)
+      const position = client.stationPosition
+      const x = Number.isFinite(position?.x) ? position.x : 0
+      const z = Number.isFinite(position?.z) ? position.z : 43
+      const yaw = Number.isFinite(position?.yaw) ? position.yaw : 0
+      this.camera.position.set(x, 2.6, z)
       this.camera.up.set(0, 1, 0)
-      this.camera.lookAt(0, 1.7, -45)
+      // The person's viewpoint moves, while the real ship stays parked.
+      // Head tracking then adds a local quaternion for the SBS phone only.
+      this.camera.rotation.set(0, -yaw, 0, "YXZ")
       this.camera.updateMatrixWorld(true)
     } else {
       if (this.camera.parent !== this.scene) this.scene.add(this.camera)

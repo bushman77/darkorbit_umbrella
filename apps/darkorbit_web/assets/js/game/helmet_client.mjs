@@ -55,6 +55,7 @@ export class HelmetClient {
     this.orbitalBase = null
     this.mapId = null
     this.docked = false
+    this.stationPosition = null
     this.stationDockingHold = null
     this.stationDockingSeconds = null
     this.screenWake = new HelmetScreenWake()
@@ -535,6 +536,7 @@ export class HelmetClient {
     this.orbitalBase = null
     this.mapId = null
     this.docked = false
+    this.stationPosition = null
     this.stationDockingHold = null
     this.stationDockingSeconds = null
     this.beams = []
@@ -562,6 +564,9 @@ export class HelmetClient {
     this.mapId = typeof map.map_id === "string" ? map.map_id : null
     const wasDocked = this.docked
     this.docked = pilotDockedInWorld(map, this.selfId)
+    this.stationPosition = this.docked ?
+      map.station_avatars?.find(avatar => key(avatar.player_id) === this.selfId) || null
+      : null
     this.stationDockingHold = this.docked ? null :
       syncDockingHold(this.stationDockingHold, map, this.selfId, performance.now())
     if (wasDocked !== this.docked) {

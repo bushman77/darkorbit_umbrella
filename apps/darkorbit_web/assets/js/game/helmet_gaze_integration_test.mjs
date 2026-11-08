@@ -50,6 +50,15 @@ test("the five-second docking countdown is rendered in both SBS eyes", () => {
   assert.doesNotMatch(helmet, /channel\.push\("station_dock"/)
 })
 
+test("desktop and SBS render the same server-owned walking pose", () => {
+  assert.match(view, /const position = client\.stationPosition/)
+  assert.match(view, /this\.camera\.position\.set\(x, 2\.6, z\)/)
+  assert.match(view, /this\.camera\.rotation\.set\(0, -yaw, 0, "YXZ"\)/)
+  assert.match(view, /this\.camera\.quaternion\.multiply\(this\.helmetHeadRotation\)/)
+  assert.match(helmet, /this\.stationPosition = this\.docked \?/)
+  assert.doesNotMatch(helmet, /channel\.push\("station_walk"|"station_look"/)
+})
+
 test("the 3D docking hangar is driven by server-replicated state, not an HMD command", () => {
   assert.match(view, /const docked = greenStarbaseInteriorVisible\(client\)/)
   assert.match(view, /const activeScene = docked \? this\.hangarScene : this\.scene/)

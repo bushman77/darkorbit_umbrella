@@ -40,6 +40,7 @@ import {
 } from "./planetary_warning.mjs"
 import {ownStationWarning, stationWarningView} from "./station_warning.mjs"
 import {dockingHoldFromEvent, syncDockingHold, dockingSeconds} from "./starbase_docking_countdown.mjs"
+import {StationWalkingControls} from "./station_walking_controls.mjs"
 import {validOrbitalMapId, shouldEnterOrbitalRegion} from "./orbital_regions.mjs"
 import {tacticalEncounterAction} from "./solar_encounter_actions.mjs"
 
@@ -103,6 +104,7 @@ class SpaceClient {
     this.lastLaserFeedback = null
     this.lastFrame = performance.now()
     this.docked = false
+    this.stationPosition = null
     this.stationDockingHold = null
     this.stationDockingSeconds = null
     this.lastDockingCountdownLabel = null
@@ -143,6 +145,14 @@ class SpaceClient {
       getBoundaries: () => this.boundaries,
       getSelfId: () => this.selfId,
       getDestination: () => this.commandDestination,
+    }).start()
+    // Registered before flight handlers so docked WASD never controls the ship.
+    this.stationWalking = new StationWalkingControls({
+      active: () => this.docked && !this.navComputer?.isOpen &&
+        this.channel?.state === "joined",
+      canvas: this.canvas,
+      sendWalk: input => this.channel?.push("station_walk", input),
+      sendLook: input => this.channel?.push("station_look", input),
     }).start()
     this.flightControls = new FlightControls({
       active: () => this.flightInputState() === "ready",
@@ -607,6 +617,7 @@ class SpaceClient {
     this.applyStationWarning(ownStationWarning(response.map, this.selfId))
     this.setDocked(Boolean(response.map.docked_pilots?.some(id =>
       entityKey(id) === this.selfId)))
+    this.applyStationPosition(response.map)
     if (!this.docked) this.stationDockingHold = syncDockingHold(
       this.stationDockingHold, response.map, this.selfId, performance.now())
     this.syncOwnCombatState()
@@ -667,6 +678,7 @@ class SpaceClient {
     if (Array.isArray(state.docked_pilots)) {
       this.setDocked(state.docked_pilots.some(id => entityKey(id) === this.selfId))
     }
+    this.applyStationPosition(state)
     if (!this.docked) this.stationDockingHold = syncDockingHold(
       this.stationDockingHold, state, this.selfId, performance.now())
     this.syncOwnCombatState()
@@ -1400,7 +1412,9 @@ class SpaceClient {
 
   setDocked(docked) {
     const wasDocked = this.docked
+    if (wasDocked && !docked) this.stationWalking?.release()
     this.docked = Boolean(docked)
+    if (!this.docked) this.stationPosition = null
     if (this.docked) this.clearDockingCountdown()
     const panel = this.root.querySelector("#starbase-docked-panel")
     if (panel) panel.style.display = this.docked ? "grid" : "none"
@@ -1419,6 +1433,12 @@ class SpaceClient {
       this.spaceLaser?.release()
       this.navigation?.cancel()
     }
+  }
+
+  applyStationPosition(map) {
+    const pose = map.station_avatars?.find(
+      avatar => entityKey(avatar.player_id) === this.selfId)
+    this.stationPosition = this.docked && pose || null
   }
 
   clearDockingCountdown() {
@@ -1582,6 +1602,7 @@ class SpaceClient {
       if (expired) this.flightControls?.setMouseSteering(expired)
     }
     this.interpolate(deltaSeconds)
+    this.stationWalking?.frame(time)
     this.updateDockingCountdown(time)
     this.flightControls?.heartbeat(time)
     this.updateFlightInputStatus()

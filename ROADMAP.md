@@ -938,6 +938,23 @@ Source: [Symbrella `symbolic_generation`](https://github.com/bushman77/Symbrella
 - [ ] After live confirmation, proceed to Green Starbase Stage 6 services,
   beginning with repair pricing and credit-backed settlement.
 
+### Green Starbase authoritative station walking V1 (2026-11-08)
+
+- [x] Add per-pilot server-owned station walking pose and bounded WASD,
+  strafe/turn and mouse-look intents independent of the parked spacecraft.
+- [x] Replicate the station avatar pose through existing world snapshots to
+  desktop and read-only SBS; phone's local head tracking remains independent.
+- [x] Restrict initial walking to the main hangar corridor with server bounds
+  and a closed rear airlock. No client-driven teleport or alternate rooms.
+- [x] Store the validated station-room position/facing in the existing
+  PostgreSQL docked-ship checkpoint, tied to ship/map/voyage, without migration.
+- [x] Restore the docked ship and avatar location after reconnect; checkpoint
+  immediately on auto-dock, periodically and on clean logout.
+- [ ] Run Elixir, Phoenix, JS/Tauri tests and perform real headset walking,
+  reconnection, collision and launch checks.
+- [ ] Add physical room transitions, detailed collision and real interactive
+  services in separate milestones.
+
 ### Green Starbase automatic five-second docking (2026-11-08)
 
 - [x] MapServer starts a server-owned five-second docking hold when the ship
