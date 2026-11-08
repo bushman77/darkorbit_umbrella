@@ -60,6 +60,32 @@ defmodule Core.World do
     end
   end
 
+  @doc "Station walking is authoritative and only available while docked."
+  def station_walk(session_id, input, opts \\ []) do
+    with {:ok, session} <- fetch_session(
+           Keyword.get(opts, :sessions, SessionManager), session_id) do
+      MapServer.station_walk(Keyword.get(opts, :registry, Core.World.Registry),
+        session.map_id, session.id, session.entity_id, input)
+    end
+  end
+
+  def station_look(session_id, input, opts \\ []) do
+    with {:ok, session} <- fetch_session(
+           Keyword.get(opts, :sessions, SessionManager), session_id) do
+      MapServer.station_look(Keyword.get(opts, :registry, Core.World.Registry),
+        session.map_id, session.id, session.entity_id, input)
+    end
+  end
+
+  def restore_station_position(session_id, pose, opts \\ []) do
+    with {:ok, session} <- fetch_session(
+           Keyword.get(opts, :sessions, SessionManager), session_id) do
+      MapServer.restore_station_position(
+        Keyword.get(opts, :registry, Core.World.Registry),
+        session.map_id, session.id, session.entity_id, pose)
+    end
+  end
+
   def docking_status(session_id, opts \\ []) do
     with {:ok, session} <- fetch_session(
            Keyword.get(opts, :sessions, SessionManager), session_id) do

@@ -87,6 +87,34 @@ defmodule Core.World.GreenStarbaseDockingIntegrationTest do
     assert :ok = World.disconnect(session.id, ctx.opts)
   end
 
+  test "parked pilot walks with server-owned bounds; launch rejects walking", ctx do
+    at_starbase!()
+    session = connect!(ctx, at(0, 0, -10))
+    assert {:error, :not_docked} =
+      World.station_walk(session.id, %{"forward" => 1, "strafe" => 0, "turn" => 0}, ctx.opts)
+    assert {:ok, %{docked: true}} = World.dock(session.id, ctx.opts)
+    assert {:error, :invalid_station_controls} =
+      World.station_walk(session.id, %{"forward" => 55, "strafe" => 0, "turn" => 0}, ctx.opts)
+    assert {:ok, _} =
+      World.station_walk(session.id, %{"forward" => 1, "strafe" => 0, "turn" => 0}, ctx.opts)
+    for _ <- 1..15, do: assert {:ok, _} = World.tick(ctx.opts[:map_id], ctx.opts)
+    assert {:ok, snapshot} = World.snapshot(ctx.opts[:map_id], ctx.opts)
+    assert [%{player_id: @pilot, z: z}] = snapshot.station_avatars
+    assert z < 43.0
+    assert {:ok, %{station_position: %{z: ^z}}} =
+      World.ship_condition(session.id, ctx.opts)
+    assert {:ok, _} = World.station_look(session.id, %{"delta_yaw" => 0.15}, ctx.opts)
+    assert {:ok, snapshot} = World.snapshot(ctx.opts[:map_id], ctx.opts)
+    assert [%{yaw: yaw}] = snapshot.station_avatars
+    assert yaw > 0.1
+    assert {:ok, _} = World.launch(session.id, ctx.opts)
+    assert {:error, :not_docked} =
+      World.station_walk(session.id, %{"forward" => 1, "strafe" => 0, "turn" => 0}, ctx.opts)
+    assert {:ok, after_launch} = World.snapshot(ctx.opts[:map_id], ctx.opts)
+    assert after_launch.station_avatars == []
+    assert :ok = World.disconnect(session.id, ctx.opts)
+  end
+
   test "server rejects requests outside the bay and away from the SOL waypoint", ctx do
     session = connect!(ctx, at(0, 0, -45))
     assert {:error, :not_at_starbase} = World.dock(session.id, ctx.opts)

@@ -20,6 +20,7 @@ defmodule Core.World.MapServer do
   alias Core.World.FlightDynamics
   alias Core.World.GreenStarbaseSafety
   alias Core.World.GreenStarbaseDocking
+  alias Core.World.StationInterior
   alias Core.Universe.{FreeFlightRegion, GreenStarbase}
   alias Core.World.EventSink
   alias Core.World.MapDefinition
@@ -72,6 +73,17 @@ defmodule Core.World.MapServer do
 
   def docking_status(registry, map_id, session_id, entity_id),
     do: call_map(registry, map_id, {:docking_status, session_id, entity_id})
+
+  def station_walk(registry, map_id, session_id, entity_id, input),
+    do: call_map(registry, map_id, {:station_walk, session_id, entity_id, input})
+
+  def station_look(registry, map_id, session_id, entity_id, input),
+    do: call_map(registry, map_id, {:station_look, session_id, entity_id, input})
+
+  @doc "Server-only restore from the previously validated durable dock record."
+  def restore_station_position(registry, map_id, session_id, entity_id, pose),
+    do: call_map(registry, map_id,
+      {:restore_station_position, session_id, entity_id, pose})
 
   @doc "Read the server-owned condition of an authenticated player ship."
   def ship_condition(registry, map_id, session_id, entity_id) do
@@ -255,6 +267,8 @@ defmodule Core.World.MapServer do
       entities: %{},
       docked_ships: %{},
       docking_holds: %{},
+      station_avatars: %{},
+      station_inputs: %{},
       # An Atlas session begins peacefully. Definitions remain dormant.
       npcs: if(Keyword.get(opts, :initial_npcs?, false),
         do: spawn_npcs(npc_definitions, tick_ms), else: %{}),
@@ -341,7 +355,7 @@ defmodule Core.World.MapServer do
   def handle_call({:ship_condition, session_id, entity_id}, _from, state) do
     result =
       with {:ok, ship} <- find_session_entity(state, session_id, entity_id) do
-        {:ok, player_ship_report(ship)}
+        {:ok, player_ship_report(ship, state)}
       end
 
     {:reply, result, state}
@@ -377,6 +391,42 @@ defmodule Core.World.MapServer do
     end
   end
 
+  # Only a parked ship in its own authenticated session can walk. Client
+  # commands supply axes, never an absolute pose or a chosen station.
+  def handle_call({:station_walk, session_id, entity_id, input}, _from, state) do
+    with {:ok, _ship} <- parked_station_ship(state, session_id, entity_id),
+         {:ok, axes} <- StationInterior.controls(input) do
+      updated = %{state | station_inputs: Map.put(state.station_inputs, entity_id, axes)}
+      {:reply, {:ok, %{accepted: true}}, updated}
+    else
+      error -> {:reply, error, state}
+    end
+  end
+
+  def handle_call({:station_look, session_id, entity_id, input}, _from, state) do
+    with {:ok, _ship} <- parked_station_ship(state, session_id, entity_id),
+         {:ok, delta} <- StationInterior.look(input) do
+      pose = Map.get(state.station_avatars, entity_id, StationInterior.initial())
+      updated = %{state | station_avatars: Map.put(state.station_avatars,
+        entity_id, StationInterior.rotate(pose, delta))}
+      {:reply, {:ok, %{accepted: true}}, updated}
+    else
+      error -> {:reply, error, state}
+    end
+  end
+
+  def handle_call({:restore_station_position, session_id, entity_id, pose},
+                  _from, state) do
+    with {:ok, _ship} <- parked_station_ship(state, session_id, entity_id),
+         true <- StationInterior.valid_pose?(pose) do
+      updated = %{state | station_avatars: Map.put(state.station_avatars, entity_id, pose)}
+      {:reply, :ok, updated}
+    else
+      false -> {:reply, {:error, :invalid_station_position}, state}
+      error -> {:reply, error, state}
+    end
+  end
+
   def handle_call({:restore_dock, session_id, entity_id}, _from, state) do
     with {:ok, ship} <- authorized_entity(state, session_id, entity_id),
          :ok <- authorize_green_starbase(state, ship.player_id),
@@ -385,7 +435,9 @@ defmodule Core.World.MapServer do
       updated = %{state |
         entities: Map.delete(state.entities, ship.id),
         docked_ships: Map.put(state.docked_ships, ship.id, parked),
-        docking_holds: Map.delete(state.docking_holds, ship.id)}
+        docking_holds: Map.delete(state.docking_holds, ship.id),
+        station_avatars: Map.put(state.station_avatars, ship.id,
+          StationInterior.initial())}
       broadcast(updated, :entity_left, public_entity(ship))
       {:reply, :ok, updated}
     else
@@ -404,6 +456,8 @@ defmodule Core.World.MapServer do
         updated = %{state |
           docked_ships: Map.delete(state.docked_ships, entity_id),
           docking_holds: Map.delete(state.docking_holds, entity_id),
+          station_avatars: Map.delete(state.station_avatars, entity_id),
+          station_inputs: Map.delete(state.station_inputs, entity_id),
           entities: Map.put(state.entities, entity_id, ship)}
         broadcast(updated, :entity_joined, public_entity(ship))
         broadcast(updated, :station_launched, %{entity_id: ship.id,
@@ -444,7 +498,7 @@ defmodule Core.World.MapServer do
   def handle_call({:prepare_disconnect, session_id, entity_id}, _from, state) do
     case Map.fetch(state.departures, session_id) do
       {:ok, %Entity{id: ^entity_id} = ship} ->
-        {:reply, {:ok, player_ship_report(ship)}, state}
+        {:reply, {:ok, player_ship_report(ship, state)}, state}
 
       {:ok, _other_ship} ->
         {:reply, {:error, :session_mismatch}, state}
@@ -455,9 +509,10 @@ defmodule Core.World.MapServer do
             updated = %{state |
               entities: Map.delete(state.entities, ship.id),
               docked_ships: Map.delete(state.docked_ships, ship.id),
-              departures: Map.put(state.departures, session_id, ship)
+              departures: Map.put(state.departures, session_id, ship),
+              station_inputs: Map.delete(state.station_inputs, ship.id)
             }
-            {:reply, {:ok, player_ship_report(ship)}, updated}
+            {:reply, {:ok, player_ship_report(ship, state)}, updated}
 
           error ->
             {:reply, error, state}
@@ -711,6 +766,8 @@ defmodule Core.World.MapServer do
           entities: Map.delete(state.entities, entity.id),
           docked_ships: Map.delete(state.docked_ships, entity.id),
           docking_holds: Map.delete(state.docking_holds, entity.id),
+          station_avatars: Map.delete(state.station_avatars, entity.id),
+          station_inputs: Map.delete(state.station_inputs, entity.id),
           departures: Map.delete(state.departures, session_id),
           npcs: npcs
         }
@@ -1177,12 +1234,31 @@ defmodule Core.World.MapServer do
     updated
   end
 
+  defp parked_station_ship(state, session_id, entity_id) do
+    case Map.get(state.docked_ships, entity_id) do
+      %Entity{session_id: ^session_id, player_id: ^entity_id, docked: true} = ship ->
+        {:ok, ship}
+      %Entity{} -> {:error, :session_mismatch}
+      nil -> {:error, :not_docked}
+    end
+  end
+
+  defp advance_station_avatars(state) do
+    poses = Map.new(state.station_avatars, fn {id, pose} ->
+      input = Map.get(state.station_inputs, id, StationInterior.idle())
+      {id, StationInterior.step(pose, input, state.tick_ms / 1_000)}
+    end)
+    %{state | station_avatars: poses}
+  end
+
   defp park_green_starbase_ship(state, ship) do
     parked = GreenStarbaseDocking.park(ship)
     updated = %{state |
       entities: Map.delete(state.entities, ship.id),
       docked_ships: Map.put(state.docked_ships, ship.id, parked),
-      docking_holds: Map.delete(state.docking_holds, ship.id)}
+      docking_holds: Map.delete(state.docking_holds, ship.id),
+      station_avatars: Map.put(state.station_avatars, ship.id,
+        StationInterior.initial())}
     broadcast(updated, :entity_left, public_entity(ship))
     broadcast(updated, :station_docked, %{
       entity_id: ship.id, station_id: GreenStarbase.id(), docked: true
@@ -1391,7 +1467,7 @@ defmodule Core.World.MapServer do
 
     state = state |> resolve_player_engagements() |> respawn_due_npcs()
     state = complete_tactical_courses(state, Enum.reverse(finished_courses))
-    state = advance_automatic_docking(state)
+    state = state |> advance_automatic_docking() |> advance_station_avatars()
     broadcast(state, :world_state, public_state(state))
     state
   end
@@ -2062,8 +2138,10 @@ defmodule Core.World.MapServer do
     end
   end
 
-  defp player_ship_report(ship) do
+  defp player_ship_report(ship, state) do
     %{
+      station_position: if(ship.docked, do: Map.get(state.station_avatars,
+        ship.id, StationInterior.initial()), else: nil),
       player_id: ship.player_id,
       ship_instance_id: ship.ship_instance_id,
       position: ship.position,
@@ -2207,6 +2285,9 @@ defmodule Core.World.MapServer do
       planetary_warnings: proximity_warnings,
       station_warnings: station_warnings,
       docked_pilots: state.docked_ships |> Map.keys() |> Enum.sort(),
+      station_avatars: state.station_avatars
+        |> Enum.map(fn {id, pose} -> Map.put(pose, :player_id, id) end)
+        |> Enum.sort_by(& &1.player_id),
       # A late-joining desktop/HMD can display the remaining hold without
       # restarting the five-second timer. No private ship state is included.
       docking_holds: state.docking_holds
