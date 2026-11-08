@@ -183,6 +183,21 @@ defmodule DarkorbitWeb.WorldChannel do
   def handle_in("solar_hail", _payload, socket),
     do: {:reply, {:error, %{reason: "invalid_contact"}}, socket}
 
+  # Pilot session identity, docking position, and berth are always server-owned.
+  def handle_in("station_dock", _payload, socket) do
+    case World.dock(socket.assigns.world_session_id) do
+      {:ok, status} -> {:reply, {:ok, status}, socket}
+      {:error, reason} -> {:reply, {:error, %{reason: error_reason(reason)}}, socket}
+    end
+  end
+
+  def handle_in("station_launch", _payload, socket) do
+    case World.launch(socket.assigns.world_session_id) do
+      {:ok, status} -> {:reply, {:ok, status}, socket}
+      {:error, reason} -> {:reply, {:error, %{reason: error_reason(reason)}}, socket}
+    end
+  end
+
   def handle_in("stop_navigation", _payload, socket) do
     case World.stop_navigation(socket.assigns.world_session_id) do
       {:ok, entity} -> {:reply, {:ok, %{entity: entity}}, socket}
@@ -456,6 +471,8 @@ defmodule DarkorbitWeb.WorldChannel do
              :planetary_proximity_changed,
              :station_proximity_changed,
              :station_collision,
+             :station_docked,
+             :station_launched,
              :entity_destroyed
            ] do
     :ok = push(socket, Atom.to_string(event), payload)
