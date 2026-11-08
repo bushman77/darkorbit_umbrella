@@ -24,6 +24,7 @@ defmodule Core.World.Entity do
   defstruct @enforce_keys ++ [
               :ship_instance_id,
               :destination,
+              docked: false,
               :target_id,
               :engaged_target_id,
               navigation_mode: :manual,
@@ -70,6 +71,7 @@ defmodule Core.World.Entity do
           next_attack_tick: non_neg_integer(),
           target_id: term() | nil,
           engaged_target_id: term() | nil,
+          docked: boolean(),
           status: :alive | :destroyed
         }
 end
