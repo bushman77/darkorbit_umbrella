@@ -18,6 +18,7 @@ defmodule Core.World.MapServer do
   alias Core.World.Course
   alias Core.World.Entity
   alias Core.World.FlightDynamics
+  alias Core.World.GreenStarbaseSafety
   alias Core.World.EventSink
   alias Core.World.MapDefinition
   alias Core.World.Movement
@@ -245,6 +246,8 @@ defmodule Core.World.MapServer do
       departures: %{},
       tactical_frozen: %{},
       solar_navigation_server: Keyword.get(opts, :solar_navigation_server),
+      green_starbase_active?: false,
+      green_starbase_checked_tick: nil,
       auto_respawn?: Keyword.get(opts, :auto_respawn?, false),
       event_sink: Keyword.fetch!(opts, :event_sink),
       tick: 0,
@@ -973,9 +976,60 @@ defmodule Core.World.MapServer do
     }
   end
 
+  # Private deep-space maps only contain physical starbase geometry while
+  # the authenticated pilot has stopped at its genuine SOL waypoint.
+  # SOL Navigation runs in a separate GenServer; cache its read-only public
+  # state every second to avoid cross-process calls on 100ms physics ticks.
+  defp refresh_green_starbase_presence(
+         %{definition: %{id: "sol:free_" <> pilot_text}} = state, tick) do
+    interval = max(1, ceil(1_000 / state.tick_ms))
+    if is_nil(state.green_starbase_checked_tick) or
+         tick - state.green_starbase_checked_tick >= interval do
+      active =
+        case Integer.parse(pilot_text) do
+          {player_id, ""} when player_id > 0 ->
+            if is_nil(state.solar_navigation_server) do
+              false
+            else
+              try do
+                match?({:ok, %{green_starbase_nearby: true}},
+                  SolarNavigation.snapshot(state.solar_navigation_server, player_id))
+              catch
+                :exit, _reason -> false
+              end
+            end
+          _ -> false
+        end
+      %{state | green_starbase_active?: active,
+        green_starbase_checked_tick: tick}
+    else
+      state
+    end
+  end
+  defp refresh_green_starbase_presence(state, _tick), do: state
+
+  defp station_warning(position, state),
+    do: station_warning(position, state, state.green_starbase_active?)
+
+  defp station_warning(position, %{definition: %{planet: nil}}, active),
+    do: GreenStarbaseSafety.warning(position, active)
+
+  defp station_warning(position, state, _active),
+    do: StationSafety.warning(position, state.definition)
+
+  defp resolve_station_contact(before, moved,
+         %{definition: %{planet: nil}} = state, elapsed),
+    do: GreenStarbaseSafety.resolve(before, moved, state.green_starbase_active?, elapsed)
+
+  defp resolve_station_contact(before, moved, state, elapsed),
+    do: StationSafety.resolve(before, moved, state.definition, elapsed)
+
   defp advance_tick(state) do
     next_tick = state.tick + 1
     distance_factor = state.tick_ms / 1_000
+    old_green_active = state.green_starbase_active?
+    # Ask Navigation at most once per second, not every physics tick.
+    state = refresh_green_starbase_presence(state, next_tick)
 
     # Apply one authoritative swept planet test after either manual thrust
     # OR plotted autopilot movement. Even a single fast tick that enters and
@@ -997,7 +1051,7 @@ defmodule Core.World.MapServer do
             # Station geometry is distinct from lethal planetary geometry.
             # Both manual flight and autopilot receive swept collision checks.
             {safe, station_impact} =
-              case StationSafety.resolve(entity, planet_safe, state.definition, distance_factor) do
+              case resolve_station_contact(entity, planet_safe, state, distance_factor) do
                 {:ok, safe} -> {safe, nil}
                 {:impact, stopped, report} -> {stopped, {entity, stopped, report}}
               end
@@ -1013,8 +1067,8 @@ defmodule Core.World.MapServer do
                   ),
                   StationSafety.transition(
                     entity_id,
-                    StationSafety.warning(entity.position, state.definition),
-                    StationSafety.warning(safe.position, state.definition),
+                    station_warning(entity.position, state, old_green_active),
+                    station_warning(safe.position, state),
                     next_tick
                   )
                 }
@@ -1942,7 +1996,7 @@ defmodule Core.World.MapServer do
       |> Enum.sort_by(fn {id, _entity} -> inspect(id) end)
       |> Enum.flat_map(fn {id, entity} ->
         if Combat.alive?(entity) do
-          case StationSafety.warning(entity.position, state.definition) do
+          case station_warning(entity.position, state) do
             nil -> []
             warning -> [Map.put(warning, :entity_id, id)]
           end
