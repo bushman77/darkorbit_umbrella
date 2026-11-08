@@ -19,6 +19,8 @@ defmodule Core.World.MapServer do
   alias Core.World.Entity
   alias Core.World.FlightDynamics
   alias Core.World.GreenStarbaseSafety
+  alias Core.World.GreenStarbaseDocking
+  alias Core.Universe.{FreeFlightRegion, GreenStarbase}
   alias Core.World.EventSink
   alias Core.World.MapDefinition
   alias Core.World.Movement
@@ -56,6 +58,19 @@ defmodule Core.World.MapServer do
   def join(registry, map_id, %Session{} = session, stats, entry \\ nil, condition \\ nil) do
     call_map(registry, map_id, {:join, session, stats, entry, condition})
   end
+
+  @doc "Server-authoritative docking and launch commands."
+  def dock(registry, map_id, session_id, entity_id),
+    do: call_map(registry, map_id, {:dock, session_id, entity_id})
+
+  def restore_dock(registry, map_id, session_id, entity_id),
+    do: call_map(registry, map_id, {:restore_dock, session_id, entity_id})
+
+  def launch(registry, map_id, session_id, entity_id),
+    do: call_map(registry, map_id, {:launch, session_id, entity_id})
+
+  def docking_status(registry, map_id, session_id, entity_id),
+    do: call_map(registry, map_id, {:docking_status, session_id, entity_id})
 
   @doc "Read the server-owned condition of an authenticated player ship."
   def ship_condition(registry, map_id, session_id, entity_id) do
@@ -237,6 +252,7 @@ defmodule Core.World.MapServer do
     state = %{
       definition: definition,
       entities: %{},
+      docked_ships: %{},
       # An Atlas session begins peacefully. Definitions remain dormant.
       npcs: if(Keyword.get(opts, :initial_npcs?, false),
         do: spawn_npcs(npc_definitions, tick_ms), else: %{}),
@@ -329,6 +345,68 @@ defmodule Core.World.MapServer do
     {:reply, result, state}
   end
 
+  def handle_call({:docking_status, session_id, entity_id}, _from, state) do
+    result =
+      with {:ok, ship} <- find_session_entity(state, session_id, entity_id) do
+        {:ok, %{docked: ship.docked == true,
+          station_id: if(ship.docked, do: GreenStarbase.id(), else: nil)}}
+      end
+    {:reply, result, state}
+  end
+
+  def handle_call({:dock, session_id, entity_id}, _from, state) do
+    with {:ok, ship} <- authorized_entity(state, session_id, entity_id),
+         :ok <- authorize_green_starbase(state, ship.player_id),
+         :ok <- GreenStarbaseDocking.ready?(ship) do
+      parked = GreenStarbaseDocking.park(ship)
+      updated = %{state |
+        entities: Map.delete(state.entities, ship.id),
+        docked_ships: Map.put(state.docked_ships, ship.id, parked)}
+      broadcast(updated, :entity_left, public_entity(ship))
+      broadcast(updated, :station_docked, %{entity_id: ship.id,
+        station_id: GreenStarbase.id(), docked: true})
+      {:reply, {:ok, %{docked: true, station_id: GreenStarbase.id()}}, updated}
+    else
+      error -> {:reply, error, state}
+    end
+  end
+
+  def handle_call({:restore_dock, session_id, entity_id}, _from, state) do
+    with {:ok, ship} <- authorized_entity(state, session_id, entity_id),
+         :ok <- authorize_green_starbase(state, ship.player_id),
+         true <- GreenStarbaseDocking.inside_bay?(ship.position) do
+      parked = GreenStarbaseDocking.park(ship)
+      updated = %{state |
+        entities: Map.delete(state.entities, ship.id),
+        docked_ships: Map.put(state.docked_ships, ship.id, parked)}
+      broadcast(updated, :entity_left, public_entity(ship))
+      {:reply, :ok, updated}
+    else
+      false -> {:reply, {:error, :invalid_saved_dock}, state}
+      error -> {:reply, error, state}
+    end
+  end
+
+  def handle_call({:launch, session_id, entity_id}, _from, state) do
+    case Map.get(state.docked_ships, entity_id) do
+      %Entity{session_id: ^session_id, docked: true} = parked ->
+        attitude = GreenStarbaseDocking.launch_attitude()
+        ship = %{parked |
+          docked: false, position: GreenStarbaseDocking.launch_position(),
+          attitude: attitude, orientation: Orientation.from_angles(attitude)}
+        updated = %{state |
+          docked_ships: Map.delete(state.docked_ships, entity_id),
+          entities: Map.put(state.entities, entity_id, ship)}
+        broadcast(updated, :entity_joined, public_entity(ship))
+        broadcast(updated, :station_launched, %{entity_id: ship.id,
+          station_id: GreenStarbase.id(), docked: false})
+        {:reply, {:ok, %{station_id: GreenStarbase.id(),
+          docked: false, entity: public_entity(ship)}}, updated}
+      %Entity{} -> {:reply, {:error, :session_mismatch}, state}
+      nil -> {:reply, {:error, :not_docked}, state}
+    end
+  end
+
   def handle_call({:pending_tactical_cleanup, session_id, entity_id}, _from, state) do
     result =
       with {:ok, ship} <- find_session_entity(state, session_id, entity_id) do
@@ -364,10 +442,11 @@ defmodule Core.World.MapServer do
         {:reply, {:error, :session_mismatch}, state}
 
       :error ->
-        case authorized_entity(state, session_id, entity_id) do
+        case find_session_entity(state, session_id, entity_id) do
           {:ok, ship} ->
             updated = %{state |
               entities: Map.delete(state.entities, ship.id),
+              docked_ships: Map.delete(state.docked_ships, ship.id),
               departures: Map.put(state.departures, session_id, ship)
             }
             {:reply, {:ok, player_ship_report(ship)}, updated}
@@ -622,6 +701,7 @@ defmodule Core.World.MapServer do
         {npcs, cleared_npc_ids} = clear_npc_targets(state.npcs, entity.id)
         new_state = %{state |
           entities: Map.delete(state.entities, entity.id),
+          docked_ships: Map.delete(state.docked_ships, entity.id),
           departures: Map.delete(state.departures, session_id),
           npcs: npcs
         }
@@ -974,6 +1054,25 @@ defmodule Core.World.MapServer do
       shields: target.shields, max_shields: target.max_shields,
       status: target.status
     }
+  end
+
+  # Check live SOL position on every docking request, never rely on the
+  # one-second rendering cache. Only the pilot's own private map qualifies.
+  defp authorize_green_starbase(state, player_id) do
+    if state.definition.id != FreeFlightRegion.map_id(player_id) or
+         is_nil(state.solar_navigation_server) do
+      {:error, :not_at_starbase}
+    else
+      try do
+        case SolarNavigation.snapshot(state.solar_navigation_server, player_id) do
+          {:ok, %{green_starbase_nearby: true, status: :idle,
+                  location_id: nil, tactical_encounter: nil}} -> :ok
+          _ -> {:error, :not_at_starbase}
+        end
+      catch
+        :exit, _ -> {:error, :navigation_unavailable}
+      end
+    end
   end
 
   # Private deep-space maps only contain physical starbase geometry while
@@ -1866,7 +1965,8 @@ defmodule Core.World.MapServer do
   defp find_session_entity(state, session_id, entity_id) do
     case authorized_entity(state, session_id, entity_id) do
       {:error, :entity_not_found} ->
-        case Map.get(state.tactical_frozen, session_id) ||
+        case Map.get(state.docked_ships, entity_id) ||
+               Map.get(state.tactical_frozen, session_id) ||
                Map.get(state.departures, session_id) do
           %Entity{id: ^entity_id} = ship -> {:ok, ship}
           nil -> {:error, :entity_not_found}
@@ -1884,6 +1984,7 @@ defmodule Core.World.MapServer do
       ship_instance_id: ship.ship_instance_id,
       position: ship.position,
       attitude: ship.attitude,
+      docked: ship.docked == true,
       combat: player_combat_condition(ship)
     }
   end
@@ -2021,6 +2122,7 @@ defmodule Core.World.MapServer do
       tick_ms: state.tick_ms,
       planetary_warnings: proximity_warnings,
       station_warnings: station_warnings,
+      docked_pilots: state.docked_ships |> Map.keys() |> Enum.sort(),
       # Stable planet-local station geometry; shared by 3D and read-only SBS.
       orbital_base: if(state.definition.planet,
         do: Core.Universe.OrbitalEntry.space_base(state.definition.planet.body_id),
