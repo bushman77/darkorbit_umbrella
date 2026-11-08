@@ -23,8 +23,20 @@ defmodule Darkorbit.PilotLocation do
       when is_integer(player_id) and player_id > 0 and is_map(data) do
     with {:ok, _} <- VoyageCheckpoint.load(data) do
       now = DateTime.utc_now()
+      # Once automated cruise replaces manual free flight, discard that
+      # voyage's previous cockpit checkpoint. Returning to manual flight
+      # later must never reuse old spatial coordinates.
+      fields =
+        if data["status"] == "traveling" and data["free_flight"] == false do
+          [navigation: data, updated_at: now,
+           pose_map_id: nil, pose_voyage_number: nil,
+           pose_ship_instance_id: nil, pose_position: nil, pose_attitude: nil]
+        else
+          [navigation: data, updated_at: now]
+        end
+
       case Repo.insert(%Checkpoint{player_id: player_id, navigation: data},
-             on_conflict: [set: [navigation: data, updated_at: now]],
+             on_conflict: [set: fields],
              conflict_target: [:player_id]) do
         {:ok, _} -> :ok
         {:error, error} -> {:error, error}

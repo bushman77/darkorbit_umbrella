@@ -119,6 +119,12 @@ defmodule Darkorbit.PilotLocationTest do
     bad = %{report | position: %Position{x: 25_000.0, y: 400.0, z: 0.0}}
     assert :ok = PilotLocation.save_pose(account.id, entry.map_id, voyage, bad)
     assert PilotLocation.restore_entry(account.id, ship.id, entry, 7) == restored
+
+    # Reengaging automatic cruise invalidates the former conventional pose,
+    # even if this is still the same strategic voyage.
+    assert :ok = PilotLocation.save_navigation(account.id,
+      Navigation.Checkpoint.dump(%{voyage | free_flight: false}))
+    assert PilotLocation.restore_entry(account.id, ship.id, entry, 7) == entry
   end
 
   test "true deep-space waypoint remains stationary and restores its local cockpit" do

@@ -854,6 +854,8 @@ Source: [Symbrella `symbolic_generation`](https://github.com/bushman77/Symbrella
 - [x] On logout, freeze the pilot's strategic cruise at the precise saved
   point; continue shared merchant traffic, then resume the player's voyage
   only after the next authenticated world join.
+- [x] Invalidate old free-flight cockpit coordinates when automated cruise
+  resumes so subsequent manual entries in the same voyage use fresh poses.
 - [ ] Verify desktop manual free-flight logout/relogin and forced server
   restart in addition to the existing Venus reconnect regression.
 - [ ] Persist shared merchant routes and base inventory separately.
