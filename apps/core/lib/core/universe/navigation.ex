@@ -238,7 +238,7 @@ defmodule Core.Universe.Navigation do
       replacement = %{idle("earth") | voyage_number: voyage.voyage_number + 1}
 
       # Unlike periodic checkpoints, relocation must be durable before
-      acknowledging the client; never restore a pre-death coordinate.
+      # acknowledging the client; never restore a pre-death coordinate.
       case persist_connection_change(state, player_id, replacement) do
         {:ok, updated} ->
           broadcast(updated, player_id, replacement)
