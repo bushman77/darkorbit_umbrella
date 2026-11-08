@@ -19,10 +19,18 @@
 
   <%!-- Green Starbase bay access. Server validates the physical approach;
        this display never provides positional authority. --%>
+  <div id="starbase-docking-countdown" hidden aria-live="off"
+       class="pointer-events-none absolute left-1/2 top-[22%] z-[75] -translate-x-1/2
+              rounded-xl border border-emerald-300/70 bg-slate-950/90 px-7 py-4
+              text-center font-mono text-emerald-100 shadow-2xl backdrop-blur-lg">
+    <p class="text-xs font-bold tracking-widest text-emerald-300">GREEN STARBASE · AUTO DOCK</p>
+    <p id="starbase-docking-seconds" class="mt-1 text-5xl font-bold text-white">5</p>
+    <p class="mt-2 text-xs tracking-wider">HOLD POSITION · KEEP THROTTLE ZERO</p>
+  </div>
   <div id="starbase-docking-prompt" style="display: none"
        class="absolute bottom-40 left-1/2 z-[65] w-72 -translate-x-1/2 rounded-xl border border-emerald-400/60 bg-slate-950/95 p-3 text-center font-mono shadow-2xl">
     <p class="text-xs font-bold tracking-wider text-emerald-300">GREEN STARBASE · OPEN BAY</p>
-    <p class="my-2 text-xs text-slate-300">Enter the illuminated central hangar and stop completely.</p>
+    <p class="my-2 text-xs text-slate-300">Enter the illuminated central bay and stop. Auto-docking starts after 5 seconds. You may also request immediate docking.</p>
     <button id="starbase-dock" type="button" class="nav-button nav-primary w-full">Request docking</button>
     <p id="starbase-dock-feedback" role="status" aria-live="polite" class="mt-2 text-xs text-emerald-200">Docking available inside bay at low speed.</p>
   </div>

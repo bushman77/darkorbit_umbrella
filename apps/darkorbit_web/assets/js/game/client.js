@@ -39,6 +39,7 @@ import {
   ownPlanetaryWarning, proximityEventWarning, planetaryWarningView,
 } from "./planetary_warning.mjs"
 import {ownStationWarning, stationWarningView} from "./station_warning.mjs"
+import {dockingHoldFromEvent, syncDockingHold, dockingSeconds} from "./starbase_docking_countdown.mjs"
 import {validOrbitalMapId, shouldEnterOrbitalRegion} from "./orbital_regions.mjs"
 import {tacticalEncounterAction} from "./solar_encounter_actions.mjs"
 
@@ -102,6 +103,9 @@ class SpaceClient {
     this.lastLaserFeedback = null
     this.lastFrame = performance.now()
     this.docked = false
+    this.stationDockingHold = null
+    this.stationDockingSeconds = null
+    this.lastDockingCountdownLabel = null
     this.respawnPending = false
     this.lastFlightInputState = null
   }
@@ -487,6 +491,14 @@ class SpaceClient {
         if (event.entity) this.upsertEntity(event.entity, true)
       }
     })
+    channel.on("station_docking_started", event => {
+      if (entityKey(event.entity_id) === this.selfId && !this.docked) {
+        this.stationDockingHold = dockingHoldFromEvent(event, performance.now())
+      }
+    })
+    channel.on("station_docking_cancelled", event => {
+      if (entityKey(event.entity_id) === this.selfId) this.clearDockingCountdown()
+    })
     channel.on("station_docked", event => {
       if (entityKey(event.entity_id) === this.selfId) this.setDocked(true)
     })
@@ -595,6 +607,8 @@ class SpaceClient {
     this.applyStationWarning(ownStationWarning(response.map, this.selfId))
     this.setDocked(Boolean(response.map.docked_pilots?.some(id =>
       entityKey(id) === this.selfId)))
+    if (!this.docked) this.stationDockingHold = syncDockingHold(
+      this.stationDockingHold, response.map, this.selfId, performance.now())
     this.syncOwnCombatState()
     this.respawnPending = false
     this.showRespawnPanel(
@@ -653,6 +667,8 @@ class SpaceClient {
     if (Array.isArray(state.docked_pilots)) {
       this.setDocked(state.docked_pilots.some(id => entityKey(id) === this.selfId))
     }
+    if (!this.docked) this.stationDockingHold = syncDockingHold(
+      this.stationDockingHold, state, this.selfId, performance.now())
     this.syncOwnCombatState()
     this.updateCombatHud()
     this.showSolarTactical()
@@ -1385,6 +1401,7 @@ class SpaceClient {
   setDocked(docked) {
     const wasDocked = this.docked
     this.docked = Boolean(docked)
+    if (this.docked) this.clearDockingCountdown()
     const panel = this.root.querySelector("#starbase-docked-panel")
     if (panel) panel.style.display = this.docked ? "grid" : "none"
     const prompt = this.root.querySelector("#starbase-docking-prompt")
@@ -1402,6 +1419,28 @@ class SpaceClient {
       this.spaceLaser?.release()
       this.navigation?.cancel()
     }
+  }
+
+  clearDockingCountdown() {
+    this.stationDockingHold = null
+    this.stationDockingSeconds = null
+    this.lastDockingCountdownLabel = null
+    const overlay = this.root.querySelector("#starbase-docking-countdown")
+    if (overlay) overlay.hidden = true
+  }
+
+  updateDockingCountdown(time) {
+    const seconds = this.docked ? null : dockingSeconds(this.stationDockingHold, time)
+    this.stationDockingSeconds = seconds
+    const overlay = this.root.querySelector("#starbase-docking-countdown")
+    if (overlay) overlay.hidden = seconds === null || Boolean(this.navComputer?.isOpen)
+    if (this.lastDockingCountdownLabel === seconds) return
+    this.lastDockingCountdownLabel = seconds
+    const number = this.root.querySelector("#starbase-docking-seconds")
+    if (number) number.textContent = seconds === 0 ? "SECURING" : String(seconds)
+    const feedback = this.root.querySelector("#starbase-dock-feedback")
+    if (feedback && seconds !== null) feedback.textContent = seconds === 0 ?
+      "Docking clamps engaging…" : "Auto-docking in " + seconds + " · hold still."
   }
 
   applyStationWarning(warning, {announce = true} = {}) {
@@ -1543,6 +1582,7 @@ class SpaceClient {
       if (expired) this.flightControls?.setMouseSteering(expired)
     }
     this.interpolate(deltaSeconds)
+    this.updateDockingCountdown(time)
     this.flightControls?.heartbeat(time)
     this.updateFlightInputStatus()
     this.spaceLaser?.update(time)

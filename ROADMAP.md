@@ -938,6 +938,21 @@ Source: [Symbrella `symbolic_generation`](https://github.com/bushman77/Symbrella
 - [ ] After live confirmation, proceed to Green Starbase Stage 6 services,
   beginning with repair pricing and credit-backed settlement.
 
+### Green Starbase automatic five-second docking (2026-11-08)
+
+- [x] MapServer starts a server-owned five-second docking hold when the ship
+  remains stopped inside the actual, collision-safe Green Starbase bay.
+- [x] Cancel the hold if the ship moves, leaves the bay or loses its verified
+  station eligibility; recheck SOL navigation authority before parking.
+- [x] Automatically dock the existing player ship using the already-tested
+  secured docking lifecycle, without any phone-originated controls.
+- [x] Display the five-second countdown as a stereoscopic 3D HUD panel in
+  both SBS eyes, plus a desktop countdown; no per-second socket spam.
+- [x] Late-joining viewers resume the hold's remaining duration from the
+  server's world snapshot; rejoining does not reset the hold on the server.
+- [ ] Run core, channel and Node tests, then live-check stop, countdown,
+  throttle-cancellation, automatic hangar transition and launch.
+
 ### Green Starbase immersive docked hangar V1 (2026-11-08)
 
 - [x] The desktop 3D cockpit and paired read-only SBS headset now use a

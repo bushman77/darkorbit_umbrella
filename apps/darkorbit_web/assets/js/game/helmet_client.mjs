@@ -9,6 +9,7 @@ import {renderHelmetEncounter} from "./helmet_encounter_view.mjs"
 import {renderHelmetSurrender, helmetSurrenderFromEntities} from "./helmet_surrender_view.mjs"
 import {helmetPlanetaryNavigation} from "./helmet_planetary_navigation.mjs"
 import {pilotDockedInWorld} from "./green_starbase_interior_state.mjs"
+import {dockingHoldFromEvent, syncDockingHold, dockingSeconds} from "./starbase_docking_countdown.mjs"
 import {HelmetScreenWake} from "./helmet_screen_wake.mjs"
 import {HelmetHeadTracking} from "./helmet_head_tracking.mjs"
 import {HelmetGazeDwell} from "./helmet_gaze_dwell.mjs"
@@ -54,6 +55,8 @@ export class HelmetClient {
     this.orbitalBase = null
     this.mapId = null
     this.docked = false
+    this.stationDockingHold = null
+    this.stationDockingSeconds = null
     this.screenWake = new HelmetScreenWake()
     this.gaze = new HelmetGazeDwell()
     this.headTracking = new HelmetHeadTracking({
@@ -115,6 +118,14 @@ export class HelmetClient {
     })
     this.channel.on("helmet_navigation", payload => {
       this.navComputer.solarNavigation = helmetPlanetaryNavigation(payload)
+    })
+    this.channel.on("station_docking_started", payload => {
+      if (key(payload.entity_id) === this.selfId && !this.docked) {
+        this.stationDockingHold = dockingHoldFromEvent(payload, performance.now())
+      }
+    })
+    this.channel.on("station_docking_cancelled", payload => {
+      if (key(payload.entity_id) === this.selfId) this.stationDockingHold = null
     })
     this.channel.on("helmet_revoked", () => {
       localStorage.removeItem(STORAGE_KEY)
@@ -524,6 +535,8 @@ export class HelmetClient {
     this.orbitalBase = null
     this.mapId = null
     this.docked = false
+    this.stationDockingHold = null
+    this.stationDockingSeconds = null
     this.beams = []
     this.report(false)
   }
@@ -549,6 +562,8 @@ export class HelmetClient {
     this.mapId = typeof map.map_id === "string" ? map.map_id : null
     const wasDocked = this.docked
     this.docked = pilotDockedInWorld(map, this.selfId)
+    this.stationDockingHold = this.docked ? null :
+      syncDockingHold(this.stationDockingHold, map, this.selfId, performance.now())
     if (wasDocked !== this.docked) {
       this.gaze.reset()
       this.view?.setHelmetNavOpen(false)
@@ -611,6 +626,8 @@ export class HelmetClient {
     if (!this.running || this.mode !== "combat" || document.hidden) return
     try {
       this.beams = this.beams.filter(beam => beam.expiresAt > time)
+      this.stationDockingSeconds = this.docked ? null :
+        dockingSeconds(this.stationDockingHold, time)
       this.view.setHelmetHeadRotation(this.headTracking.rotation(time))
       this.view.render(this, time)
       this.frameCount++

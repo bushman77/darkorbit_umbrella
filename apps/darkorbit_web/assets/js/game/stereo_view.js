@@ -205,6 +205,26 @@ export class StereoSpaceView {
     framing.add(panel)
     this.hudPanel = panel
 
+    // Server-owned five-second docking progress: paint locally in both eyes.
+    // No per-second Phoenix events, timers with flight authority, or 2D overlays.
+    this.dockingCountdownCanvas = document.createElement("canvas")
+    this.dockingCountdownCanvas.width = 640
+    this.dockingCountdownCanvas.height = 320
+    this.dockingCountdownTexture = new THREE.CanvasTexture(this.dockingCountdownCanvas)
+    this.dockingCountdownTexture.colorSpace = THREE.SRGBColorSpace
+    this.dockingCountdownMesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(1.95, 0.98),
+      new THREE.MeshBasicMaterial({
+        map: this.dockingCountdownTexture, transparent: true,
+        depthTest: false, depthWrite: false,
+      }),
+    )
+    this.dockingCountdownMesh.position.set(0, 0.28, -2.27)
+    this.dockingCountdownMesh.renderOrder = 82
+    this.dockingCountdownMesh.visible = false
+    framing.add(this.dockingCountdownMesh)
+    this.lastCountdownNumber = null
+
     const sight = new THREE.Mesh(
       new THREE.RingGeometry(0.025, 0.035, 40),
       new THREE.MeshBasicMaterial({color: 0x78e6fc, transparent: true, opacity: 0.8, depthTest: false}),
@@ -609,6 +629,31 @@ export class StereoSpaceView {
     this.hudTexture.needsUpdate = true
   }
 
+  updateDockingCountdown(seconds) {
+    const visible = Number.isInteger(seconds) && seconds >= 0
+    this.dockingCountdownMesh.visible = visible
+    if (!visible || this.lastCountdownNumber === seconds) return
+    this.lastCountdownNumber = seconds
+    const ctx = this.dockingCountdownCanvas.getContext("2d")
+    ctx.clearRect(0, 0, 640, 320)
+    ctx.fillStyle = "rgba(2, 25, 19, 0.94)"
+    ctx.fillRect(0, 0, 640, 320)
+    ctx.strokeStyle = "#75ffb0"
+    ctx.lineWidth = 12
+    ctx.strokeRect(8, 8, 624, 304)
+    ctx.textAlign = "center"
+    ctx.fillStyle = "#8cffe0"
+    ctx.font = "bold 44px monospace"
+    ctx.fillText("GREEN STARBASE", 320, 78)
+    ctx.fillStyle = "#f7fff5"
+    ctx.font = seconds === 0 ? "bold 66px monospace" : "bold 124px monospace"
+    ctx.fillText(seconds === 0 ? "DOCKING…" : String(seconds), 320, 217)
+    ctx.fillStyle = "#c5dfce"
+    ctx.font = "bold 30px monospace"
+    ctx.fillText("HOLD STILL · AUTO DOCK", 320, 287)
+    this.dockingCountdownTexture.needsUpdate = true
+  }
+
   render(client, time) {
     const feedback = client.lastLaserFeedback
     const active = feedback && time - feedback.at < LASER_FEEDBACK_MS
@@ -616,6 +661,7 @@ export class StereoSpaceView {
       feedback.hit ? 0x79ff9b : 0xff7272 : 0x78e6fc)
     const ownShip = client.entities.get(client.selfId)
     const docked = greenStarbaseInteriorVisible(client)
+    this.updateDockingCountdown(docked ? null : client.stationDockingSeconds)
     this.interiorActive = docked
     if (docked) {
       // Station camera is an anchored viewpoint inside the actual hangar.

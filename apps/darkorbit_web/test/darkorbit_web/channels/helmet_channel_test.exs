@@ -89,6 +89,23 @@ defmodule DarkorbitWeb.HelmetChannelTest do
     assert_push "helmet_navigation",
       %{planetary_view: %{body_id: "earth", stage: :orbital_preview}}
 
+    # Only this authenticated viewer sees its own docking hold events.
+    Phoenix.PubSub.broadcast(Darkorbit.PubSub, Darkorbit.World.PubSub.topic("1-1"),
+      {:station_docking_started, %{entity_id: id,
+        station_id: "sol:starbase:green", started_tick: 12,
+        duration_ms: 5_000, remaining_ms: 5_000}})
+    assert_push "station_docking_started", %{entity_id: ^id, duration_ms: 5_000}
+    other_id = id + 1
+    Phoenix.PubSub.broadcast(Darkorbit.PubSub, Darkorbit.World.PubSub.topic("1-1"),
+      {:station_docking_started, %{entity_id: other_id,
+        station_id: "sol:starbase:green", started_tick: 12,
+        duration_ms: 5_000, remaining_ms: 5_000}})
+    refute_push "station_docking_started", %{entity_id: ^other_id}, 50
+    Phoenix.PubSub.broadcast(Darkorbit.PubSub, Darkorbit.World.PubSub.topic("1-1"),
+      {:station_docking_cancelled, %{entity_id: id,
+        station_id: "sol:starbase:green"}})
+    assert_push "station_docking_cancelled", %{entity_id: ^id}
+
     # A real encounter hold is mirrored only to the paired pilot's HMD.
     # The viewer receives a read-only alert, not cargo or a flight command.
     encounter_id = "flyby:traffic:sol:vesper-02:1"

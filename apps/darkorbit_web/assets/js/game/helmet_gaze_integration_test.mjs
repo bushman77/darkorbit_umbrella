@@ -41,6 +41,15 @@ test("helmet has explicit sensor permission, read-only local controls and recent
   assert.doesNotMatch(helmet, /channel\.push\("station_dock"|"station_launch"|"flight_controls"/)
 })
 
+test("the five-second docking countdown is rendered in both SBS eyes", () => {
+  assert.match(view, /this\.updateDockingCountdown\(docked \? null : client\.stationDockingSeconds\)/)
+  assert.match(view, /this\.dockingCountdownMesh\.visible = visible/)
+  assert.match(view, /this\.dockingCountdownTexture\.needsUpdate = true/)
+  assert.match(helmet, /this\.channel\.on\("station_docking_started"/)
+  assert.match(helmet, /this\.stationDockingSeconds = this\.docked \? null/)
+  assert.doesNotMatch(helmet, /channel\.push\("station_dock"/)
+})
+
 test("the 3D docking hangar is driven by server-replicated state, not an HMD command", () => {
   assert.match(view, /const docked = greenStarbaseInteriorVisible\(client\)/)
   assert.match(view, /const activeScene = docked \? this\.hangarScene : this\.scene/)

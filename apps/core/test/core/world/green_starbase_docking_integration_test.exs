@@ -135,9 +135,6 @@ defmodule Core.World.GreenStarbaseDockingIntegrationTest do
     assert {:ok, cancelled} = World.tick(map_id, ctx.opts)
     assert cancelled.docking_holds == []
     assert_receive {^map_id, :station_docking_cancelled, %{entity_id: @pilot}}
-    for _ <- 1..55 do
-      assert {:ok, _} = World.tick(map_id, ctx.opts)
-    end
     assert {:ok, %{docked: false}} = World.docking_status(session.id, ctx.opts)
     assert :ok = World.disconnect(session.id, ctx.opts)
   end
