@@ -6,11 +6,11 @@ export function flightInputState({
 } = {}) {
   if (atlasOpen) return "atlas"
   if (docked) return "docked"
-  if (encounterHeld) return "encounter"
-  if (cruiseLocked) return "cruise"
   if (!sectorJoined) return "disconnected"
   if (!ship) return "synchronizing"
   if (ship.status === "destroyed") return "destroyed"
+  if (encounterHeld) return "encounter"
+  if (cruiseLocked) return "cruise"
   return "ready"
 }
 
