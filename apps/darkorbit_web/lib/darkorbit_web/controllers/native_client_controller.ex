@@ -10,6 +10,14 @@ defmodule DarkorbitWeb.NativeClientController do
 
   @token_lifetime_seconds 900
 
+  # Credential-free diagnostic: exercises the same native CORS and JSON API
+  # pipeline as login without consuming rate limits or transmitting secrets.
+  def probe(conn, _params) do
+    conn
+    |> put_resp_header("cache-control", "no-store")
+    |> json(%{status: "ok"})
+  end
+
   def login(conn, %{"username" => username, "password" => password})
       when is_binary(username) and is_binary(password) do
     cond do

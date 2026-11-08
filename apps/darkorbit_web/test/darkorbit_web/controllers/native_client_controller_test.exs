@@ -19,6 +19,13 @@ defmodule DarkorbitWeb.NativeClientControllerTest do
     post(conn, path, Jason.encode!(data))
   end
 
+  test "native probe works without credentials through the same CORS pipeline", %{conn: conn} do
+    result = json_post(conn, "/api/native/probe", %{})
+    assert json_response(result, 200) == %{"status" => "ok"}
+    assert get_resp_header(result, "access-control-allow-origin") == [@origin]
+    assert get_resp_header(result, "cache-control") == ["no-store"]
+  end
+
   test "a verified account can launch and refresh a native pilot session", %{conn: conn} do
     password = "native-space-client-123"
 

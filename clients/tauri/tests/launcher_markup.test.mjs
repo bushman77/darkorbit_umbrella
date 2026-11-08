@@ -15,7 +15,7 @@ test("the desktop launcher uses the shared HUD layout", () => {
 })
 
 test("all connection controls are preserved for the launcher controller", () => {
-  for (const id of ["connect-form", "server-url", "use-local", "register-pilot", "visit-home", "error", "networking-open", "networking-panel", "proxy-mode", "proxy-host", "proxy-port", "networking-form"]) {
+  for (const id of ["connect-form", "server-url", "use-local", "register-pilot", "visit-home", "error", "networking-open", "networking-panel", "proxy-mode", "proxy-host", "proxy-port", "networking-form", "probe-native-server", "probe-result"]) {
     assert.equal((html.match(new RegExp('id="' + id + '"', "g")) ?? []).length, 1, id)
   }
   assert.match(html, /type="submit"/)

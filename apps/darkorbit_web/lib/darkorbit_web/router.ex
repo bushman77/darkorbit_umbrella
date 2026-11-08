@@ -22,6 +22,7 @@ defmodule DarkorbitWeb.Router do
   scope "/api/native", DarkorbitWeb do
     pipe_through :api
 
+    post "/probe", NativeClientController, :probe
     post "/login", NativeClientController, :login
     post "/refresh", NativeClientController, :refresh
     post "/logout", NativeClientController, :logout

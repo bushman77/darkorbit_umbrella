@@ -71,7 +71,9 @@
             <div class="local-server">
               <button type="button" id="use-local" class="text-button">Use local server / port 4000</button>
               <button type="button" id="preview-local" class="text-button">Test locally bundled Atlas / 3D / SBS graphics</button>
+              <button type="button" id="probe-native-server" class="text-button">Test server connection (no login)</button>
             </div>
+            <p id="probe-result" role="status" aria-live="polite" class="hint" hidden></p>
             <p role="alert" id="error" class="error" hidden></p>
           </form>
           <footer>Your pilot signs in through an authenticated HTTPS API; Phoenix Channels carry real-time gameplay. Registration and email verification still use the hosted website.</footer>
