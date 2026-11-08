@@ -35,6 +35,7 @@ on:
       - "apps/darkorbit_web/assets/js/game/helmet_control.mjs"
       - "apps/darkorbit_web/assets/js/game/helmet_alignment_keys.mjs"
       - "apps/darkorbit_web/assets/js/game/stereo_view.js"
+      - "apps/darkorbit_web/assets/js/game/ambient_refinery_traffic*.mjs"
       - "apps/darkorbit_web/assets/js/game/stereo_viewport.mjs"
       - "apps/darkorbit_web/assets/js/game/stereo_viewport_test.mjs"
       - "apps/darkorbit_web/assets/js/game/helmet_alignment_keys_test.mjs"
@@ -115,4 +116,5 @@ jobs:
           node --test apps/darkorbit_web/assets/js/game/helmet_planetary_navigation_test.mjs
           node --test apps/darkorbit_web/assets/js/game/helmet_encounter_view_test.mjs
           node --test apps/darkorbit_web/assets/js/game/planetary_body_test.mjs
+          node --test apps/darkorbit_web/assets/js/game/ambient_refinery_traffic_test.mjs
           node --test apps/darkorbit_web/assets/js/game/station_warning_test.mjs

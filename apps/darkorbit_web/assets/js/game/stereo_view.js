@@ -11,6 +11,7 @@ import {npcVisualClass} from "./ship_model_selection.mjs"
 import {surrenderedHudLabel} from "./target_hud_status.mjs"
 import {PlanetaryBody} from "./planetary_body.js"
 import {SpaceBaseVisual} from "./space_base_visual.js"
+import {AmbientRefineryTraffic} from "./ambient_refinery_traffic.mjs"
 import {EncounterShipVisual} from "./encounter_ship.js"
 
 // Rendering only: no Phoenix socket, no movement authority, no combat calculations.
@@ -91,6 +92,7 @@ export class StereoSpaceView {
     // It must not inherit the tactical map's 3,000-unit clipping limits.
     this.planetaryBody = new PlanetaryBody(THREE, this.scene)
     this.spaceBase = new SpaceBaseVisual(THREE, this.scene)
+    this.refineryTraffic = new AmbientRefineryTraffic(THREE, this.scene)
     this.encounterShip = new EncounterShipVisual(THREE, this.scene)
     this.addCockpit()
     this.beamGroup = new THREE.Group()
@@ -429,6 +431,8 @@ export class StereoSpaceView {
     const navigation = client.navComputer?.solarNavigation
     this.planetaryBody.update(navigation, this.camera, time, ownShip)
     this.spaceBase.update(client.orbitalBase, this.camera)
+    this.refineryTraffic.update(client.orbitalBase, this.spaceBase.node,
+      this.planetaryBody, navigation?.planetary_view, time, this.camera)
     this.encounterShip.update(navigation?.tactical_encounter ? null : navigation, this.camera)
     this.syncShips(client)
     this.syncBeams(client, time)

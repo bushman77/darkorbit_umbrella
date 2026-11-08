@@ -864,6 +864,27 @@ Source: [Symbrella `symbolic_generation`](https://github.com/bushman77/Symbrella
 - [ ] Later: tune collision volumes to the final mesh and hull scale, add
   repair/insurance/port fees, docking UI and proximity autopilot guidance.
 
+### V1 ambient refinery drone logistics (2026-11-07)
+
+- [x] Add **20 purely visual, non-targetable cargo drones** moving in four
+  curved lanes between the planet-facing atmosphere and forward refinery.
+  Two traffic lanes carry local resources inward and two carry processed
+  supplies outward; phased repetition, subtle speeds and endpoint scale fades
+  keep the streams continuous without creating world entities.
+- [x] Draw using two reusable instanced low-poly meshes (cyan inbound and
+  amber outbound). Reuse the camera-relative planet/refinery visual proxies
+  so the streams appear connected in regular cockpit and SBS, without ever
+  reinterpreting projected positions as physics or collision coordinates.
+- [x] Render only while the current orbital planet and base match; hide
+  automatically during SOL cruise, deep-space encounters and region changes.
+  No Phoenix Channels, database records, cargo settlement, target selection,
+  missile/laser hits, collision volumes, minimap objects or new assets.
+- [x] Add deterministic path/phase, lifecycle, mismatch and visibility
+  regression tests. Full in-game desktop and paired-phone SBS visual
+  verification remains pending.
+- [ ] Later: anchor streams to individually modeled berth pads and vary
+  visual density from a single low-rate refinery activity indicator.
+
 ### SOL encounter overlap / mixed-faction guard (2026-11-05)
 
 - [x] Keep one authentic pending/tactical encounter identity in every
