@@ -887,6 +887,28 @@ Source: [Symbrella `symbolic_generation`](https://github.com/bushman77/Symbrella
   restart in addition to the existing Venus reconnect regression.
 - [ ] Persist shared merchant routes and base inventory separately.
 
+### Phone SBS VR head-gaze prototype (2026-11-08)
+
+- [x] Separate cockpit mesh/instruments from the camera. Ship orientation
+  remains authoritative while device-orientation head rotation changes ONLY
+  the Galaxy headset's local Three.js view.
+- [x] Opt-in permission step and user recenter; gracefully retain normal SBS
+  when motion sensors are absent, denied or unavailable over insecure HTTP.
+  Camera sensor data never leaves the phone or issues flight input.
+- [x] Add a physically ship-fixed NAV switch and read-only in-headset
+  navigation display. Head gaze arms for 1.0 s, then fills a 0.8 s circular
+  confirmation ring; looking away cancels, and holding never re-activates.
+- [x] NAV, CLOSE and RECENTER are local headset controls only. Mouse steering,
+  lasers, SOL course authority, docking and Phoenix channel contracts remain
+  unchanged. No new assets, packages or database schema required.
+- [ ] Verify trusted HTTPS from Galaxy S21 on the local network, head sensor
+  yaw/pitch/roll sign and neutral calibration. Untrusted HTTP origin typically
+  blocks device-orientation permission in modern browsers.
+- [ ] Verify both SBS eyes comfortably show reticle, NAV switch, countdown,
+  and navigation panel without optical drift or cockpit/world camera clipping.
+- [ ] Extend the same independent VR camera and gaze framework into ship and
+  Green Starbase interiors after this prototype is validated.
+
 ### Green Starbase Stage 4–7 — physical entry and launch (2026-11-08)
 
 - [x] Allow docking only for a live authenticated pilot at the SOL Green
