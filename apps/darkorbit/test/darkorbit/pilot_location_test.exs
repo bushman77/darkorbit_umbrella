@@ -154,7 +154,6 @@ defmodule Darkorbit.PilotLocationTest do
     account = player_account_fixture()
     {:ok, ship} = Fleet.get_active_ship(account.id)
     position = Core.Universe.GreenStarbase.position_km()
-    {:ok, earth} = Sol.game_position_km("earth")
     voyage = %{idle_at("earth") |
       location_id: nil, origin_id: nil, arrival_origin_id: nil,
       origin_position_km: position, position_km: position, voyage_number: 45}

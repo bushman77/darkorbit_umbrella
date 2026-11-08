@@ -88,11 +88,9 @@ defmodule Core.World.GreenStarbaseDockingIntegrationTest do
   end
 
   test "server rejects requests outside the bay and away from the SOL waypoint", ctx do
-    session = connect!(ctx, at(0, 0, -10))
+    session = connect!(ctx, at(0, 0, -45))
     assert {:error, :not_at_starbase} = World.dock(session.id, ctx.opts)
     at_starbase!()
-    assert :ok = World.disconnect(session.id, ctx.opts)
-    session = connect!(ctx, at(0, 0, -45))
     assert {:error, :outside_docking_bay} = World.dock(session.id, ctx.opts)
     assert :ok = World.disconnect(session.id, ctx.opts)
   end
