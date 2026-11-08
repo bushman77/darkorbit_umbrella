@@ -1,5 +1,5 @@
 import QRCode from "qrcode"
-import {chooseHelmetOrigin} from "./helmet_network.mjs"
+import {chooseHelmetOrigin, helmetPairingOrigin} from "./helmet_network.mjs"
 
 // The Atlas owns enrollment; the cockpit owns the headset's operating mode.
 export class HelmetControl {
@@ -31,7 +31,7 @@ export class HelmetControl {
     this.channel.onError(() => this.message("Helmet link interrupted. Reconnecting…"))
     this.channel.join()
       .receive("ok", reply => {
-        this.suggestNetworkHosts(reply.network_hosts || [])
+        this.suggestNetworkHosts(reply.network_hosts || [], reply.helmet_https_origin)
         this.updateStatus(reply.status)
         this.setCombat(this.combatActive)
         if (this.open && !reply.status.paired) this.requestPairing()
@@ -40,13 +40,19 @@ export class HelmetControl {
     return this
   }
 
-  suggestNetworkHosts(hosts) {
-    const address = chooseHelmetOrigin((window.SPACE_NOVA_SERVER_ORIGIN || window.location.origin), hosts)
+  suggestNetworkHosts(hosts, lanHttpsOrigin = null) {
+    const address = helmetPairingOrigin(
+      (window.SPACE_NOVA_SERVER_ORIGIN || window.location.origin), hosts, lanHttpsOrigin)
     const input = this.root.querySelector("#helmet-host")
     if (input && !this.hostEdited) input.value = address
     const options = this.root.querySelector("#helmet-host-candidates")
     if (options) {
       options.replaceChildren()
+      if (address.startsWith("https://")) {
+        const secure = document.createElement("option")
+        secure.value = address
+        options.appendChild(secure)
+      }
       for (const hostname of hosts) {
         const origin = chooseHelmetOrigin("http://localhost:4000", [hostname])
         if (!origin) continue

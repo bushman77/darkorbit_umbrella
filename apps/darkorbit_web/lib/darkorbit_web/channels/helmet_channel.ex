@@ -16,7 +16,11 @@ defmodule DarkorbitWeb.HelmetChannel do
     if id == Integer.to_string(player_id) do
       {:ok, %{
         status: HelmetManager.status(player_id),
-        network_hosts: HelmetNetwork.hosts()
+        network_hosts: HelmetNetwork.hosts(),
+        # The opt-in secure HMD endpoint is distinct from the localhost
+        # desktop origin. Never expose private key material or credentials.
+        helmet_https_origin:
+          Application.get_env(:darkorbit_web, :helmet_dev_lan_https_origin)
       }, assign(socket, :helmet_role, :controller)}
     else
       {:error, %{reason: "forbidden"}}

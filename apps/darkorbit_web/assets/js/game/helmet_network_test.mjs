@@ -1,6 +1,6 @@
 import test from "node:test"
 import assert from "node:assert/strict"
-import {chooseHelmetOrigin} from "./helmet_network.mjs"
+import {chooseHelmetOrigin, helmetPairingOrigin} from "./helmet_network.mjs"
 
 test("localhost pairing URLs use the laptop LAN address, retaining port", () => {
   assert.equal(chooseHelmetOrigin("http://localhost:4000", ["192.168.1.56", "10.0.0.5"]),
@@ -20,4 +20,18 @@ test("do not create a misleading localhost QR code without an LAN address", () =
   assert.equal(chooseHelmetOrigin("http://localhost:4000", []), "")
   assert.equal(chooseHelmetOrigin("http://localhost:4000", ["127.0.0.1"]), "")
   assert.equal(chooseHelmetOrigin("http://localhost:4000", ["http://evil.site/path"]), "")
+})
+
+test("native HMD pairing prefers configured, reachable LAN HTTPS, independently of Tauri localhost", () => {
+  const hosts = ["192.168.0.48", "10.0.0.5"]
+  assert.equal(helmetPairingOrigin("http://127.0.0.1:4000", hosts,
+    "https://192.168.0.48:4443"), "https://192.168.0.48:4443")
+  assert.equal(helmetPairingOrigin("http://127.0.0.1:4000", hosts,
+    "https://192.168.1.123:4443"), "http://192.168.0.48:4000")
+  assert.equal(helmetPairingOrigin("http://127.0.0.1:4000", hosts, null),
+    "http://192.168.0.48:4000")
+  assert.equal(helmetPairingOrigin("http://127.0.0.1:4000", hosts,
+    "https://192.168.0.48:4443/helmet?pair=secret"), "http://192.168.0.48:4000")
+  assert.equal(helmetPairingOrigin("http://127.0.0.1:4000", hosts,
+    "http://192.168.0.48:4443"), "http://192.168.0.48:4000")
 })
