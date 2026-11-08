@@ -8,6 +8,7 @@ import {restoredHelmetCalibration} from "./helmet_calibration_restore.mjs"
 import {renderHelmetEncounter} from "./helmet_encounter_view.mjs"
 import {renderHelmetSurrender, helmetSurrenderFromEntities} from "./helmet_surrender_view.mjs"
 import {helmetPlanetaryNavigation} from "./helmet_planetary_navigation.mjs"
+import {pilotDockedInWorld} from "./green_starbase_interior_state.mjs"
 import {HelmetScreenWake} from "./helmet_screen_wake.mjs"
 import {HelmetHeadTracking} from "./helmet_head_tracking.mjs"
 import {HelmetGazeDwell} from "./helmet_gaze_dwell.mjs"
@@ -52,6 +53,7 @@ export class HelmetClient {
     this.navComputer = {solarNavigation: {planetary_view: null}}
     this.orbitalBase = null
     this.mapId = null
+    this.docked = false
     this.screenWake = new HelmetScreenWake()
     this.gaze = new HelmetGazeDwell()
     this.headTracking = new HelmetHeadTracking({
@@ -521,6 +523,7 @@ export class HelmetClient {
     this.navComputer.solarNavigation = {planetary_view: null}
     this.orbitalBase = null
     this.mapId = null
+    this.docked = false
     this.beams = []
     this.report(false)
   }
@@ -544,6 +547,12 @@ export class HelmetClient {
     // The helmet uses its pilot's server-subscribed orbital region, not a
     // phone-provided map ID. Green Starbase must only appear in deep space.
     this.mapId = typeof map.map_id === "string" ? map.map_id : null
+    const wasDocked = this.docked
+    this.docked = pilotDockedInWorld(map, this.selfId)
+    if (wasDocked !== this.docked) {
+      this.gaze.reset()
+      this.view?.setHelmetNavOpen(false)
+    }
     this.orbitalBase = map.orbital_base || null
     const active = new Set()
     for (const e of map.entities) {

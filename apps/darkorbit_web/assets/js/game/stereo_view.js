@@ -13,6 +13,7 @@ import {PlanetaryBody} from "./planetary_body.js"
 import {SpaceBaseVisual} from "./space_base_visual.js"
 import {AmbientRefineryTraffic} from "./ambient_refinery_traffic.mjs"
 import {GreenStarbaseVisual} from "./green_starbase_visual.js"
+import {GreenStarbaseInterior, greenStarbaseInteriorVisible} from "./green_starbase_interior.js"
 import {EncounterShipVisual} from "./encounter_ship.js"
 
 // Rendering only: no Phoenix socket, no movement authority, no combat calculations.
@@ -119,6 +120,12 @@ export class StereoSpaceView {
     this.spaceBase = new SpaceBaseVisual(THREE, this.scene)
     this.refineryTraffic = new AmbientRefineryTraffic(THREE, this.scene)
     this.greenStarbase = new GreenStarbaseVisual(THREE, this.scene)
+    // Keep the hangar in a separate, static scene: parked pilots are removed
+    // from tactical entities and must not inherit ship camera/physics state.
+    this.hangarScene = new THREE.Scene()
+    this.hangarScene.background = new THREE.Color(0x03140e)
+    this.hangar = new GreenStarbaseInterior(THREE, this.hangarScene)
+    this.interiorActive = false
     this.encounterShip = new EncounterShipVisual(THREE, this.scene)
     // These must be initialized BEFORE addCockpit builds the VR meshes:
     // Three.js treats visible=undefined as visible, not hidden.
@@ -608,34 +615,48 @@ export class StereoSpaceView {
     this.sight?.material?.color?.setHex(active ?
       feedback.hit ? 0x79ff9b : 0xff7272 : 0x78e6fc)
     const ownShip = client.entities.get(client.selfId)
-    this.setCamera(ownShip)
-    // Ship-fixed cockpit surfaces retain their original position/attitude.
-    // Only the HMD view camera receives the recentered local head rotation.
-    this.cockpitFraming.position.copy(this.camera.position)
-    this.cockpitFraming.quaternion.copy(this.camera.quaternion)
+    const docked = greenStarbaseInteriorVisible(client)
+    this.interiorActive = docked
+    if (docked) {
+      // Station camera is an anchored viewpoint inside the actual hangar.
+      // The headset still adds its own local, recentered head quaternion.
+      if (this.camera.parent !== this.hangarScene) this.hangarScene.add(this.camera)
+      this.camera.position.set(0, 2.6, 43)
+      this.camera.up.set(0, 1, 0)
+      this.camera.lookAt(0, 1.7, -45)
+      this.camera.updateMatrixWorld(true)
+    } else {
+      if (this.camera.parent !== this.scene) this.scene.add(this.camera)
+      this.setCamera(ownShip)
+      // Ship-fixed cockpit surfaces stay separate from headset head motion.
+      this.cockpitFraming.position.copy(this.camera.position)
+      this.cockpitFraming.quaternion.copy(this.camera.quaternion)
+    }
     if (this.helmetGazeEnabled && this.helmetHeadRotation) {
       this.camera.quaternion.multiply(this.helmetHeadRotation)
       this.camera.updateMatrixWorld(true)
     }
     if (this.helmetGazeEnabled && this.onHelmetGaze) {
-      this.onHelmetGaze(this.gazeTarget(), time)
+      // In the station the laptop retains service control. Do not allow
+      // invisible cockpit NAV meshes to trigger head-gaze actions.
+      this.onHelmetGaze(docked ? null : this.gazeTarget(), time)
     }
-    // Keep the distant starfield surrounding the pilot even in large
-    // planet-centred maps. Stars are an infinite visual background.
-    this.stars?.position.copy(this.camera.position)
-    // Keep the actual local planet collision visual, but hide the distant
-    // strategic traffic avatar once its tactical Dart opponent is present.
-    const navigation = client.navComputer?.solarNavigation
-    this.planetaryBody.update(navigation, this.camera, time, ownShip)
-    this.spaceBase.update(client.orbitalBase, this.camera)
-    this.greenStarbase.update(navigation, client.mapId)
-    this.refineryTraffic.update(client.orbitalBase, this.spaceBase.node,
-      this.planetaryBody, navigation?.planetary_view, time, this.camera)
-    this.encounterShip.update(navigation?.tactical_encounter ? null : navigation, this.camera)
-    this.syncShips(client)
-    this.syncBeams(client, time)
-    this.updateHud(client, time)
+    if (!docked) {
+      // Real outer-space rendering is retained unchanged after launch.
+      this.stars?.position.copy(this.camera.position)
+      const navigation = client.navComputer?.solarNavigation
+      this.planetaryBody.update(navigation, this.camera, time, ownShip)
+      this.spaceBase.update(client.orbitalBase, this.camera)
+      this.greenStarbase.update(navigation, client.mapId)
+      this.refineryTraffic.update(client.orbitalBase, this.spaceBase.node,
+        this.planetaryBody, navigation?.planetary_view, time, this.camera)
+      this.encounterShip.update(navigation?.tactical_encounter ? null : navigation, this.camera)
+      this.syncShips(client)
+      this.syncBeams(client, time)
+      this.updateHud(client, time)
+    }
     this.stereo.update(this.camera)
+    const activeScene = docked ? this.hangarScene : this.scene
     const {width, height} = this.size
     if (this.mode === "sbs") {
       const {left, right} = stereoViewports(width, height, this.eyeGapPx)
@@ -655,17 +676,17 @@ export class StereoSpaceView {
         this.renderer.setScissorTest(true)
         this.renderer.setViewport(left.x, left.y, left.width, left.height)
         this.renderer.setScissor(left.x, left.y, left.width, left.height)
-        this.renderer.render(this.scene, this.stereo.cameraL)
+        this.renderer.render(activeScene, this.stereo.cameraL)
         this.renderer.setViewport(right.x, right.y, right.width, right.height)
         this.renderer.setScissor(right.x, right.y, right.width, right.height)
-        this.renderer.render(this.scene, this.stereo.cameraR)
+        this.renderer.render(activeScene, this.stereo.cameraR)
       } finally {
         restore()
         this.renderer.setScissorTest(false)
       }
     } else {
       this.renderer.setViewport(0, 0, width, height)
-      this.renderer.render(this.scene, this.camera)
+      this.renderer.render(activeScene, this.camera)
     }
   }
 
@@ -680,7 +701,7 @@ export class StereoSpaceView {
   }
 
   selectNpc(pointer, rect) {
-    if (!this.rayFromPointer(pointer, rect)) return null
+    if (this.interiorActive || !this.rayFromPointer(pointer, rect)) return null
     const intersections = this.raycaster.intersectObjects(this.pickables, true)
     for (const intersection of intersections) {
       let node = intersection.object
@@ -691,7 +712,7 @@ export class StereoSpaceView {
   }
 
   destination(pointer, rect, bounds) {
-    if (!this.rayFromPointer(pointer, rect)) return null
+    if (this.interiorActive || !this.rayFromPointer(pointer, rect)) return null
     const point = this.raycaster.ray.intersectPlane(this.floor, new THREE.Vector3())
     if (!point) return null
     const xy = toWorld(point)

@@ -1383,12 +1383,20 @@ class SpaceClient {
   }
 
   setDocked(docked) {
+    const wasDocked = this.docked
     this.docked = Boolean(docked)
     const panel = this.root.querySelector("#starbase-docked-panel")
     if (panel) panel.style.display = this.docked ? "grid" : "none"
     const prompt = this.root.querySelector("#starbase-docking-prompt")
     if (this.docked) {
       if (prompt) prompt.style.display = "none"
+      if (!wasDocked) {
+        // Force the local cockpit/hangar viewport to the foreground on a
+        // fresh docking event OR when a parked pilot reconnects.
+        this.navComputer?.close()
+      }
+    }
+    if (this.docked && !wasDocked) {
       this.exitMouseSteering({silent: true})
       this.flightControls?.release({silent: true})
       this.spaceLaser?.release()

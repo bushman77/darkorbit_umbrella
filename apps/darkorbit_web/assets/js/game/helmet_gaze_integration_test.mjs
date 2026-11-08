@@ -41,6 +41,15 @@ test("helmet has explicit sensor permission, read-only local controls and recent
   assert.doesNotMatch(helmet, /channel\.push\("station_dock"|"station_launch"|"flight_controls"/)
 })
 
+test("the 3D docking hangar is driven by server-replicated state, not an HMD command", () => {
+  assert.match(view, /const docked = greenStarbaseInteriorVisible\(client\)/)
+  assert.match(view, /const activeScene = docked \? this\.hangarScene : this\.scene/)
+  assert.match(view, /this\.camera\.quaternion\.multiply\(this\.helmetHeadRotation\)/)
+  assert.match(view, /this\.onHelmetGaze\(docked \? null : this\.gazeTarget\(\), time\)/)
+  assert.match(helmet, /this\.docked = pilotDockedInWorld\(map, this\.selfId\)/)
+  assert.doesNotMatch(helmet, /channel\.push\("station_dock"|"station_launch"/)
+})
+
 test("native desktop starts with ALL headset-only meshes hidden", () => {
   // Three.js treats visible=undefined as visible. Initialize opt-in state
   // BEFORE addCockpit creates/synchronizes its meshes, not afterwards.

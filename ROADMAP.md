@@ -938,6 +938,24 @@ Source: [Symbrella `symbolic_generation`](https://github.com/bushman77/Symbrella
 - [ ] After live confirmation, proceed to Green Starbase Stage 6 services,
   beginning with repair pricing and credit-backed settlement.
 
+### Green Starbase immersive docked hangar V1 (2026-11-08)
+
+- [x] The desktop 3D cockpit and paired read-only SBS headset now use a
+  separate locally rendered industrial hangar interior while the existing
+  MapServer world snapshot marks the authenticated pilot as docked.
+- [x] Keep phone head tracking active through the same stereo camera while
+  disabling invisible cockpit targeting and NAV gaze interactions in-station.
+- [x] Restore the actual ship/cockpit scene on server-authorized launch,
+  without copying the ship or changing flight, cargo, or persistent condition.
+- [x] Replace the desktop's opaque fullscreen station panel with a compact
+  corner services console so the new 3D space remains visible.
+- [x] Preserve a docked pilot on reconnect from existing durable MapServer
+  docking and world snapshots; keep the phone in its existing paired session.
+- [ ] Live test approach / stop / dock / SBS view / reconnect / launch on Tauri
+  and Galaxy S21 before adding repair charges and station commerce.
+- [ ] Later: navigate through an interactive station interior, character
+  movement, ship model at berth, signed economic transactions.
+
 ### Green Starbase Stage 4–7 — physical entry and launch (2026-11-08)
 
 - [x] Allow docking only for a live authenticated pilot at the SOL Green
