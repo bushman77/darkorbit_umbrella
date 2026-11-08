@@ -102,7 +102,8 @@ defmodule Core.World.GreenStarbaseDockingIntegrationTest do
 
     assert {:ok, %{docked: false}} = World.docking_status(session.id, ctx.opts)
     assert {:ok, first} = World.tick(map_id, ctx.opts)
-    assert [%{entity_id: @pilot, remaining_ms: 5_000}] = first.docking_holds
+    assert [%{entity_id: @pilot, started_tick: 1, duration_ms: 5_000}] =
+      first.docking_holds
     assert_receive {^map_id, :station_docking_started,
       %{entity_id: @pilot, duration_ms: 5_000}}
 

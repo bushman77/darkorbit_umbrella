@@ -1166,7 +1166,7 @@ defmodule Core.World.MapServer do
   defp eligible_for_automatic_docking?(state, %Entity{} = ship) do
     state.green_starbase_active? and
       state.definition.id == FreeFlightRegion.map_id(ship.player_id) and
-      GreenStarbaseDocking.ready?(ship) == :ok
+      GreenStarbaseDocking.auto_ready?(ship) == :ok
   end
 
   defp cancel_automatic_docking(state, id) do

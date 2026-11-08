@@ -18,7 +18,7 @@ test("five-second hold counts down locally without network traffic", () => {
 test("frequent world snapshots never reset the active hold", () => {
   const start = dockingHoldFromEvent(hold, 1000)
   const same = syncDockingHold(start,
-    {docking_holds: [{...hold, remaining_ms: 2500}]}, 17, 3500)
+    {tick: 67, tick_ms: 100, docking_holds: [hold]}, 17, 3500)
   assert.equal(same, start)
   assert.equal(dockingSeconds(same, 3500), 3)
   assert.equal(syncDockingHold(same, {docking_holds: []}, 17, 3600), null)
@@ -27,7 +27,7 @@ test("frequent world snapshots never reset the active hold", () => {
 
 test("late joins resume remaining time; malformed payloads are rejected", () => {
   const resumed = syncDockingHold(null,
-    {docking_holds: [{...hold, remaining_ms: 1200}]}, "17", 9000)
+    {tick: 80, tick_ms: 100, docking_holds: [hold]}, "17", 9000)
   assert.equal(dockingSeconds(resumed, 9000), 2)
   assert.equal(dockingSeconds(resumed, 9600), 1)
   assert.equal(dockingHoldFromEvent({...hold, started_tick: "42"}, 1000), null)

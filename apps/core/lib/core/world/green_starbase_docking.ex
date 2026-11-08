@@ -8,6 +8,9 @@ defmodule Core.World.GreenStarbaseDocking do
 
   @scale 0.06
   @maximum_speed 15.0
+  # Automatic docking requires an actual stationary vessel. The manual
+  # emergency dock request retains its older safe-speed tolerance.
+  @automatic_stop_speed 0.5
 
   def inside_bay?(%Position{} = position) do
     origin = GreenStarbase.local_site()
@@ -30,6 +33,18 @@ defmodule Core.World.GreenStarbaseDocking do
         {:error, :reduce_speed_to_dock}
       ship.engaged_target_id != nil -> {:error, :disengage_combat_first}
       true -> :ok
+    end
+  end
+
+  @doc "Stricter stationary check for the timed, automatic docking sequence."
+  def auto_ready?(%Entity{} = ship) do
+    with :ok <- ready?(ship) do
+      if abs(ship.cruise_speed) <= @automatic_stop_speed and
+           velocity_speed(ship.velocity) <= @automatic_stop_speed do
+        :ok
+      else
+        {:error, :ship_still_moving}
+      end
     end
   end
 

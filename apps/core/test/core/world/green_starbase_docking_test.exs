@@ -27,6 +27,7 @@ defmodule Core.World.GreenStarbaseDockingTest do
     refute GreenStarbaseDocking.inside_bay?(at(0, 11, -12))
     refute GreenStarbaseSafety.inside?(at(0, 0, 0))
     assert :ok == GreenStarbaseDocking.ready?(ship(at(0, 0, 0)))
+    assert :ok == GreenStarbaseDocking.auto_ready?(ship(at(0, 0, 0)))
     assert {:error, :outside_docking_bay} =
       GreenStarbaseDocking.ready?(ship(at(0, 0, -40)))
   end
@@ -38,6 +39,12 @@ defmodule Core.World.GreenStarbaseDockingTest do
     assert {:error, :reduce_speed_to_dock} =
       GreenStarbaseDocking.ready?(%{resting |
         velocity: %{x: 30.0, y: 0.0, z: 0.0}})
+    # Manually requesting a dock at low speed still works, but the automatic
+    # hold must not complete if the ship is slowly drifting.
+    moving = %{resting | velocity: %{x: 2.0, y: 0.0, z: 0.0}}
+    assert :ok == GreenStarbaseDocking.ready?(moving)
+    assert {:error, :ship_still_moving} =
+      GreenStarbaseDocking.auto_ready?(moving)
     assert {:error, :stop_navigation_first} =
       GreenStarbaseDocking.ready?(%{resting | destination: at(0, 0, 10)})
     assert {:error, :disengage_combat_first} =
