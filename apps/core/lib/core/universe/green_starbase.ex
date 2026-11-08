@@ -12,7 +12,9 @@ defmodule Core.Universe.GreenStarbase do
   @id "sol:starbase:green"
   @name "Green Starbase"
   @local_site %{x: 12_000.0, y: 15_500.0, z: 0.0}
-  @bay_mouth %{x: 12_000.0, y: 15_190.0, z: 0.0}
+  # 24 Three.js scene units ahead of the hub: 24 / WORLD_SCALE 0.06 = 400 km.
+  # This will be the future server-owned docking-approach plane.
+  @bay_mouth %{x: 12_000.0, y: 15_100.0, z: 0.0}
   @visual_radius_km 35_000.0
 
   def id, do: @id
