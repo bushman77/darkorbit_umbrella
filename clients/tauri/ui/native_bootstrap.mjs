@@ -1,6 +1,7 @@
 // The game runs from packaged local assets. Only signed credentials,
 // world-state and pilot commands cross the network; no remote HTML is loaded.
 import {DEFAULT_SERVER_URL, serverOrigin} from "./server_url.mjs"
+import {nativePostJson} from "./native_transport.mjs"
 
 const login = document.querySelector("#native-login")
 const form = document.querySelector("#native-login-form")
@@ -16,35 +17,18 @@ let origin = DEFAULT_SERVER_URL
 let refreshTimer = null
 
 try {
-  origin = serverOrigin(sessionStorage.getItem(authStorageKey) ||
-    localStorage.getItem(fallbackStorageKey) || DEFAULT_SERVER_URL)
+  origin = serverOrigin(localStorage.getItem(fallbackStorageKey) ||
+    sessionStorage.getItem(authStorageKey) || DEFAULT_SERVER_URL)
 } catch {
   origin = DEFAULT_SERVER_URL
 }
 server.textContent = origin
 
 async function postJson(route, payload, bearer = null) {
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 16000)
-  try {
-    const response = await fetch(origin + route, {
-      method: "POST",
-      mode: "cors",
-      credentials: "omit",
-      cache: "no-store",
-      headers: {
-        "content-type": "application/json",
-        ...(bearer ? {"authorization": "Bearer " + bearer} : {}),
-      },
-      body: JSON.stringify(payload),
-      signal: controller.signal,
-    })
-    const body = response.status === 204 ? {} : await response.json()
-    if (!response.ok) throw Error(body.error || "Server refused this request (" + response.status + ").")
-    return body
-  } finally {
-    clearTimeout(timeout)
-  }
+  const response = await nativePostJson(origin, route, payload, bearer)
+  const body = response.status === 204 ? {} : await response.json()
+  if (!response.ok) throw Error(body.error || "Server refused this request (" + response.status + ").")
+  return body
 }
 
 function showError(message) {

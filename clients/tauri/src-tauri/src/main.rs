@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod network;
+mod native_loopback;
 
 use tauri::Manager;
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
@@ -14,6 +15,7 @@ fn main() {
             network::get_network_settings,
             network::save_network_settings,
             network::restart_client,
+            native_loopback::native_loopback_post,
         ])
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())

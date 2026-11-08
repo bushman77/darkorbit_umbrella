@@ -38,6 +38,7 @@ test("native bootstrap uses authenticated API without persisting pilot tokens", 
   assert.match(js, /\/api\/native\/login/)
   assert.match(js, /\/api\/native\/refresh/)
   assert.match(js, /\/api\/native\/logout/)
+  assert.match(js, /nativePostJson/)
   assert.match(js, /import\("\.\/native_game\.js"\)/)
   assert.doesNotMatch(js, /localStorage\.setItem\(.*token/)
 })

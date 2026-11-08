@@ -86,7 +86,7 @@ fn save(app: &AppHandle, settings: &NetworkSettings) -> Result<(), String> {
 
 // Both URLs are Tauri's local packaged-app origins. The production HTTPS
 // game page (or any other remote origin) is never allowed to call these.
-fn require_local(window: &WebviewWindow) -> Result<(), String> {
+pub(crate) fn require_local(window: &WebviewWindow) -> Result<(), String> {
     let url = window.url().map_err(|error| error.to_string())?;
     let local = (url.scheme() == "tauri" && url.host_str() == Some("localhost"))
         || (["http", "https"].contains(&url.scheme())

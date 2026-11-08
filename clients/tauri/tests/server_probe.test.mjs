@@ -40,3 +40,19 @@ test("probe does not permit HTTP to non-loopback hosts", async () => {
     /HTTPS/
   )
 })
+
+test("probe uses the native Rust loopback bridge when Tauri IPC is present", async () => {
+  const {probeNativeServer} = await import("../ui/server_probe.mjs")
+  let received
+  const result = await probeNativeServer("http://localhost:4000",
+    async () => { throw Error("WebKit fetch must not be called") },
+    async (command, args) => {
+      received = {command, args}
+      return {status: 200, body: '{"status":"ok"}'}
+    })
+  assert.equal(result.ok, true)
+  assert.match(result.message, /Native loopback bridge/)
+  assert.equal(received.command, "native_loopback_post")
+  assert.equal(received.args.route, "/api/native/probe")
+  assert.deepEqual(received.args.payload, {})
+})

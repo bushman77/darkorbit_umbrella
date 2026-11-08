@@ -5,6 +5,7 @@ fn main() {
                 "get_network_settings",
                 "save_network_settings",
                 "restart_client",
+                "native_loopback_post",
             ]),
         ),
     )

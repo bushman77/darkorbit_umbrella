@@ -27,7 +27,7 @@
       "capabilities": [
         {
           "identifier": "local-networking-settings",
-          "description": "Only bundled Space Nova launcher pages may manage native proxy preferences.",
+          "description": "Only bundled Space Nova pages can manage networking and use the restricted local JSON bridge.",
           "windows": [
             "main"
           ],
@@ -35,7 +35,8 @@
           "permissions": [
             "allow-get-network-settings",
             "allow-save-network-settings",
-            "allow-restart-client"
+            "allow-restart-client",
+            "allow-native-loopback-post"
           ]
         }
       ]
