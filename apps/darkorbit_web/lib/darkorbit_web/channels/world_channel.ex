@@ -204,6 +204,22 @@ defmodule DarkorbitWeb.WorldChannel do
     end
   end
 
+  # Movement intents belong to the authenticated world session, never to
+  # a caller-supplied player ID, room, destination or absolute position.
+  def handle_in("station_walk", input, socket) when is_map(input) do
+    case World.station_walk(socket.assigns.world_session_id, input) do
+      {:ok, accepted} -> {:reply, {:ok, accepted}, socket}
+      {:error, reason} -> {:reply, {:error, %{reason: error_reason(reason)}}, socket}
+    end
+  end
+
+  def handle_in("station_look", input, socket) when is_map(input) do
+    case World.station_look(socket.assigns.world_session_id, input) do
+      {:ok, accepted} -> {:reply, {:ok, accepted}, socket}
+      {:error, reason} -> {:reply, {:error, %{reason: error_reason(reason)}}, socket}
+    end
+  end
+
   def handle_in("station_launch", _payload, socket) do
     case World.launch(socket.assigns.world_session_id) do
       {:ok, status} -> {:reply, {:ok, status}, socket}
@@ -491,6 +507,19 @@ defmodule DarkorbitWeb.WorldChannel do
              :entity_destroyed
            ] do
     :ok = push(socket, Atom.to_string(event), payload)
+    {:noreply, socket}
+  end
+
+  # Auto-docking happens in MapServer without a client request. Persist its
+  # confirmed berth promptly here (outside the physics tick) so a crash or
+  # restart doesn't accidentally return the pilot to open space.
+  def handle_info({:station_docked, %{entity_id: player_id} = payload},
+                  %{assigns: %{current_player_id: player_id}} = socket) do
+    case World.checkpoint_location(socket.assigns.world_session_id) do
+      :ok -> :ok
+      {:error, reason} -> Logger.warning("Station dock checkpoint: #{inspect(reason)}")
+    end
+    push(socket, "station_docked", payload)
     {:noreply, socket}
   end
 

@@ -100,6 +100,7 @@ defmodule Darkorbit.World do
             end)
             session_id = elem(success, 1).id
             with :ok <- maybe_restore_docked(session_id, entry),
+                 :ok <- maybe_restore_station_position(session_id, entry),
                  :ok <- SolarNavigation.resume_after_login(server, user_id) do
               success
             else
@@ -120,6 +121,11 @@ defmodule Darkorbit.World do
   defp maybe_restore_docked(session_id, %{docked: true}),
     do: Simulation.restore_dock(session_id)
   defp maybe_restore_docked(_session_id, _entry), do: :ok
+
+  defp maybe_restore_station_position(session_id,
+       %{docked: true, station_position: position}),
+    do: Simulation.restore_station_position(session_id, position)
+  defp maybe_restore_station_position(_session_id, _entry), do: :ok
 
   @doc "Request the Green Starbase berth; save its state before acknowledging."
   def dock(session_id) do

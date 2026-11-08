@@ -8,7 +8,7 @@ defmodule Darkorbit.PilotLocation do
   """
   alias Core.Universe.Navigation.Checkpoint, as: VoyageCheckpoint
   alias Core.Universe.{FreeFlightRegion, OrbitalEntry}
-  alias Core.World.{GreenStarbaseDocking, Movement, PlanetaryCollision, Position, StationSafety}
+  alias Core.World.{GreenStarbaseDocking, Movement, PlanetaryCollision, Position, StationSafety, StationInterior}
   alias Darkorbit.PilotLocation.Checkpoint
   alias Darkorbit.Repo
 
@@ -54,7 +54,8 @@ defmodule Darkorbit.PilotLocation do
     if map_id == OrbitalEntry.map_id(body_id) and
          valid_pose?(player_id, map_id, position, attitude) do
       save_pose_row(player_id, map_id, navigation, voyage_number, ship_id,
-        position, attitude, Map.get(report, :docked, false) == true)
+        position, attitude, Map.get(report, :docked, false) == true,
+        Map.get(report, :station_position))
     else
       :ok
     end
@@ -73,7 +74,8 @@ defmodule Darkorbit.PilotLocation do
     if map_id == FreeFlightRegion.map_id(player_id) and
          valid_pose?(player_id, map_id, position, attitude) do
       save_pose_row(player_id, map_id, navigation, voyage_number, ship_id,
-        position, attitude, Map.get(report, :docked, false) == true)
+        position, attitude, Map.get(report, :docked, false) == true,
+        Map.get(report, :station_position))
     else
       :ok
     end
@@ -84,12 +86,20 @@ defmodule Darkorbit.PilotLocation do
   def save_pose(_player_id, _map_id, _navigation, _report), do: :ok
 
   defp save_pose_row(player_id, map_id, navigation, voyage_number, ship_id,
-         position, attitude, docked?) do
+         position, attitude, docked?, station_position) do
     now = DateTime.utc_now()
     location = xyz(position)
-    location = if docked? and map_id == FreeFlightRegion.map_id(player_id) and
-        GreenStarbaseDocking.inside_bay?(position),
-      do: Map.put(location, "docked", true), else: location
+    location =
+      if docked? and map_id == FreeFlightRegion.map_id(player_id) and
+          GreenStarbaseDocking.inside_bay?(position) do
+        location = Map.put(location, "docked", true)
+        case StationInterior.dump(station_position) do
+          nil -> location
+          room -> Map.put(location, "station_room", room)
+        end
+      else
+        location
+      end
     heading = angles(attitude)
     fields = [
       pose_map_id: map_id, pose_voyage_number: voyage_number,
@@ -123,7 +133,11 @@ defmodule Darkorbit.PilotLocation do
               if map_id == FreeFlightRegion.map_id(player_id) and
                    Map.get(position_data, "docked") == true and
                    GreenStarbaseDocking.inside_bay?(position) do
-                Map.put(updated, :docked, true)
+                docked = Map.put(updated, :docked, true)
+                case StationInterior.from_saved(Map.get(position_data, "station_room")) do
+                  {:ok, room} -> Map.put(docked, :station_position, room)
+                  :error -> docked
+                end
               else
                 updated
               end

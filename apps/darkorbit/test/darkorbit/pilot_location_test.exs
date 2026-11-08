@@ -162,14 +162,26 @@ defmodule Darkorbit.PilotLocationTest do
     {:ok, entry} = Core.Universe.FreeFlightRegion.entry(account.id, voyage)
     site = Core.Universe.GreenStarbase.local_site()
     pose = %Position{x: site.x, y: site.y - 80.0, z: site.z}
+    station_position = %{room_id: "main_hangar", x: 12.5, z: -35.0, yaw: 1.2}
     condition = %{ship_instance_id: ship.id, position: pose,
-      attitude: %{yaw: 0.0, pitch: 0.0, roll: 0.0}, docked: true}
+      attitude: %{yaw: 0.0, pitch: 0.0, roll: 0.0}, docked: true,
+      station_position: station_position}
     assert :ok = PilotLocation.save_pose(account.id, entry.map_id, voyage, condition)
     restored = PilotLocation.restore_entry(account.id, ship.id, entry, 45)
     assert restored.docked
     assert restored.position == pose
+    assert restored.station_position == station_position
     assert PilotLocation.restore_entry(account.id, ship.id, entry, 46) == entry
     assert PilotLocation.restore_entry(account.id, ship.id + 1, entry, 45) == entry
+
+    # A compromised/old saved room must never supply an arbitrary teleport.
+    checkpoint = Repo.get_by!(Checkpoint, player_id: account.id)
+    tampered = Map.put(checkpoint.pose_position, "station_room",
+      %{"room_id" => "main_hangar", "x" => 9_999, "z" => -20, "yaw" => 0})
+    checkpoint |> Ecto.Changeset.change(pose_position: tampered) |> Repo.update!()
+    rejected = PilotLocation.restore_entry(account.id, ship.id, entry, 45)
+    assert rejected.docked
+    refute Map.has_key?(rejected, :station_position)
 
     # A subsequent launch stores an ordinary location, not an old dock flag.
     launch = Core.World.GreenStarbaseDocking.launch_position()
@@ -177,6 +189,7 @@ defmodule Darkorbit.PilotLocationTest do
       %{condition | docked: false, position: launch})
     after_launch = PilotLocation.restore_entry(account.id, ship.id, entry, 45)
     refute Map.has_key?(after_launch, :docked)
+    refute Map.has_key?(after_launch, :station_position)
     assert after_launch.position == launch
   end
 
