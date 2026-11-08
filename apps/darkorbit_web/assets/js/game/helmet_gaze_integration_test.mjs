@@ -27,6 +27,7 @@ test("helmet has explicit sensor permission, read-only local controls and recent
   assert.match(helmet, /update\.activated === "nav_open"/)
   assert.match(helmet, /update\.activated === "nav_close"/)
   assert.match(helmet, /update\.activated === "recenter"/)
+  assert.match(view, /this\.setHelmetNavOpen\(this\.helmetGazeEnabled && this\.helmetNavOpen\)/)
   assert.match(view, /this\.raycaster\.intersectObjects\(/)
   assert.match(view, /this\.helmetNavRecenter/)
   assert.match(view, /this\.camera\.add\(this\.gazeArc\)/)
