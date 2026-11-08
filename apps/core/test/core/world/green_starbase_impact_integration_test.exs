@@ -4,7 +4,7 @@ defmodule Core.World.GreenStarbaseImpactIntegrationTest do
   alias Core.Ships.Stats
   alias Core.Universe.{FreeFlightRegion, GreenStarbase, Navigation}
   alias Core.World
-  alias Core.World.{Position, Supervisor, MapServer}
+  alias Core.World.{Position, Supervisor}
 
   @registry __MODULE__.Registry
   @sessions __MODULE__.Sessions
@@ -93,7 +93,9 @@ defmodule Core.World.GreenStarbaseImpactIntegrationTest do
     refute_receive {_, :station_collision, _}
 
     near_starbase!()
-    state = tick!(ctx, 1)
+    # Presence is intentionally cached for 1 second; allow the public
+    # Navigation gate to refresh before inspecting its world snapshot.
+    state = tick!(ctx, 11)
     assert state.station_warnings != []
     assert state.station_warnings |> Enum.any?(&(&1.station_id == GreenStarbase.id()))
   end
