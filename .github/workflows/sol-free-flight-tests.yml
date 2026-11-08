@@ -95,6 +95,8 @@ jobs:
           mix test apps/core/test/core/universe/navigation_test.exs
           mix test apps/core/test/core/universe/free_flight_region_test.exs
           mix test apps/core/test/core/world/world_test.exs
+          mix test apps/core/test/core/universe/orbital_entry_test.exs
+          mix test apps/core/test/core/world/planetary_collision_test.exs
           mix test apps/core/test/core/world/station_safety_test.exs
           mix test apps/core/test/core/world/station_impact_integration_test.exs
       - name: Test authenticated Phoenix handoffs
