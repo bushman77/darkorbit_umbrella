@@ -836,6 +836,34 @@ Source: [Symbrella `symbolic_generation`](https://github.com/bushman77/Symbrella
   PostgreSQL persistence boundary.
 
 
+### SOL forward refinery collision safety V1.1 (2026-11-07)
+
+- [x] Keep planetary fatal proximity independent from station approach telemetry;
+  the Earth impact warning must never be mistaken for a refinery warning.
+- [x] Derive an immutable 600-km station safety hull from each registered
+  planet's server-owned orbital site. Sweep each player movement segment in
+  true orbital XYZ coordinates, never against a projected Three.js mesh.
+- [x] Resolve manual and autopilot station contact by stopping flight just
+  outside the hull and applying bounded speed-dependent impact damage through
+  the existing shield/hull combat rules. Destruction, if it happens, is a
+  separate `:station_collision` cause rather than `:planetary_collision`.
+- [x] Include independent caution/critical refinery warnings in authoritative
+  snapshots and level-change events. Show a clearly labeled refinery warning
+  in desktop/SBS cockpit and preserve world-state resynchronization behavior.
+- [x] Add swept-contact, altitude-clearance, idle-tick, shield/hull,
+  warning-transition, and map-server integration regression tests.
+- [ ] Verify real laptop/SBS maneuvering against the **physical** station
+  boundary. The long-range visual proxy may visually overlap the cockpit
+  while the real station is still many kilometers away.
+- [ ] Add explicit authenticated docking clearance, physical approach
+  corridors, bay occupancy and speed gates before pilots can cross the
+  protected hull boundary. The current sphere is a V1 safety approximation
+  and does not authorize player docking.
+- [ ] Spawn visible docked Scows at each numbered berth; reconcile their
+  strategic cargo/occupancy with the same tactical physical identities.
+- [ ] Later: tune collision volumes to the final mesh and hull scale, add
+  repair/insurance/port fees, docking UI and proximity autopilot guidance.
+
 ### SOL encounter overlap / mixed-faction guard (2026-11-05)
 
 - [x] Keep one authentic pending/tactical encounter identity in every
