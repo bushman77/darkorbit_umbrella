@@ -2,9 +2,11 @@ name: Verify SOL free-flight mechanics
 
 on:
   push:
-    branches: [native_client]
+    branches: [main]
     paths:
       - "apps/core/lib/core/universe/navigation.ex"
+      - "apps/core/lib/core/universe/green_starbase.ex"
+      - "apps/core/test/core/universe/green_starbase_test.exs"
       - "apps/core/lib/core/universe/navigation/checkpoint.ex"
       - "apps/core/lib/core/universe/trade_lanes.ex"
       - "apps/core/lib/core/universe/traffic.ex"
@@ -41,6 +43,10 @@ on:
       - "apps/darkorbit_web/assets/js/game/helmet_control.mjs"
       - "apps/darkorbit_web/assets/js/game/helmet_alignment_keys.mjs"
       - "apps/darkorbit_web/assets/js/game/stereo_view.js"
+      - "apps/darkorbit_web/assets/js/game/green_starbase_visual.js"
+      - "apps/darkorbit_web/assets/js/game/green_starbase_visual_test.mjs"
+      - "apps/darkorbit_web/assets/js/game/solar_atlas.mjs"
+      - "apps/darkorbit_web/assets/js/game/solar_atlas_test.mjs"
       - "apps/darkorbit_web/assets/js/game/ambient_refinery_traffic*.mjs"
       - "apps/darkorbit_web/assets/js/game/stereo_viewport.mjs"
       - "apps/darkorbit_web/assets/js/game/stereo_viewport_test.mjs"
@@ -100,6 +106,7 @@ jobs:
           mix test apps/core/test/core/universe/encounters_test.exs
           mix test apps/core/test/core/universe/traffic_test.exs
           mix test apps/core/test/core/universe/navigation_test.exs
+          mix test apps/core/test/core/universe/green_starbase_test.exs
           mix test apps/core/test/core/universe/free_flight_region_test.exs
           mix test apps/core/test/core/world/world_test.exs
           mix test apps/darkorbit/test/darkorbit/world_test.exs
@@ -116,6 +123,8 @@ jobs:
       - name: Test navigation controls and map ID validation
         run: |
           node --test apps/darkorbit_web/assets/js/game/solar_atlas_view_test.mjs
+          node --test apps/darkorbit_web/assets/js/game/solar_atlas_test.mjs
+          node --test apps/darkorbit_web/assets/js/game/green_starbase_visual_test.mjs
           node --test apps/darkorbit_web/assets/js/game/orbital_regions_test.mjs
           node --test apps/darkorbit_web/assets/js/game/stereo_viewport_test.mjs
           node --test apps/darkorbit_web/assets/js/game/helmet_alignment_keys_test.mjs

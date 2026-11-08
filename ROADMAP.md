@@ -836,6 +836,33 @@ Source: [Symbrella `symbolic_generation`](https://github.com/bushman77/Symbrella
   PostgreSQL persistence boundary.
 
 
+### Green Starbase — independent Earth–Mars landmark (2026-11-08)
+
+- [x] The first independent interplanetary starbase now has a stable,
+  server-owned SOL position midway between Earth and Mars. This is NOT
+  the nine planetary forward refineries and creates no stock or NPC state.
+- [x] Add a distinct green twin-pyramid Atlas icon and selectable, validated
+  navigation destination. Pilots travel to its precise position through the
+  existing SOL cruise/waypoint system; the server remains authoritative.
+- [x] Render a low-poly, 1989-inspired green starbase in the ordinary and SBS
+  3D cockpit after arrival. The design has opposing pyramids, an industrial
+  central block and a *real open* front-facing docking aperture.
+  Geometry lives in the installed desktop bundle, never Phoenix socket
+  payloads. It is not a targetable/combat NPC.
+- [x] Gate local rendering to a server-validated nearby idle SOL waypoint
+  in the correct deep-space flight region.
+- [ ] V1.1: station safety collision hull, special open docking corridor,
+  proximity warning and speed/orientation approach guidance.
+- [ ] V1.2: server-authorized bay entry, docking state and automatic removal
+  of the player ship from active tactical space while docked.
+- [ ] V1.3: persistent docked status and basic docked-services panel.
+- [ ] V1.4: authenticated undocking/launch pose and temporary protection
+  against immediate re-contact; server validates ship and bay occupancy.
+- [ ] V1.5: actual credit-backed repair, shields, ammunition and trading
+  through existing Ecto inventory/ship-condition transaction boundaries.
+- [ ] Visually verify the real desktop client and paired-phone SBS graphics,
+  alignment and scale at the docking mouth before activating docking.
+
 ### Pilot location continuity (2026-11-08)
 
 - [x] Add PostgreSQL pilot checkpoints for SOL planet, voyage number,
