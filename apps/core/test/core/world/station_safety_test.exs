@@ -90,7 +90,9 @@ defmodule Core.World.StationSafetyTest do
     assert stopped.shields == 48
 
     exposed = %{before | shields: 0, shield_absorption: 0.0}
-    assert {:impact, destroyed, _} = StationSafety.resolve(exposed, moved, world(), 0.1)
+    moved_exposed = %{moved | shields: 0, shield_absorption: 0.0}
+    assert {:impact, destroyed, _} =
+      StationSafety.resolve(exposed, moved_exposed, world(), 0.1)
     assert destroyed.hull == 0
     assert destroyed.status == :destroyed
   end
