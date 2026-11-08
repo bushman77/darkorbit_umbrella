@@ -8,6 +8,7 @@ defmodule DarkorbitWeb.HelmetChannel do
   alias Darkorbit.{Helmets, World}
   alias DarkorbitWeb.{HelmetManager, HelmetNetwork, HelmetSurrender}
   alias Core.Universe.Navigation, as: SolarNavigation
+  alias Core.Universe.GreenStarbase
   alias Core.World.SessionManager
 
   @impl true
@@ -307,13 +308,31 @@ defmodule DarkorbitWeb.HelmetChannel do
     end
   end
 
-  # Tactical presence is a single display hint, not an encounter payload.
-  # The phone still receives no commands, cargo or reputation metadata.
-  defp visual_navigation(navigation) when is_map(navigation),
-    do: %{
+  # The phone only needs a tiny, server-owned station render hint while the
+  # pilot is physically at Green Starbase's SOL waypoint. Never send whole
+  # navigation, merchant cargo, standings, or any command authority.
+  defp visual_navigation(navigation) when is_map(navigation) do
+    basic = %{
       planetary_view: Map.get(navigation, :planetary_view),
       tactical_active: is_map(Map.get(navigation, :tactical_encounter))
     }
+
+    if Map.get(navigation, :status) == :idle and
+         Map.get(navigation, :location_id) == nil and
+         Map.get(navigation, :green_starbase_nearby) == true do
+      # Canonical catalog is sourced from server code, NOT a broadcast
+      # payload; the client cannot select alternate station coordinates.
+      station = GreenStarbase.catalog()
+        |> Enum.map(&Map.take(&1, [:id, :model, :site_3d]))
+
+      Map.merge(basic, %{
+        status: :idle, location_id: nil,
+        green_starbase_nearby: true, starbases: station
+      })
+    else
+      basic
+    end
+  end
 
   defp visual_navigation(_), do: %{planetary_view: nil, tactical_active: false}
 

@@ -887,6 +887,18 @@ Source: [Symbrella `symbolic_generation`](https://github.com/bushman77/Symbrella
   restart in addition to the existing Venus reconnect regression.
 - [ ] Persist shared merchant routes and base inventory separately.
 
+### Green Starbase visual parity on paired SBS phone (2026-11-08)
+
+- [x] Send only the canonical Green Starbase position/model and proximity
+  flag to the read-only helmet navigation feed while at its SOL waypoint.
+- [x] Track authenticated sector map ID from the headset's world snapshot so
+  the existing stereo renderer can correctly show/hide deep-space objects.
+- [x] Clear the station when departing; keep private contacts, cargo,
+  pilot instructions and reputation out of the HMD rendering payload.
+- [x] Add navigation-gating, payload and native stereo integration regressions.
+- [ ] Live-test the Green Starbase from its exact Earth–Mars chart waypoint
+  in both SBS eyes, including head tracking, approach and docking mouth.
+
 ### Phone SBS VR head-gaze prototype (2026-11-08)
 
 - [x] Separate cockpit mesh/instruments from the camera. Ship orientation

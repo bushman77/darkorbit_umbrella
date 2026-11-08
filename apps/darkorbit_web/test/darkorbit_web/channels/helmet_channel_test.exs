@@ -127,6 +127,30 @@ defmodule DarkorbitWeb.HelmetChannelTest do
     assert_push "helmet_navigation", %{planetary_view: ^visual}
     assert_push "helmet_encounter", %{paused: false, encounter: nil}
 
+    # A confirmed Green Starbase approach delivers only canonical, read-only
+    # render metadata: the headset never receives cargo or client locations.
+    Phoenix.PubSub.broadcast(Darkorbit.PubSub, Darkorbit.World.PubSub.topic("sol"),
+      {:solar_navigation_updated, %{player_id: id,
+        navigation: %{status: :idle, location_id: nil,
+          green_starbase_nearby: true, planetary_view: nil,
+          cargo: %{secret: 500}, pending_encounter: nil}}})
+    assert_push "helmet_navigation", %{status: :idle, location_id: nil,
+      green_starbase_nearby: true, starbases: [base]} = station_visual
+    assert base.id == "sol:starbase:green"
+    assert base.model == :green_pyramid_starbase_v1
+    assert base.site_3d == Core.Universe.GreenStarbase.local_site()
+    refute Map.has_key?(station_visual, :cargo)
+    assert_push "helmet_encounter", %{paused: false, encounter: nil}
+
+    Phoenix.PubSub.broadcast(Darkorbit.PubSub, Darkorbit.World.PubSub.topic("sol"),
+      {:solar_navigation_updated, %{player_id: id,
+        navigation: %{status: :traveling, location_id: nil,
+          green_starbase_nearby: false, planetary_view: nil,
+          pending_encounter: nil}}})
+    assert_push "helmet_navigation", navigation_without_base
+    refute Map.has_key?(navigation_without_base, :starbases)
+    assert_push "helmet_encounter", %{paused: false, encounter: nil}
+
     Phoenix.PubSub.broadcast(Darkorbit.PubSub, Darkorbit.World.PubSub.topic("sol"),
       {:solar_navigation_updated, %{player_id: id + 1,
         navigation: %{planetary_view: %{body_id: "mars"}, pending_encounter: nil}}})

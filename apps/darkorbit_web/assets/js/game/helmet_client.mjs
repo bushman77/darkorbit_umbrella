@@ -51,6 +51,7 @@ export class HelmetClient {
     // StereoSpaceView reads the same navComputer.visual data on laptop and HMD.
     this.navComputer = {solarNavigation: {planetary_view: null}}
     this.orbitalBase = null
+    this.mapId = null
     this.screenWake = new HelmetScreenWake()
     this.gaze = new HelmetGazeDwell()
     this.headTracking = new HelmetHeadTracking({
@@ -519,6 +520,7 @@ export class HelmetClient {
     this.entities.clear()
     this.navComputer.solarNavigation = {planetary_view: null}
     this.orbitalBase = null
+    this.mapId = null
     this.beams = []
     this.report(false)
   }
@@ -539,6 +541,9 @@ export class HelmetClient {
 
   applyWorld(map) {
     if (!map?.entities || this.mode !== "combat") return
+    // The helmet uses its pilot's server-subscribed orbital region, not a
+    // phone-provided map ID. Green Starbase must only appear in deep space.
+    this.mapId = typeof map.map_id === "string" ? map.map_id : null
     this.orbitalBase = map.orbital_base || null
     const active = new Set()
     for (const e of map.entities) {
