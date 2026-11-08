@@ -77,7 +77,12 @@ test("calibrates present head direction, tracks relative yaw, recenters, times o
   near(fresh.w, 1)
   time = 2_310
   phone.emit({alpha: 79, beta: 30, gamma: 0})
-  assert.ok(Math.abs(tracking.rotation().y) > 0.01)
+  const moved = tracking.rotation()
+  // In landscape orientation a heading change rotates about a mixture of
+  // local axes, not necessarily Y. Check the physical 8-degree rotation,
+  // independent of screen orientation or Euler-axis convention.
+  near(Math.hypot(moved.x, moved.y, moved.z), Math.sin(4 * Math.PI / 180))
+  near(2 * Math.acos(Math.min(1, Math.abs(moved.w))), 8 * Math.PI / 180)
   tracking.stop()
   assert.equal(phone.hasListener(), false)
   assert.equal(tracking.rotation(), null)
