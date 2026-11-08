@@ -20,6 +20,17 @@ export class HelmetControl {
     this.root.querySelector("#nav-helmet-open")?.addEventListener("click", () => this.openPanel())
     this.root.querySelector("#nav-helmet-close")?.addEventListener("click", () => this.closePanel())
     this.root.querySelector("#helmet-forget")?.addEventListener("click", () => this.forget())
+    // Center the phone while it is already mounted in the VR headset.
+    // Keep this separate from the calibration arrows and flight controls.
+    window.addEventListener("keydown", event => {
+      if (event.code !== "KeyC" || event.repeat ||
+          event.ctrlKey || event.altKey || event.metaKey || event.shiftKey ||
+          event.target?.isContentEditable ||
+          ["INPUT", "TEXTAREA", "SELECT"].includes(event.target?.tagName) ||
+          !this.canAdjustAlignment()) return
+      event.preventDefault()
+      this.recenter()
+    }, true)
     const host = this.root.querySelector("#helmet-host")
     host?.addEventListener("input", () => { this.hostEdited = true })
     host?.addEventListener("change", () => this.drawQR())
@@ -80,6 +91,15 @@ export class HelmetControl {
       .receive("error", reply => this.alignmentFeedback(
         "HMD calibration unavailable: " + (reply.reason || "unknown")))
       .receive("timeout", () => this.alignmentFeedback("HMD calibration timed out"))
+    return true
+  }
+
+  recenter() {
+    if (!this.canAdjustAlignment()) return false
+    this.channel.push("recenter", {})
+      .receive("error", reply => this.alignmentFeedback(
+        "HMD recenter unavailable: " + (reply.reason || "unknown")))
+      .receive("timeout", () => this.alignmentFeedback("HMD recenter timed out"))
     return true
   }
 

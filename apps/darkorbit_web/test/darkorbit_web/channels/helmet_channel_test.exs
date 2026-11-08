@@ -164,6 +164,15 @@ defmodule DarkorbitWeb.HelmetChannelTest do
     assert_reply ref, :ok, %{axis: "eye_sep", direction: -1}
     assert_push "helmet_alignment_adjust", %{axis: "eye_sep", direction: -1}
 
+    # Centering is an authenticated display-only command. It does not
+    # let the phone steer or affect another pilot's viewer.
+    ref = push(control, "recenter", %{})
+    assert_reply ref, :ok
+    assert_push "helmet_recenter", %{}
+
+    ref = push(viewer, "recenter", %{})
+    assert_reply ref, :error, %{reason: "read_only_or_invalid_command"}
+
     ref = push(viewer, "adjust_alignment", %{"axis" => "gap", "direction" => 1})
     assert_reply ref, :error, %{reason: "read_only_or_invalid_command"}
 
@@ -201,6 +210,8 @@ defmodule DarkorbitWeb.HelmetChannelTest do
     assert %{mode: :standby, rendering: false} = HelmetManager.status(account.id)
 
     ref = push(control, "adjust_alignment", %{"axis" => "gap", "direction" => 1})
+    assert_reply ref, :error, %{reason: "not_in_cockpit"}
+    ref = push(control, "recenter", %{})
     assert_reply ref, :error, %{reason: "not_in_cockpit"}
 
     # ChannelTest leave is asynchronous. Observe termination before the
@@ -247,6 +258,8 @@ defmodule DarkorbitWeb.HelmetChannelTest do
     ref = push(control, "set_mode", %{"mode" => "combat"})
     assert_reply ref, :ok
     ref = push(control, "adjust_alignment", %{"axis" => "gap", "direction" => -1})
+    assert_reply ref, :error, %{reason: "helmet_not_rendering"}
+    ref = push(control, "recenter", %{})
     assert_reply ref, :error, %{reason: "helmet_not_rendering"}
 
     ref = push(control, "open_pairing", %{})

@@ -8,6 +8,11 @@ export const MOUSE_STEERING_IDLE_MS = 25
 export const MOUSE_STEERING_DEFAULT_SENSITIVITY = 1
 
 const clamp = (value, low, high) => Math.min(high, Math.max(low, value))
+// Native clients have their own storage origin. Do not silently disable
+// mouse steering on first launch; preserve an explicit opt-out everywhere.
+export const enabledMouseSteering = (saved, isNative = false) =>
+  saved === "1" || (saved === null && isNative === true)
+
 export const validMouseSensitivity = value => Number.isFinite(value) &&
   value >= 0.4 && value <= 6.0
 

@@ -30,6 +30,10 @@ defmodule DarkorbitWeb.HelmetManager do
     GenServer.call(__MODULE__, {:adjust_alignment, player_id, axis, direction})
   end
 
+  # Only the authenticated desktop pilot can recenter a rendering viewer.
+  # Sensor orientation stays entirely on the handset.
+  def recenter(player_id), do: GenServer.call(__MODULE__, {:recenter, player_id})
+
   def report_alignment(pid, gap_px, separation_mm)
       when is_integer(gap_px) and gap_px in -160..80 and
            is_integer(separation_mm) and separation_mm in 40..85 do
@@ -142,6 +146,26 @@ defmodule DarkorbitWeb.HelmetManager do
 
       true ->
         Enum.each(viewers, &send(&1, {:helmet_alignment_adjust, axis, direction}))
+        {:reply, :ok, state}
+    end
+  end
+
+  def handle_call({:recenter, player_id}, _from, state) do
+    active? = Map.get(state.modes, player_id, :standby) == :combat
+    viewers =
+      for {pid, viewer} <- state.viewers,
+          viewer.player_id == player_id and viewer.rendering,
+          do: pid
+
+    cond do
+      not active? ->
+        {:reply, {:error, :not_in_cockpit}, state}
+
+      viewers == [] ->
+        {:reply, {:error, :helmet_not_rendering}, state}
+
+      true ->
+        Enum.each(viewers, &send(&1, :helmet_recenter))
         {:reply, :ok, state}
     end
   end

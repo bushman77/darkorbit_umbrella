@@ -2,8 +2,16 @@ import test from "node:test"
 import assert from "node:assert/strict"
 import {
   MouseSteering, mouseSteeringAxes, MOUSE_STEERING_IDLE_MS,
-  validMouseSensitivity,
+  validMouseSensitivity, enabledMouseSteering,
 } from "./mouse_steering.mjs"
+
+test("native defaults to mouse flight without overriding saved preference", () => {
+  assert.equal(enabledMouseSteering(null, true), true)
+  assert.equal(enabledMouseSteering(null, false), false)
+  assert.equal(enabledMouseSteering("0", true), false)
+  assert.equal(enabledMouseSteering("1", true), true)
+  assert.equal(enabledMouseSteering("1", false), true)
+})
 
 test("mouse yaw/pitch control remains bounded and sensitivity remains 0.4x-6x", () => {
   assert.deepEqual(mouseSteeringAxes(5.5, -5.5), {yaw: 0.5, pitch: 0.5})

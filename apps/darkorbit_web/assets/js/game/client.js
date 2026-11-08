@@ -24,7 +24,7 @@ import {FlightControls} from "./flight_controls.mjs"
 import {WorldStreamDelta} from "./world_stream_delta.mjs"
 import {gameSocketEndpoint} from "./socket_endpoint.mjs"
 import {
-  MouseSteering, validMouseSensitivity, MOUSE_STEERING_IDLE_MS,
+  MouseSteering, validMouseSensitivity, enabledMouseSteering, MOUSE_STEERING_IDLE_MS,
 } from "./mouse_steering.mjs"
 import {smoothAttitude} from "./attitude_interpolation.mjs"
 import {smoothOrientation, orientationTelemetry} from "./orientation_interpolation.mjs"
@@ -64,13 +64,18 @@ class SpaceClient {
     // Per-pilot browser preference, not an authority-bearing network setting.
     this.mouseSteeringKey = "darkorbit:mouse-steering:" + root.dataset.layoutPlayerId
     this.mouseSensitivityKey = "darkorbit:mouse-sensitivity:" + root.dataset.layoutPlayerId
-    this.mouseSteeringEnabled = localStorage.getItem(this.mouseSteeringKey) === "1"
+    this.mouseSteeringEnabled = enabledMouseSteering(
+      localStorage.getItem(this.mouseSteeringKey),
+      root.dataset.nativeClient === "true",
+    )
     const savedSensitivity = Number(localStorage.getItem(this.mouseSensitivityKey))
     this.mouseSteeringSensitivity = validMouseSensitivity(savedSensitivity)
       ? savedSensitivity : 1
     this.mouseSteering = new MouseSteering({sensitivity: this.mouseSteeringSensitivity})
     this.mouseIdleTimer = null
     this.mouseCaptureLost = false
+    this.mouseFallback = false
+    this.mouseFallbackPoint = null
     this.helmetAlignmentKeys = new HelmetAlignmentKeyGate()
     this.entities = new Map()
     this.pilots = new Map()
@@ -1677,6 +1682,17 @@ class SpaceClient {
     }, MOUSE_STEERING_IDLE_MS)
   }
 
+  enableNativeMouseFallback() {
+    if (this.root.dataset.nativeClient !== "true" ||
+        !this.mouseSteeringEnabled || !this.flightControls?.active()) return false
+    this.mouseFallback = true
+    this.mouseFallbackPoint = null
+    this.mouseCaptureLost = false
+    this.flightControls.setMouseMode(true)
+    this.updateMouseSteeringStatus()
+    return true
+  }
+
   setupMouseSteering() {
     const toggle = this.root.querySelector("#nav-mouse-steering")
     const slider = this.root.querySelector("#nav-mouse-sensitivity")
@@ -1711,37 +1727,73 @@ class SpaceClient {
       event.stopImmediatePropagation()
       this.canvas.focus({preventScroll: true})
       if (!this.canvas.requestPointerLock) {
-        this.mouseSteeringMessage("Pointer lock unavailable; keyboard steering remains active.")
+        if (!this.enableNativeMouseFallback()) {
+          this.mouseSteeringMessage("Pointer lock unavailable; keyboard steering remains active.")
+        }
         return
       }
       try {
         this.mouseCaptureLost = false
         const request = this.canvas.requestPointerLock()
-        request?.catch?.(() =>
-          this.mouseSteeringMessage("Mouse capture was denied. Click the cockpit to retry."))
+        request?.catch?.(() => {
+          if (!this.enableNativeMouseFallback()) {
+            this.mouseSteeringMessage("Mouse capture was denied. Click the cockpit to retry.")
+          }
+        })
+        // Some Linux webviews neither reject nor dispatch pointerlockerror.
+        // Fall back to bounded hover deltas only in the native client.
+        window.setTimeout(() => {
+          if (document.pointerLockElement !== this.canvas) this.enableNativeMouseFallback()
+        }, 450)
       } catch (_error) {
-        this.mouseSteeringMessage("Mouse capture unavailable; keyboard steering remains active.")
+        if (!this.enableNativeMouseFallback()) {
+          this.mouseSteeringMessage("Mouse capture unavailable; keyboard steering remains active.")
+        }
       }
     }, true)
 
     document.addEventListener("mousemove", event => {
-      if (!this.mouseSteeringEnabled || document.pointerLockElement !== this.canvas ||
-          this.navComputer?.isOpen || this.inSystemCruise() ||
-          !this.flightControls.active()) return
+      if (!this.mouseSteeringEnabled || this.navComputer?.isOpen ||
+          this.inSystemCruise() || !this.flightControls.active()) return
+      const captured = document.pointerLockElement === this.canvas
+      if (!captured && (!this.mouseFallback || event.target !== this.canvas)) return
+      let dx = event.movementX
+      let dy = event.movementY
+      if (!captured) {
+        // Unlocked WebKit mousemove deltas are not consistently populated.
+        // Use bounded cursor displacement with a fresh first-point baseline.
+        const point = {x: event.clientX, y: event.clientY}
+        if (!this.mouseFallbackPoint) {
+          this.mouseFallbackPoint = point
+          return
+        }
+        dx = point.x - this.mouseFallbackPoint.x
+        dy = point.y - this.mouseFallbackPoint.y
+        this.mouseFallbackPoint = point
+      }
       // Zero-delta browser events must not extend steering beyond the
       // last physical movement. In particular, do not restart the timer.
-      if (!Number.isFinite(event.movementX) ||
-          !Number.isFinite(event.movementY) ||
-          (event.movementX === 0 && event.movementY === 0)) return
-      const axes = this.mouseSteering.move(event.movementX, event.movementY)
+      if (!Number.isFinite(dx) || !Number.isFinite(dy) ||
+          (dx === 0 && dy === 0)) return
+      const axes = this.mouseSteering.move(dx, dy)
       this.flightControls.setMouseSteering(axes)
       this.scheduleMouseStop()
+    })
+    this.canvas.addEventListener("mouseleave", () => {
+      if (!this.mouseFallback) return
+      // The fallback never keeps steering after the cursor leaves the deck.
+      this.exitMouseSteering()
     })
     document.addEventListener("pointerlockchange", () => {
       window.clearTimeout(this.mouseIdleTimer)
       this.mouseIdleTimer = null
-      const captured = this.mouseSteeringEnabled &&
+      const pointerLocked = this.mouseSteeringEnabled &&
         document.pointerLockElement === this.canvas
+      if (pointerLocked) {
+        this.mouseFallback = false
+        this.mouseFallbackPoint = null
+      }
+      const captured = pointerLocked || this.mouseFallback
       if (captured) {
         this.mouseCaptureLost = false
       } else if (this.mouseSteeringEnabled && !this.navComputer?.isOpen &&
@@ -1761,13 +1813,17 @@ class SpaceClient {
       })
       this.updateMouseSteeringStatus()
     })
-    document.addEventListener("pointerlockerror", () =>
-      this.mouseSteeringMessage("Mouse capture failed. Try clicking the cockpit again."))
+    document.addEventListener("pointerlockerror", () => {
+      if (!this.enableNativeMouseFallback()) {
+        this.mouseSteeringMessage("Mouse capture failed. Try clicking the cockpit again.")
+      }
+    })
 
     // Escape first releases the cursor rather than accidentally disengaging
     // combat; M still opens Atlas, which releases the mouse automatically.
     window.addEventListener("keydown", event => {
-      if (event.code !== "Escape" || document.pointerLockElement !== this.canvas) return
+      if (event.code !== "Escape" ||
+          (document.pointerLockElement !== this.canvas && !this.mouseFallback)) return
       event.preventDefault()
       event.stopImmediatePropagation()
       this.exitMouseSteering()
@@ -1787,15 +1843,19 @@ class SpaceClient {
     if (!node) return
     node.hidden = !this.mouseSteeringEnabled || Boolean(this.navComputer?.isOpen)
     if (node.hidden) return
-    const captured = document.pointerLockElement === this.canvas
-    node.textContent = captured
-      ? "MOUSE STEERING ACTIVE · MOVE TO PITCH/YAW · ESC RELEASES"
+    const captured = document.pointerLockElement === this.canvas || this.mouseFallback
+    node.textContent = this.mouseFallback
+      ? "MOUSE STEERING ACTIVE · NATIVE FALLBACK · ESC RELEASES"
+      : captured
+        ? "MOUSE STEERING ACTIVE · MOVE TO PITCH/YAW · ESC RELEASES"
       : this.mouseCaptureLost
         ? "MOUSE STEERING PAUSED · CLICK COCKPIT TO RESUME"
         : "MOUSE STEERING ENABLED · CLICK COCKPIT TO CAPTURE"
   }
 
   exitMouseSteering({silent = false} = {}) {
+    this.mouseFallback = false
+    this.mouseFallbackPoint = null
     window.clearTimeout(this.mouseIdleTimer)
     this.mouseIdleTimer = null
     this.mouseSteering.release()

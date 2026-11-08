@@ -24,6 +24,8 @@ test("helmet has explicit sensor permission, read-only local controls and recent
   assert.match(helmet, /new HelmetHeadTracking\(/)
   assert.match(helmet, /new HelmetGazeDwell\(/)
   assert.match(helmet, /this\.view\.setHelmetHeadRotation\(this\.headTracking\.rotation\(time\)\)/)
+  assert.match(helmet, /this\.headTracking\.requestRecenter\(\)/)
+  assert.match(helmet, /this\.channel\.on\("helmet_recenter"/)
   assert.match(helmet, /update\.activated === "nav_open"/)
   assert.match(helmet, /update\.activated === "nav_close"/)
   assert.match(helmet, /update\.activated === "recenter"/)

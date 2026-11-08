@@ -92,8 +92,16 @@ export class HelmetHeadTracking {
   }
 
   recenter() {
-    if (!this.enabled || !this.last) return false
+    if (!this.ready()) return false
     this.baseline = {...this.last}
+    return true
+  }
+
+  // Recalibrate on the NEXT fresh sensor event, not an old portrait/setup
+  // sample. The phone can rotate while entering landscape/fullscreen.
+  requestRecenter() {
+    if (!this.enabled) return false
+    this.baseline = null
     return true
   }
 

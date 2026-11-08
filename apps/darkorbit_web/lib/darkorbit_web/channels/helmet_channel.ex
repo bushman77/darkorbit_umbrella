@@ -81,6 +81,14 @@ defmodule DarkorbitWeb.HelmetChannel do
     end
   end
 
+  def handle_in("recenter", _payload,
+                %{assigns: %{helmet_role: :controller, current_player_id: player_id}} = socket) do
+    case HelmetManager.recenter(player_id) do
+      :ok -> {:reply, {:ok, %{}}, socket}
+      {:error, reason} -> {:reply, {:error, %{reason: Atom.to_string(reason)}}, socket}
+    end
+  end
+
   # Browser saves only after input settles. This write is authenticated by
   # the helmet socket's device ID, not any client-supplied player/device ID.
   def handle_in("save_alignment", %{"eye_gap_px" => gap, "eye_sep_mm" => separation},
@@ -218,6 +226,12 @@ defmodule DarkorbitWeb.HelmetChannel do
       when axis in [:gap, :eye_sep] and direction in [-1, 1] do
     push(socket, "helmet_alignment_adjust",
       %{axis: Atom.to_string(axis), direction: direction})
+    {:noreply, socket}
+  end
+
+  def handle_info(:helmet_recenter,
+                  %{assigns: %{helmet_role: :viewer, helmet_active: true}} = socket) do
+    push(socket, "helmet_recenter", %{})
     {:noreply, socket}
   end
 

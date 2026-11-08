@@ -91,6 +91,7 @@ export class HelmetClient {
     this.channel.on("helmet_alignment_adjust", ({axis, direction}) => {
       this.adjustAlignmentFromPilot(axis, direction)
     })
+    this.channel.on("helmet_recenter", () => this.recenterFromPilot())
     this.channel.on("helmet_snapshot", ({map, player_id}) => {
       this.selfId = key(player_id)
       this.applyWorld(map)
@@ -152,7 +153,10 @@ export class HelmetClient {
       this.resize()
       if (this.mode === "combat" && this.immersiveReady && !this.running) this.startRendering()
     })
-    window.addEventListener("orientationchange", () => this.resize())
+    window.addEventListener("orientationchange", () => {
+      this.headTracking.requestRecenter()
+      this.resize()
+    })
     window.visualViewport?.addEventListener("resize", () => this.resize())
     document.addEventListener("visibilitychange", () => {
       this.screenWake.onVisibilityChange()
@@ -318,6 +322,16 @@ export class HelmetClient {
     })
   }
 
+  recenterFromPilot() {
+    if (this.mode !== "combat" || !this.immersiveReady || !this.running) return
+    // Immediately aim the virtual eyes straight down the ship axis, then
+    // use the next physical sensor sample as the new headset neutral pose.
+    this.headTracking.requestRecenter()
+    this.view?.setHelmetHeadRotation(null)
+    this.view?.setHelmetNavOpen(false)
+    this.gaze.reset()
+  }
+
   adjustAlignmentFromPilot(axis, direction) {
     if (this.mode !== "combat" || !this.immersiveReady || !this.running) return
     const next = adjustedHelmetAlignment(
@@ -456,6 +470,11 @@ export class HelmetClient {
       }
     }
     this.canvas.hidden = false
+    // The initial permission tap may have been in portrait or outside the
+    // headset. Recenter after the immersive cockpit actually starts.
+    this.headTracking.requestRecenter()
+    this.gaze.reset()
+    this.view.setHelmetHeadRotation(null)
     this.resize()
     this.message("")
     this.running = true

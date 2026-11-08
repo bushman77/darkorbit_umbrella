@@ -64,6 +64,20 @@ test("calibrates present head direction, tracks relative yaw, recenters, times o
   near(recentered.z, 0)
   near(recentered.w, 1)
   assert.equal(tracking.rotation(2_300), null)
+  // A headset is not neutralized against a stale sensor pose. It waits for
+  // a new sample after the pilot's "center" command.
+  time = 2_301
+  assert.equal(tracking.requestRecenter(), true)
+  assert.equal(tracking.rotation(), null)
+  phone.emit({alpha: 71, beta: 30, gamma: 0})
+  const fresh = tracking.rotation()
+  near(fresh.x, 0)
+  near(fresh.y, 0)
+  near(fresh.z, 0)
+  near(fresh.w, 1)
+  time = 2_310
+  phone.emit({alpha: 79, beta: 30, gamma: 0})
+  assert.ok(Math.abs(tracking.rotation().y) > 0.01)
   tracking.stop()
   assert.equal(phone.hasListener(), false)
   assert.equal(tracking.rotation(), null)
