@@ -98,11 +98,13 @@ defmodule Darkorbit.World do
               :ok = SolarNavigation.set_faction_standing(
                 server, user_id, faction, standing)
             end)
-            case SolarNavigation.resume_after_login(server, user_id) do
-              :ok -> success
+            session_id = elem(success, 1).id
+            with :ok <- maybe_restore_docked(session_id, entry),
+                 :ok <- SolarNavigation.resume_after_login(server, user_id) do
+              success
+            else
               {:error, reason} ->
-                # Never leave a live world entity attached to a rejected join.
-                _ = Simulation.disconnect(elem(success, 1).id)
+                _ = Simulation.disconnect(session_id)
                 {:error, {:location_resume_failed, reason}}
             end
 
@@ -114,6 +116,41 @@ defmodule Darkorbit.World do
       end
     end
   end
+
+  defp maybe_restore_docked(session_id, %{docked: true}),
+    do: Simulation.restore_dock(session_id)
+  defp maybe_restore_docked(_session_id, _entry), do: :ok
+
+  @doc "Request the Green Starbase berth; save its state before acknowledging."
+  def dock(session_id) do
+    case Simulation.dock(session_id) do
+      {:ok, status} ->
+        case checkpoint_location(session_id) do
+          :ok -> {:ok, status}
+          {:error, reason} ->
+            _ = Simulation.launch(session_id)
+            {:error, {:docking_checkpoint_failed, reason}}
+        end
+      error -> error
+    end
+  end
+
+  @doc "Launch an authenticated parked ship without rebuilding its combat state."
+  def launch(session_id) do
+    case Simulation.launch(session_id) do
+      {:ok, _status} = result ->
+        case checkpoint_location(session_id) do
+          :ok -> :ok
+          {:error, reason} ->
+            require Logger
+            Logger.warning("Green Starbase launch checkpoint: #{inspect(reason)}")
+        end
+        result
+      error -> error
+    end
+  end
+
+  defdelegate docking_status(session_id), to: Simulation
 
   @doc "Settle any live combat and persist map-owned damage before disconnecting."
   def disconnect(session_id) do
