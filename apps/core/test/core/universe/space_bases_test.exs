@@ -1,7 +1,7 @@
 defmodule Core.Universe.SpaceBasesTest do
   use ExUnit.Case, async: true
 
-  alias Core.Universe.{Sol, SpaceBases, Traffic}
+  alias Core.Universe.{OrbitalEntry, Sol, SpaceBases, Traffic}
 
   test "every registered SOL destination owns one operational orbital base and refinery" do
     bases = SpaceBases.seed()
@@ -14,6 +14,7 @@ defmodule Core.Universe.SpaceBasesTest do
       assert base.id == "sol:base:" <> planet.id
       assert base.refinery_id == "sol:refinery:" <> planet.id
       assert base.berth_count == 3
+      assert OrbitalEntry.space_base(planet.id).refinery_id == base.refinery_id
       assert base.berths == %{}
       assert Enum.all?(base.stock, fn {_good, qty} -> qty >= 0 end)
       assert %{occupied_berths: 0, refinery_status: :operational} =

@@ -24,6 +24,9 @@ defmodule Core.Universe.OrbitalEntry do
   # the 600 km server radius covers that model and ship clearance.
   # This is not a dockable berth radius; approved approach corridors come later.
   @base_collision_radius_km 600.0
+  # Small bodies (Pluto) must retain a gap between the station safety hull
+  # and the planet's fatal exclusion sphere.
+  @minimum_station_planet_gap_km 100.0
 
   @spec map_id(String.t()) :: String.t() | nil
   def map_id(id) when is_binary(id) do
@@ -54,19 +57,26 @@ defmodule Core.Universe.OrbitalEntry do
 
   @doc """
   Fixed physical orbital site shared by every player map of this planet.
-  The base is above the surface and well beyond the collision exclusion
-  radius; it is a visual/docking destination, not yet a player collision body.
+  The base is above the surface and beyond the planet's lethal exclusion
+  radius. It supplies immutable server-owned refinery collision geometry;
+  player docking requires separate future authorization.
   """
   @spec space_base(String.t()) :: map() | nil
   def space_base(body_id) when is_binary(body_id) do
     with {:ok, radius} <- Sol.planet_radius_km(body_id),
          %{} = planet_center <- center(body_id) do
+      orbit_offset = max(
+        radius * 1.52,
+        radius * @exclusion_multiplier + @base_collision_radius_km +
+          @minimum_station_planet_gap_km
+      )
+
       %{
         id: "sol:base:" <> body_id,
         refinery_id: "sol:refinery:" <> body_id,
         body_id: body_id,
         position_3d: %{
-          x: planet_center.x + radius * 1.52,
+          x: planet_center.x + orbit_offset,
           y: planet_center.y,
           z: radius * 0.14
         },

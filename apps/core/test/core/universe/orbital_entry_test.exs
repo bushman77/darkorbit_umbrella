@@ -1,6 +1,7 @@
 defmodule Core.Universe.OrbitalEntryTest do
   use ExUnit.Case, async: true
 
+  alias Core.Universe.SpaceBases
   alias Core.Universe.OrbitalEntry
   alias Core.Universe.PlanetaryView
   alias Core.Universe.Sol
@@ -36,6 +37,42 @@ defmodule Core.Universe.OrbitalEntryTest do
     assert OrbitalEntry.map_id("venus") == "sol:venus"
     assert OrbitalEntry.map_id("sun") == nil
     assert OrbitalEntry.map_id("bogus") == nil
+  end
+
+  test "all nine worlds have distinct safe orbital refineries, berths and physical sites" do
+    maps = Map.new(OrbitalEntry.planet_maps(), &{&1.planet.body_id, &1})
+    bases = SpaceBases.seed()
+    names = ~w(mercury venus earth mars jupiter saturn uranus neptune pluto)
+
+    assert Enum.sort(Map.keys(maps)) == Enum.sort(names)
+    assert Enum.sort(Map.keys(bases)) == Enum.sort(names)
+
+    for id <- names do
+      map = Map.fetch!(maps, id)
+      site = OrbitalEntry.space_base(id)
+      logistics = Map.fetch!(bases, id)
+      center = map.planet.center
+      position = site.position_3d
+      radial = :math.sqrt(
+        :math.pow(position.x - center.x, 2) +
+        :math.pow(position.y - center.y, 2) +
+        :math.pow(position.z - center.z, 2)
+      )
+
+      assert site.id == logistics.id
+      assert site.refinery_id == logistics.refinery_id
+      assert site.model == :orbital_refinery_v1
+      assert site.body_id == id
+      assert site.berth_count == 3
+      assert logistics.berth_count == 3
+      assert radial - site.collision_radius_km - map.planet.exclusion_radius >= 100.0
+      assert position.x > 0 and position.x < map.width
+      assert position.y > 0 and position.y < map.height
+      assert position.z >= map.altitude_min and position.z <= map.altitude_max
+    end
+
+    assert OrbitalEntry.space_base("sun") == nil
+    assert OrbitalEntry.space_base("nonexistent") == nil
   end
 
   test "a fresh Earth pilot begins outside planetary caution and fatal zones" do

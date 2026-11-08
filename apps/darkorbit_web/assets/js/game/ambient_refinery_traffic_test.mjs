@@ -4,6 +4,8 @@ import {
   AMBIENT_DRONE_COUNT, refineryDroneRoutes,
   sampleDroneRoute, droneFrame, AmbientRefineryTraffic,
 } from "./ambient_refinery_traffic.mjs"
+import {spaceBasePose, spaceBaseProjection} from "./space_base_view.mjs"
+import {toScene} from "./stereo_math.mjs"
 
 const station = {x: 0, y: 0, z: 180}
 const planet = {x: 0, y: 0, z: -800}
@@ -139,4 +141,82 @@ test("no traffic in Atlas cruise or when planet/station rendering is unavailable
   traffic.update(data.base, data.station, {...data.planet, activeId: "venus"},
     data.view, 0, data.camera)
   assert.equal(scene.children.length, 0)
+})
+
+const solRadii = Object.freeze({
+  mercury: 2439.7, venus: 6051.8, earth: 6371.0,
+  mars: 3389.5, jupiter: 69911.0, saturn: 58232.0,
+  uranus: 25362.0, neptune: 24622.0, pluto: 1188.3,
+})
+
+test("each SOL destination draws refinery traffic across multiple approach bearings", () => {
+  // Reproduce the public world-to-scene projection without assuming all
+  // planets share Earth's radius. Base IDs/models match the server catalog.
+  const names = Object.keys(solRadii)
+  assert.equal(names.length, 9)
+  for (const [body, radius] of Object.entries(solRadii)) {
+    const center = {x: 200_000, y: 200_000, z: 0}
+    const offset = Math.max(radius * 1.52, radius * 1.08 + 700)
+    const site = spaceBasePose({
+      id: "sol:base:" + body,
+      refinery_id: "sol:refinery:" + body,
+      body_id: body, model: "orbital_refinery_v1",
+      position_3d: {x: center.x + offset, y: center.y, z: radius * 0.14},
+      berth_count: 3,
+    })
+    assert.ok(site, body + " must have a server-compatible refinery pose")
+
+    const sceneCenter = toScene(center)
+    for (let angle = 0; angle < 360; angle += 30) {
+      const radians = angle * Math.PI / 180
+      const ship = toScene({
+        x: center.x + Math.cos(radians) * radius * 1.861,
+        y: center.y + Math.sin(radians) * radius * 1.861, z: 0,
+      })
+      const radial = {
+        x: sceneCenter.x - ship.x, y: sceneCenter.y - ship.y,
+        z: sceneCenter.z - ship.z,
+      }
+      const radialLength = Math.hypot(radial.x, radial.y, radial.z)
+      const planetCenter = {
+        x: ship.x + radial.x * 900 / radialLength,
+        y: ship.y + radial.y * 900 / radialLength,
+        z: ship.z + radial.z * 900 / radialLength,
+      }
+      const projection = spaceBaseProjection(site, ship)
+      const paths = refineryDroneRoutes(
+        projection?.position, planetCenter, 900 / 1.861, projection?.scale,
+      )
+      assert.equal(paths?.length, 4,
+        body + " needs four lanes at approach bearing " + angle)
+      for (const lane of paths) {
+        const a = sampleDroneRoute(lane, 0)
+        const b = sampleDroneRoute(lane, 1)
+        assert.ok(Math.hypot(
+          a.point.x - b.point.x, a.point.y - b.point.y,
+          a.point.z - b.point.z,
+        ) > 25, body + " drone lane must remain visible at bearing " + angle)
+      }
+    }
+  }
+})
+
+test("visual traffic is hidden when changing to another planet or deep space", () => {
+  const scene = {children: [], add(n) {this.children.push(n)},
+    remove(n) {this.children = this.children.filter(x => x !== n)}}
+  const traffic = new AmbientRefineryTraffic(fakeThree, scene)
+  for (const body of Object.keys(solRadii)) {
+    const state = visual()
+    state.base.body_id = body
+    state.planet.activeId = body
+    state.view.body_id = body
+    traffic.update(state.base, state.station, state.planet,
+      state.view, 2000, state.camera)
+    assert.equal(scene.children.length, 2)
+    assert.ok(scene.children.every(node => node.visible))
+    traffic.update({...state.base, body_id: "sun"},
+      state.station, state.planet, state.view, 3000, state.camera)
+    assert.ok(scene.children.every(node => !node.visible))
+  }
+  traffic.dispose()
 })

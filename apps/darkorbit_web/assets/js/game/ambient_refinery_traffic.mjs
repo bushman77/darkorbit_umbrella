@@ -35,10 +35,17 @@ export function refineryDroneRoutes(station, planet, radius, stationScale = 1) {
   const lateral = normalized(cross(outward, Math.abs(outward.y) < 0.94 ? UP : X_AXIS))
   const lift = normalized(cross(lateral, outward))
   // Slightly above the visible atmosphere: no low-altitude surface clipping.
-  const surface = add(planet, mul(outward, radius * 1.055))
+  let surface = add(planet, mul(outward, radius * 1.055))
   const dock = add(station, mul(outward, -clamp(11 * stationScale, 2, 11)))
   const laneGap = clamp(separation * 0.04, 7, 25)
-  if (len(sub(dock, surface)) < 25) return null
+  // Near the visible limb, camera projection can put the refinery and
+  // atmosphere endpoints almost on top of each other. Route to a nearby
+  // atmospheric entry point rather than removing drone traffic entirely.
+  // This changes *only* decorative geometry, never planetary or base physics.
+  if (len(sub(dock, surface)) < 95) {
+    const angled = normalized(add(outward, mul(lateral, 0.32)))
+    surface = add(planet, mul(angled, radius * 1.055))
+  }
 
   return [-1.5, -0.5, 0.5, 1.5].map((lane, index) => {
     const offset = mul(lateral, lane * laneGap)

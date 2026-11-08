@@ -882,6 +882,13 @@ Source: [Symbrella `symbolic_generation`](https://github.com/bushman77/Symbrella
 - [x] Add deterministic path/phase, lifecycle, mismatch and visibility
   regression tests. Full in-game desktop and paired-phone SBS visual
   verification remains pending.
+- [x] Validate the same four-lane stream geometry at 12 arrival bearings
+  for each of Mercury–Pluto (including the dwarf planet). Add an atmosphere-
+  tangent fallback for near-coincident display endpoints so a whole world's
+  drone stream doesn't vanish at one approach angle.
+- [x] Ensure every orbital refinery stays physically clear of its planet's
+  fatal exclusion sphere; small planets such as Pluto use a minimum orbital
+  spacing while retaining the same 600-km provisional station collision hull.
 - [ ] Later: anchor streams to individually modeled berth pads and vary
   visual density from a single low-rate refinery activity indicator.
 
