@@ -115,24 +115,23 @@ defmodule Darkorbit.PilotLocation do
   end
   def restore_entry(_player_id, _ship_id, entry, _voyage), do: entry
 
-  defp valid_pose?(player_id, map_id, %Position{} = position, attitude)
-       when map_id == "sol:free_" <> Integer.to_string(player_id) do
-    # The private SOL cockpit has no planetary collision sphere. Validate
-    # against its exact server-owned 3D boundaries, including altitude.
-    match?({:ok, _},
-      Movement.destination(FreeFlightRegion.definition(player_id), position)) and
-      valid_angles?(attitude)
-  end
-
-  defp valid_pose?(_player_id, map_id, %Position{} = position, attitude) do
-    case Enum.find(OrbitalEntry.planet_maps(), &(&1.id == map_id)) do
-      %{planet: planet} = map ->
-        match?({:ok, _}, Movement.destination(map, position)) and
-          valid_angles?(attitude) and
-          PlanetaryCollision.first_contact(position, position, planet.center,
-            planet.exclusion_radius) == :clear and
-          not inside_station?(position, map)
-      _ -> false
+  defp valid_pose?(player_id, map_id, %Position{} = position, attitude) do
+    if map_id == FreeFlightRegion.map_id(player_id) do
+      # The private SOL cockpit has no planetary collision sphere. Validate
+      # its exact server-owned XYZ bounds including altitude.
+      match?({:ok, _},
+        Movement.destination(FreeFlightRegion.definition(player_id), position)) and
+        valid_angles?(attitude)
+    else
+      case Enum.find(OrbitalEntry.planet_maps(), &(&1.id == map_id)) do
+        %{planet: planet} = map ->
+          match?({:ok, _}, Movement.destination(map, position)) and
+            valid_angles?(attitude) and
+            PlanetaryCollision.first_contact(position, position, planet.center,
+              planet.exclusion_radius) == :clear and
+            not inside_station?(position, map)
+        _ -> false
+      end
     end
   end
   defp valid_pose?(_, _, _, _), do: false
