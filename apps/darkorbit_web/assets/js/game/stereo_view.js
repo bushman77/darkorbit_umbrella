@@ -251,6 +251,16 @@ export class StereoSpaceView {
     this.helmetNavClose.position.set(1.02, 0.71, -2.05)
     this.helmetNavClose.renderOrder = 71
     framing.add(this.helmetNavClose)
+    this.helmetNavRecenter = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.96, 0.36),
+      new THREE.MeshBasicMaterial({
+        map: cockpitLabel(["RECENTER"], {width: 512, height: 256}),
+        transparent: true, depthTest: false,
+      }),
+    )
+    this.helmetNavRecenter.position.set(-0.95, -0.55, -2.05)
+    this.helmetNavRecenter.renderOrder = 71
+    framing.add(this.helmetNavRecenter)
 
     // Both eyes inherit the same reticle via the central camera. The
     // arc stays hidden until dwell has armed a genuine interactive target.
@@ -301,19 +311,23 @@ export class StereoSpaceView {
       this.helmetGazeEnabled && this.helmetNavOpen
     if (this.helmetNavClose) this.helmetNavClose.visible =
       this.helmetGazeEnabled && this.helmetNavOpen
+    if (this.helmetNavRecenter) this.helmetNavRecenter.visible =
+      this.helmetGazeEnabled && this.helmetNavOpen
   }
 
   gazeTarget() {
     if (!this.helmetGazeEnabled || !this.helmetHeadRotation) return null
-    const candidate = this.helmetNavOpen ? this.helmetNavClose : this.navSwitch
-    if (!candidate?.visible) return null
+    const candidates = this.helmetNavOpen ?
+      [this.helmetNavClose, this.helmetNavRecenter] : [this.navSwitch]
     this.camera.updateMatrixWorld(true)
     this.cockpitFraming.updateMatrixWorld(true)
     this.raycaster.set(this.camera.position,
       new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion))
-    const hits = this.raycaster.intersectObject(candidate, false)
-    return hits.length && hits[0].distance < 6 ?
-      (this.helmetNavOpen ? "nav_close" : "nav_open") : null
+    const hits = this.raycaster.intersectObjects(
+      candidates.filter(candidate => candidate?.visible), false)
+    if (!hits.length || hits[0].distance >= 6) return null
+    return hits[0].object === this.helmetNavClose ? "nav_close" :
+      hits[0].object === this.helmetNavRecenter ? "recenter" : "nav_open"
   }
 
   updateGazeFeedback({target = null, armed = false, progress = 0} = {}) {
