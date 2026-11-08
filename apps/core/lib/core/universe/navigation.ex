@@ -29,6 +29,7 @@ defmodule Core.Universe.Navigation do
   alias Core.Universe.EncounterDirector
   alias Core.Universe.Traffic
   alias Core.Universe.SpaceBases
+  alias Core.Universe.GreenStarbase
   alias Core.Universe.TradeLanes
   alias Core.Universe.Territory
   alias Core.World.EventSink
@@ -821,6 +822,10 @@ defmodule Core.Universe.Navigation do
       progress: progress,
       remaining_ms: remaining_ms,
       contacts: Traffic.contacts(traffic, voyage.position_km),
+      # Distinct from all planetary forward refineries. Fixed by the server;
+      # routes use the existing, validated free-waypoint format.
+      starbases: GreenStarbase.catalog(),
+      green_starbase_nearby: GreenStarbase.nearby?(voyage),
       # Only the local base is included, avoiding nine facility records on
       # every tick and keeping remote refinery inventories server-private.
       space_base: if(voyage.status == :idle and is_binary(voyage.location_id),
