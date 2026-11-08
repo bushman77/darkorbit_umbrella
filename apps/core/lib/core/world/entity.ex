@@ -24,9 +24,9 @@ defmodule Core.World.Entity do
   defstruct @enforce_keys ++ [
               :ship_instance_id,
               :destination,
-              docked: false,
               :target_id,
               :engaged_target_id,
+              docked: false,
               navigation_mode: :manual,
               route_waypoints: [],
               flight_mode: :cruise,
