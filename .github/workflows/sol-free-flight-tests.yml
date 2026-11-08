@@ -23,6 +23,11 @@ on:
       - "apps/core/lib/core/world/map_server.ex"
       - "apps/core/lib/core/world/station_safety.ex"
       - "apps/core/lib/core/world/green_starbase_safety.ex"
+      - "apps/core/lib/core/world/green_starbase_docking.ex"
+      - "apps/core/test/core/world/green_starbase_docking_test.exs"
+      - "apps/core/test/core/world/green_starbase_docking_integration_test.exs"
+      - "apps/darkorbit/lib/darkorbit/pilot_location.ex"
+      - "apps/darkorbit/test/darkorbit/pilot_location_test.exs"
       - "apps/core/test/core/world/green_starbase_safety_test.exs"
       - "apps/core/test/core/world/green_starbase_impact_integration_test.exs"
       - "apps/core/lib/core/universe/orbital_entry.ex"
@@ -118,6 +123,9 @@ jobs:
           mix test apps/core/test/core/universe/space_bases_test.exs
           mix test apps/core/test/core/world/planetary_collision_test.exs
           mix test apps/core/test/core/world/station_safety_test.exs
+          mix test apps/core/test/core/world/green_starbase_docking_test.exs
+          mix test apps/core/test/core/world/green_starbase_docking_integration_test.exs
+          mix test apps/darkorbit/test/darkorbit/pilot_location_test.exs
           mix test apps/core/test/core/world/green_starbase_safety_test.exs
           mix test apps/core/test/core/world/green_starbase_impact_integration_test.exs
           mix test apps/core/test/core/world/station_impact_integration_test.exs

@@ -150,6 +150,37 @@ defmodule Darkorbit.PilotLocationTest do
     assert PilotLocation.restore_entry(account.id, ship.id, entry, 10) == restored
   end
 
+  test "Green Starbase docked pose survives reboot and only same ship/voyage restores it" do
+    account = player_account_fixture()
+    {:ok, ship} = Fleet.get_active_ship(account.id)
+    position = Core.Universe.GreenStarbase.position_km()
+    {:ok, earth} = Sol.game_position_km("earth")
+    voyage = %{idle_at("earth") |
+      location_id: nil, origin_id: nil, arrival_origin_id: nil,
+      origin_position_km: position, position_km: position, voyage_number: 45}
+    assert :ok = PilotLocation.save_navigation(account.id,
+      Navigation.Checkpoint.dump(voyage))
+    {:ok, entry} = Core.Universe.FreeFlightRegion.entry(account.id, voyage)
+    site = Core.Universe.GreenStarbase.local_site()
+    pose = %Position{x: site.x, y: site.y - 80.0, z: site.z}
+    condition = %{ship_instance_id: ship.id, position: pose,
+      attitude: %{yaw: 0.0, pitch: 0.0, roll: 0.0}, docked: true}
+    assert :ok = PilotLocation.save_pose(account.id, entry.map_id, voyage, condition)
+    restored = PilotLocation.restore_entry(account.id, ship.id, entry, 45)
+    assert restored.docked
+    assert restored.position == pose
+    assert PilotLocation.restore_entry(account.id, ship.id, entry, 46) == entry
+    assert PilotLocation.restore_entry(account.id, ship.id + 1, entry, 45) == entry
+
+    # A subsequent launch stores an ordinary location, not an old dock flag.
+    launch = Core.World.GreenStarbaseDocking.launch_position()
+    assert :ok = PilotLocation.save_pose(account.id, entry.map_id, voyage,
+      %{condition | docked: false, position: launch})
+    after_launch = PilotLocation.restore_entry(account.id, ship.id, entry, 45)
+    refute Map.has_key?(after_launch, :docked)
+    assert after_launch.position == launch
+  end
+
   test "persisted navigation is keyed by pilot and retains transit checkpoints" do
     one = player_account_fixture()
     two = player_account_fixture()

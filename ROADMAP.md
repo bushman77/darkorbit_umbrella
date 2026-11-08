@@ -887,6 +887,25 @@ Source: [Symbrella `symbolic_generation`](https://github.com/bushman77/Symbrella
   restart in addition to the existing Venus reconnect regression.
 - [ ] Persist shared merchant routes and base inventory separately.
 
+### Green Starbase Stage 4–7 — physical entry and launch (2026-11-08)
+
+- [x] Allow docking only for a live authenticated pilot at the SOL Green
+  Starbase waypoint, physically inside the central bay, stationary,
+  with no active autopilot, throttle or laser engagement.
+- [x] Park the exact existing ship inside MapServer's protected docked set,
+  outside flight physics, targeting, collision and NPC combat. No ship cloning
+  or combat repair occurs as a result of docking.
+- [x] Preserve verified docked status in the pilot's existing PostgreSQL
+  ship-pose checkpoint; a clean reconnect restores the parked state.
+- [x] Simple docked interior panel and explicit server-issued launch command.
+  Spawn the same ship outside the front entrance at a safe heading.
+- [x] Reject forged or distant docking requests; no client-supplied position
+  or station identity is used. No additional SQL migration is required.
+- [ ] Stage 6 services: real repair prices, resupply, equipment, market, jobs.
+  Current interior labels are disabled placeholders, not working services.
+- [ ] Flight-test with the Tauri desktop client and paired SBS viewer.
+  Verify approach, stop, dock, close client, reconnect, launch and inspect hull.
+
 ### Green Starbase Stage 3 — authoritative collision and proximity (2026-11-08)
 
 - [x] Define the twin green pyramids, industrial struts, hangar frame, floor,
