@@ -247,6 +247,51 @@ defmodule Darkorbit.World do
     end
   end
 
+  @doc """
+  Authenticated recovery after verified ship destruction. Retain the owned
+  ship/loadout, settle a held tactical encounter, restore SOL to Earth, and
+  release the old world session before the client rejoins.
+  """
+  def respawn(session_id) do
+    server = Module.concat(SessionManager, SolarNavigation)
+
+    with {:ok, session} <- SessionManager.fetch(SessionManager, session_id),
+         {:ok, report} <- Simulation.ship_condition(session_id),
+         :ok <- require_destroyed_for_respawn(report),
+         {:ok, stats} <- ShipStats.calculate(session.player_id,
+           session.ship_instance_id, active_configuration(session.player_id)),
+         :ok <- settle_respawn_encounter(session_id),
+         :ok <- ShipCondition.save_verified(session.player_id,
+           session.ship_instance_id, report.combat),
+         {:ok, _navigation} <- SolarNavigation.respawn_at_earth(server, session.player_id),
+         :ok <- Simulation.disconnect(session_id),
+         {:ok, _restored} <- ShipCondition.repair_for_respawn(
+           session.player_id, session.ship_instance_id, stats),
+         {:ok, region} <- region_for_player(session.player_id) do
+      {:ok, region}
+    else
+      :error -> {:error, :session_not_found}
+      {:error, _} = error -> error
+    end
+  end
+
+  defp require_destroyed_for_respawn(%{combat: %{status: :destroyed, hull: 0}}),
+    do: :ok
+  defp require_destroyed_for_respawn(_report), do: {:error, :ship_not_destroyed}
+
+  defp settle_respawn_encounter(session_id) do
+    case Simulation.solar_snapshot(session_id) do
+      {:ok, %{tactical_encounter: %{id: id}}} ->
+        case solar_finish_tactical(session_id, id, :defeat) do
+          {:ok, _} -> :ok
+          {:error, _} = error -> error
+        end
+
+      {:ok, _} -> :ok
+      {:error, _} = error -> error
+    end
+  end
+
   defdelegate move(session_id, destination), to: Simulation
   defdelegate plot_course(session_id, waypoints), to: Simulation
   defdelegate stop_navigation(session_id), to: Simulation

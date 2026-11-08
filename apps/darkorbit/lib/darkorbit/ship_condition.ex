@@ -72,6 +72,37 @@ defmodule Darkorbit.ShipCondition do
     end
   end
 
+  @doc """
+  Repair a server-verified destroyed physical hull during an explicit
+  respawn. The authenticated World layer verifies map-owned death first.
+  The row lock prevents duplicate resurrection or an unrelated repair.
+  """
+  @spec repair_for_respawn(pos_integer(), pos_integer(), map()) ::
+          {:ok, Condition.t()} | {:error, term()}
+  def repair_for_respawn(player_id, ship_instance_id, stats) do
+    Repo.transaction(fn ->
+      ensure_owned!(player_id, ship_instance_id)
+
+      case condition_row(ship_instance_id) do
+        nil ->
+          Repo.rollback(:ship_condition_missing)
+
+        existing ->
+          if existing.status != :destroyed do
+            Repo.rollback(:ship_not_destroyed)
+          else
+            {:ok, restored} = require_condition!(Condition.initial(stats))
+
+            existing
+            |> Ecto.Changeset.change(Map.put(restored, :revision, existing.revision + 1))
+            |> persist!()
+
+            restored
+          end
+      end
+    end)
+  end
+
   defp ensure_owned!(player_id, ship_instance_id) do
     query =
       from(ship in PlayerShip,

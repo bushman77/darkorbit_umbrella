@@ -51,6 +51,19 @@ defmodule DarkorbitWeb.WorldChannel do
     end
   end
 
+  # Death is map-verified from the authenticated session. Client-supplied
+  # coordinates, ship IDs, and map names have no authority over respawn.
+  def handle_in("respawn", _payload, socket) do
+    case World.respawn(socket.assigns.world_session_id) do
+      {:ok, region} ->
+        {:reply, {:ok, %{map_id: region.map_id, location_id: "earth"}},
+         assign(socket, :world_session_id, nil)}
+
+      {:error, reason} ->
+        {:reply, {:error, %{reason: error_reason(reason)}}, socket}
+    end
+  end
+
   def handle_in("move", _payload, socket) do
     {:reply, {:error, %{reason: "invalid_destination"}}, socket}
   end

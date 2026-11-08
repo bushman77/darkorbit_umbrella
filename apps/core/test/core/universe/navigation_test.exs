@@ -278,6 +278,22 @@ defmodule Core.Universe.NavigationTest do
     assert moving.progress > 0.0
   end
 
+  test "recovery returns to Earth and invalidates the destroyed ship pose", %{server: server} do
+    assert {:ok, traveling} = Navigation.set_course(server, 11, "mars")
+    assert {:ok, _manual} = Navigation.enter_free_flight(server, 11)
+    assert {:ok, restored} = Navigation.respawn_at_earth(server, 11)
+    assert restored.location_id == "earth"
+    assert restored.status == :idle
+    assert restored.voyage_number == traveling.voyage_number + 1
+    assert restored.destination_id == nil
+    refute restored.free_flight
+    assert restored.pending_encounter == nil
+    assert restored.tactical_encounter == nil
+    assert {:ok, %{location_id: "earth", voyage_number: count}} =
+      Navigation.snapshot(server, 11)
+    assert count == restored.voyage_number
+  end
+
   test "a new pilot starts at Earth with no travel or combat encounter", %{server: server} do
     assert {:ok, state} = Navigation.snapshot(server, 11)
     assert state.system_id == "sol"

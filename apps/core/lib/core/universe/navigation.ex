@@ -151,6 +151,17 @@ defmodule Core.Universe.Navigation do
   def resume_after_login(server, player_id) when is_integer(player_id) and player_id > 0,
     do: GenServer.call(server, {:login_resume, player_id})
 
+  @doc """
+  Return a defeated pilot to Earth's safe orbital entry. Only server code
+  calls this after MapServer has verified a destroyed ship. Bump the voyage
+  number so a pre-death physical cockpit pose cannot be restored.
+  """
+  @spec respawn_at_earth(GenServer.server(), pos_integer()) ::
+          {:ok, map()} | {:error, term()}
+  def respawn_at_earth(server, player_id) when is_integer(player_id) and player_id > 0 do
+    GenServer.call(server, {:respawn_at_earth, player_id})
+  end
+
   @doc "Deterministic server test hook; never exposed to client channels."
   @spec tick(GenServer.server()) :: :ok
   def tick(server), do: GenServer.call(server, :tick)
@@ -215,6 +226,27 @@ defmodule Core.Universe.Navigation do
     case persist_connection_change(state, player_id, updated) do
       {:ok, state} -> {:reply, :ok, state}
       {:error, error} -> {:reply, {:error, error}, state}
+    end
+  end
+
+  def handle_call({:respawn_at_earth, player_id}, _from, state) do
+    {voyage, state} = ensure_player(state, player_id)
+
+    if voyage.tactical_encounter do
+      {:reply, {:error, :tactical_cleanup_pending}, state}
+    else
+      replacement = %{idle("earth") | voyage_number: voyage.voyage_number + 1}
+
+      # Unlike periodic checkpoints, relocation must be durable before
+      acknowledging the client; never restore a pre-death coordinate.
+      case persist_connection_change(state, player_id, replacement) do
+        {:ok, updated} ->
+          broadcast(updated, player_id, replacement)
+          {:reply, {:ok, public(replacement, updated, player_id)}, updated}
+
+        {:error, reason} ->
+          {:reply, {:error, reason}, state}
+      end
     end
   end
 

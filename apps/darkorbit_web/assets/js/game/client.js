@@ -102,6 +102,7 @@ class SpaceClient {
     this.lastLaserFeedback = null
     this.lastFrame = performance.now()
     this.docked = false
+    this.respawnPending = false
     this.lastFlightInputState = null
   }
 
@@ -372,6 +373,8 @@ class SpaceClient {
     // Atlas can safely own focus even before the world socket joins.
     // Closing it hands focus back to the existing 3D / SBS cockpit.
     this.navComputer.open()
+    this.root.querySelector("#pilot-respawn-button")?.addEventListener(
+      "click", () => this.requestRespawn())
     this.root.querySelector("#starbase-dock")?.addEventListener("click",
       () => this.requestStarbaseDock())
     this.root.querySelector("#starbase-launch")?.addEventListener("click",
@@ -593,6 +596,10 @@ class SpaceClient {
     this.setDocked(Boolean(response.map.docked_pilots?.some(id =>
       entityKey(id) === this.selfId)))
     this.syncOwnCombatState()
+    this.respawnPending = false
+    this.showRespawnPanel(
+      this.entities.get(this.selfId)?.status === "destroyed",
+      "Your ship has been destroyed. Respawn in Earth orbit.")
 
     this.flightControls.resetThrottle()
     this.flightControls.mode = "cruise"
@@ -1416,6 +1423,63 @@ class SpaceClient {
       nextLevel === "approach" ? "block" : "none"
   }
 
+  showRespawnPanel(visible, message = "") {
+    const panel = this.root.querySelector("#pilot-respawn-panel")
+    if (!panel) return
+    panel.hidden = !visible
+    const detail = this.root.querySelector("#pilot-respawn-message")
+    if (detail && visible) detail.textContent = message ||
+      "Your ship has been destroyed. Respawn in Earth orbit."
+    const button = this.root.querySelector("#pilot-respawn-button")
+    if (button) button.disabled = this.respawnPending
+  }
+
+  requestRespawn() {
+    if (this.respawnPending || this.channel?.state !== "joined" ||
+        this.entities.get(this.selfId)?.status !== "destroyed") return
+
+    this.respawnPending = true
+    this.showRespawnPanel(true, "Requesting an Earth-orbit recovery…")
+    const old = this.channel
+
+    const failed = reason => {
+      if (this.channel !== old) return
+      this.respawnPending = false
+      this.showRespawnPanel(true, "Respawn unavailable: " + reason)
+    }
+
+    old.push("respawn", {}, 10_000)
+      .receive("ok", ({map_id: mapId}) => {
+        if (this.channel !== old) return
+        if (!validOrbitalMapId(mapId)) return failed("Invalid server region")
+
+        this.setConnection("Returning to Earth orbit", "online")
+        this.exitMouseSteering({silent: true})
+        this.flightControls?.release({silent: true})
+        this.spaceLaser?.release()
+        this.navigation?.cancel()
+        this.showRespawnPanel(false)
+        this.selectedTargetId = null
+        this.commandDestination = null
+        this.entities.clear()
+        this.worldStream = null
+        this.worldResyncInFlight = false
+        this.beams = []
+        this.setSolarEncounter(null)
+        this.applyPlanetaryWarning(null, {announce: false})
+        this.applyStationWarning(null, {announce: false})
+        this.stereoView?.planetaryBody?.dispose()
+        this.switchingRegion = true
+
+        const rejoin = () => {
+          if (this.channel === old) this.joinSector(mapId)
+        }
+        old.leave().receive("ok", rejoin).receive("timeout", rejoin)
+      })
+      .receive("error", response => failed(response.reason || "server rejected recovery"))
+      .receive("timeout", () => failed("sector link timed out"))
+  }
+
   entityDestroyed(destruction) {
     const id = entityKey(destruction.entity.id)
     const isNpc = destruction.entity.kind === "npc"
@@ -1428,14 +1492,12 @@ class SpaceClient {
       (isNpc ? "Hostile destroyed. Respawn telemetry queued." : "Ship destroyed.")
     this.setCombatMessage(label)
     if (id === this.selfId) {
-      // Server-confirmed destruction: the tactical SOL hold is canceled on
-      // defeat. A fresh session recreates a ship at the departure region.
+      // Only the authoritative world server may resurrect a hull.
       this.exitMouseSteering({silent: true})
       this.applyPlanetaryWarning(null, {announce: false})
       this.applyStationWarning(null, {announce: false})
-      this.showError(impact || (destruction.reason === "station_collision"
-        ? "Ship destroyed by refinery collision. Reconnect to respawn."
-        : "Ship destroyed. Reconnect to respawn at your departure region."))
+      this.showRespawnPanel(true, impact ||
+        "Ship destroyed. Use Respawn at Earth to restore flight.")
     }
     this.updateCombatHud()
   }

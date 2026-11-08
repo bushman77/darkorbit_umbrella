@@ -28,6 +28,49 @@ defmodule DarkorbitWeb.WorldChannelTest do
     :ok
   end
 
+  test "death verification controls Earth respawn, not a client-selected destination" do
+    account = verified_player_account_fixture()
+    {:ok, socket} = authenticated_socket(account)
+    {:ok, _snapshot, channel} =
+      subscribe_and_join(socket, WorldChannel, "world:1-1")
+
+    alive_ref = push(channel, "respawn", %{})
+    assert_reply alive_ref, :error, %{reason: "ship_not_destroyed"}
+
+    # Test-only state injection represents a real map-owned lethal event.
+    # The production endpoint has no command that can write this state.
+    assert [{pid, _}] = Registry.lookup(Core.World.Registry, {:world_map, "1-1"})
+    :sys.replace_state(pid, fn state ->
+      ship = Map.fetch!(state.entities, account.id)
+      dead = %{ship | hull: 0, shields: 0, status: :destroyed}
+      %{state | entities: Map.put(state.entities, account.id, dead)}
+    end)
+
+    ref = push(channel, "respawn", %{
+      "player_id" => account.id + 1,
+      "map_id" => "sol:pluto",
+      "ship_id" => -1,
+      "position" => %{"x" => 999_999, "y" => 999_999}
+    })
+    assert_reply ref, :ok, %{map_id: "1-1", location_id: "earth"}
+    assert :error = SessionManager.fetch_player(SessionManager, account.id)
+
+    {:ok, ship} = Darkorbit.Fleet.get_active_ship(account.id)
+    {:ok, stats} = Darkorbit.ShipStats.calculate(account.id, ship.id, 1)
+    assert {:ok, restored} =
+      Darkorbit.ShipCondition.load_or_initialize(account.id, ship.id, stats)
+    assert restored.hull == stats.hit_points
+    assert restored.shields == stats.shields
+    assert restored.status == :alive
+    assert {:ok, %{map_id: "1-1"}} = World.region_for_player(account.id)
+
+    leave_and_wait(channel)
+    {:ok, again} = authenticated_socket(account)
+    {:ok, response, fresh} = subscribe_and_join(again, WorldChannel, "world:1-1")
+    assert Enum.find(response.map.entities, &(&1.id == account.id)).status == :alive
+    leave_and_wait(fresh)
+  end
+
   test "socket authentication rejects missing, tampered, and stale credentials" do
     account = verified_player_account_fixture()
     token = GameAuth.socket_token(account)

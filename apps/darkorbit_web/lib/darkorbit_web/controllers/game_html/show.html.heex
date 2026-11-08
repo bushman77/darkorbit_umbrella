@@ -759,6 +759,24 @@
     </div>
   </nav>
 
+  <%!-- Authenticated recovery: the server checks real death and chooses Earth,
+       not coordinates or a ship ID supplied by this interface. --%>
+  <section id="pilot-respawn-panel" hidden role="dialog" aria-modal="true"
+           aria-labelledby="pilot-respawn-title"
+           class="absolute inset-0 z-[110] flex items-center justify-center bg-[#020611]/90 px-6">
+    <div class="w-full max-w-md rounded-2xl border border-rose-400/40 bg-slate-950 p-7 text-center font-mono shadow-2xl">
+      <p class="text-xs tracking-[0.25em] text-rose-300">SPACE NOVA / RECOVERY</p>
+      <h2 id="pilot-respawn-title" class="mt-3 text-2xl font-bold text-white">SHIP DESTROYED</h2>
+      <p id="pilot-respawn-message" role="status" class="mt-4 text-sm text-slate-300">
+        Your ship has been destroyed. Respawn in Earth orbit.
+      </p>
+      <button id="pilot-respawn-button" type="button"
+              class="mt-6 w-full rounded-lg border border-cyan-300 bg-cyan-900 px-5 py-3 font-bold text-cyan-100 disabled:opacity-50">
+        RESPAWN AT EARTH
+      </button>
+    </div>
+  </section>
+
   <%!-- A prominent but non-interactive 3D-only confirmation near the crosshair.
        Stereo uses the in-world holographic HUD instead of a flat overlay. --%>
   <div id="laser-hit-confirmation" aria-live="polite"
