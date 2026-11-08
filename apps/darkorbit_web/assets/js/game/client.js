@@ -21,6 +21,7 @@ import {HelmetControl} from "./helmet_control.mjs"
 import {HelmetAlignmentKeyGate} from "./helmet_alignment_keys.mjs"
 import {NavigationComputer} from "./navigation_computer.mjs"
 import {FlightControls} from "./flight_controls.mjs"
+import {flightInputState, FLIGHT_INPUT_LABELS} from "./flight_input_state.mjs"
 import {WorldStreamDelta} from "./world_stream_delta.mjs"
 import {gameSocketEndpoint} from "./socket_endpoint.mjs"
 import {
@@ -101,6 +102,18 @@ class SpaceClient {
     this.lastLaserFeedback = null
     this.lastFrame = performance.now()
     this.docked = false
+    this.lastFlightInputState = null
+  }
+
+  flightInputState() {
+    return flightInputState({
+      atlasOpen: Boolean(this.navComputer?.isOpen),
+      docked: this.docked,
+      encounterHeld: Boolean(this.solarEncounter),
+      cruiseLocked: Boolean(this.inSystemCruise()),
+      sectorJoined: this.channel?.state === "joined",
+      ship: this.entities.get(this.selfId) || null,
+    })
   }
 
   inSystemCruise() {
@@ -127,12 +140,20 @@ class SpaceClient {
       getDestination: () => this.commandDestination,
     }).start()
     this.flightControls = new FlightControls({
-      active: () => !this.docked && !this.navComputer?.isOpen && !this.inSystemCruise() &&
-        this.channel?.state === "joined" &&
-        this.entities.get(this.selfId)?.status !== "destroyed",
+      active: () => this.flightInputState() === "ready",
       send: input => this.sendFlightControls(input),
     })
     this.setupMouseSteering()
+    const takeHelm = this.root.querySelector("#cockpit-take-helm")
+    takeHelm?.addEventListener("click", () => {
+      if (this.flightInputState() !== "cruise" || takeHelm.disabled) return
+      takeHelm.disabled = true
+      this.solarEnterFreeFlight((ok, navigation, reason) => {
+        takeHelm.disabled = false
+        if (ok && navigation) this.applySolarNavigation(navigation)
+        else this.showError("Manual helm unavailable: " + (reason || "unknown error"))
+      })
+    })
     window.addEventListener("keydown", event => this.flightControls.keyDown(event))
     window.addEventListener("keyup", event => {
       this.flightControls.keyUp(event)
@@ -332,9 +353,7 @@ class SpaceClient {
       if (!this.navComputer?.isOpen) event.preventDefault()
     })
     this.spaceLaser = new SpaceLaserTrigger({
-      active: () => !this.docked && !this.navComputer?.isOpen && !this.inSystemCruise() &&
-        this.channel?.state === "joined" &&
-        this.entities.get(this.selfId)?.status !== "destroyed",
+      active: () => this.flightInputState() === "ready",
       worldTick: () => this.worldTick,
       nextAttackTick: () => Number(this.entities.get(this.selfId)?.nextAttackTick) || 0,
       fire: done => this.fireReadyWeapon(done),
@@ -1055,9 +1074,7 @@ class SpaceClient {
   }
 
   handleLaserPointerDown(event) {
-    const active = !this.navComputer?.isOpen && !this.inSystemCruise() &&
-      this.channel?.state === "joined" &&
-      this.entities.get(this.selfId)?.status !== "destroyed"
+    const active = this.flightInputState() === "ready"
     if (!manualLaserPointerIntent(event, active)) return
 
     event.preventDefault()
@@ -1450,12 +1467,14 @@ class SpaceClient {
     this.lastFrame = time
     // Expire mouse commands before advancing the visible cockpit. The
     // independent idle timer can stop them between rendered frames as well.
-    if (this.mouseSteeringEnabled && document.pointerLockElement === this.canvas) {
+    if (this.mouseSteeringEnabled &&
+        (document.pointerLockElement === this.canvas || this.mouseFallback)) {
       const expired = this.mouseSteering.expire(time)
       if (expired) this.flightControls?.setMouseSteering(expired)
     }
     this.interpolate(deltaSeconds)
     this.flightControls?.heartbeat(time)
+    this.updateFlightInputStatus()
     this.spaceLaser?.update(time)
     this.draw(time)
     this.minimap?.draw(time)
@@ -1468,7 +1487,7 @@ class SpaceClient {
   interpolate(deltaSeconds) {
     const positionBlend = 1 - Math.exp(-deltaSeconds / 0.085)
     const pointerLocked = this.mouseSteeringEnabled &&
-      document.pointerLockElement === this.canvas
+      (document.pointerLockElement === this.canvas || this.mouseFallback)
 
     for (const entity of this.entities.values()) {
       // The local pointer-lock camera should not trail far behind the last
@@ -1668,6 +1687,21 @@ class SpaceClient {
     this.stereoView?.resize(rect.width, rect.height, dpr)
   }
 
+  updateFlightInputStatus() {
+    const state = this.flightInputState()
+    if (state === this.lastFlightInputState) return
+    this.lastFlightInputState = state
+    this.root.dataset.flightInputState = state
+    const panel = this.root.querySelector("#cockpit-flight-input-status")
+    if (!panel) return
+    panel.hidden = state === "ready" || state === "atlas"
+    if (panel.hidden) return
+    const label = this.root.querySelector("#cockpit-flight-input-reason")
+    if (label) label.textContent = FLIGHT_INPUT_LABELS[state] || "FLIGHT INPUT PAUSED"
+    const takeHelm = this.root.querySelector("#cockpit-take-helm")
+    if (takeHelm) takeHelm.hidden = state !== "cruise"
+  }
+
   scheduleMouseStop() {
     window.clearTimeout(this.mouseIdleTimer)
     // Mouse movement cannot emit its own "stopped" event. An independent
@@ -1675,7 +1709,7 @@ class SpaceClient {
     this.mouseIdleTimer = window.setTimeout(() => {
       this.mouseIdleTimer = null
       if (!this.mouseSteeringEnabled ||
-          document.pointerLockElement !== this.canvas ||
+          (document.pointerLockElement !== this.canvas && !this.mouseFallback) ||
           !this.flightControls?.active()) return
       const expired = this.mouseSteering.expire(performance.now())
       if (expired) this.flightControls.setMouseSteering(expired)

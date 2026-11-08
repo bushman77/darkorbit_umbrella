@@ -812,6 +812,18 @@
     </div>
   </div>
 
+  <%!-- Flight and rendering are independent. Explain when the authoritative
+       pilot helm is unavailable; offer an explicit server-approved takeover
+       instead of silently changing a cruise when the cockpit opens. --%>
+  <div id="cockpit-flight-input-status" hidden role="status" aria-live="polite"
+       class="absolute bottom-52 left-1/2 z-[55] w-max max-w-[min(90vw,30rem)] -translate-x-1/2 rounded-xl border border-amber-400/40 bg-slate-950/95 px-4 py-2 text-center font-mono text-xs text-amber-100 shadow-lg">
+    <p id="cockpit-flight-input-reason">FLIGHT INPUT WAITING</p>
+    <button id="cockpit-take-helm" type="button" hidden
+            class="mt-2 rounded-md border border-amber-300/70 px-3 py-1.5 font-bold text-amber-100 hover:bg-amber-900/50">
+      DISENGAGE CRUISE · TAKE MANUAL HELM
+    </button>
+  </div>
+
   <p id="cockpit-mouse-steering-status" hidden aria-live="polite"
      class="pointer-events-none absolute bottom-44 left-1/2 z-30 -translate-x-1/2 rounded-lg border border-cyan-400/30 bg-slate-950/85 px-3 py-2 text-center font-mono text-xs text-cyan-200">
     MOUSE STEERING ENABLED · CLICK COCKPIT TO CAPTURE
