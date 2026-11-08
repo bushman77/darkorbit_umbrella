@@ -8,6 +8,7 @@ defmodule Core.Universe.FreeFlightRegion do
   """
 
   alias Core.World.{MapDefinition, MapServer, NoopEventSink, Position, SessionManager}
+  alias Core.Universe.GreenStarbase
 
   @size 24_000
 
@@ -45,10 +46,14 @@ defmodule Core.Universe.FreeFlightRegion do
     end
   end
 
-  def entry(player_id, %{status: :idle, location_id: nil, position_km: position})
+  def entry(player_id, %{status: :idle, location_id: nil, position_km: position} = voyage)
       when is_integer(player_id) and player_id > 0 and is_map(position) do
+    # The station is physically south (+Y in game coordinates) of the normal
+    # private-map spawn. Face it on initial arrival, but preserve any
+    # previously saved pilot attitude through the existing restore layer.
+    yaw = if GreenStarbase.nearby?(voyage), do: :math.pi(), else: 0.0
     {:ok, %{map_id: map_id(player_id), position: definition(player_id).spawn,
-      attitude: %{yaw: 0.0, pitch: 0.0, roll: 0.0}}}
+      attitude: %{yaw: yaw, pitch: 0.0, roll: 0.0}}}
   end
 
   def entry(_player_id, _navigation), do: {:error, :free_flight_unavailable}

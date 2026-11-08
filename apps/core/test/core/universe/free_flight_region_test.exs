@@ -1,6 +1,6 @@
 defmodule Core.Universe.FreeFlightRegionTest do
   use ExUnit.Case, async: true
-  alias Core.Universe.{FreeFlightRegion, Sol}
+  alias Core.Universe.{FreeFlightRegion, GreenStarbase, Sol}
 
   test "private regions are deterministic and have no physical planet" do
     a = FreeFlightRegion.definition(10)
@@ -29,6 +29,11 @@ defmodule Core.Universe.FreeFlightRegionTest do
       FreeFlightRegion.entry(19, %{status: :idle, location_id: nil,
         position_km: earth})
     assert idle_space.map_id == entry.map_id
+    assert idle_space.attitude.yaw == 0.0
+    assert {:ok, station_arrival} =
+      FreeFlightRegion.entry(19, %{status: :idle, location_id: nil,
+        position_km: GreenStarbase.position_km()})
+    assert station_arrival.attitude.yaw == :math.pi()
     assert {:error, :free_flight_unavailable} =
       FreeFlightRegion.entry(19, %{status: :idle, location_id: "earth"})
   end
