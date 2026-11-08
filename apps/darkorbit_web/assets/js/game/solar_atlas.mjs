@@ -103,6 +103,35 @@ function renderWaypoint(svg,waypoint,focus){
     "font-family":"monospace","font-size":12},"FREE WAYPOINT")
 }
 
+// Server-owned independent starbases are navigational sites, not planets.
+// Use their authoritative game-kilometre coordinate for the Atlas location.
+export function renderStarbases(svg,starbases,focus,selectedStarbaseId=null) {
+  for(const base of starbases || []) {
+    if(base?.id!=="sol:starbase:green" || !base.position_km)continue
+    const point=solarPositionToChart(base.position_km,focus)
+    if(!point || !Number.isFinite(point.x) || !Number.isFinite(point.y))continue
+    const {x,y}=point
+    const selected=selectedStarbaseId===base.id
+    const group=add(svg,"g",{"data-starbase-id":base.id,role:"button",
+      tabindex:0,"aria-label":base.name+"; independent starbase",
+      "aria-pressed":selected?"true":"false",style:"cursor:pointer"})
+    if(selected)add(group,"circle",{cx:x,cy:y,r:21,fill:"none",
+      stroke:"#baff8a","stroke-width":1.4,"stroke-dasharray":"4 4"})
+    const points=arr=>arr.map(([dx,dy])=>[x+dx,y+dy].join(",")).join(" ")
+    add(group,"polygon",{points:points([[-9,-5],[0,-18],[9,-5]]),
+      fill:"#43ec5c",stroke:"#baffca","stroke-width":0.9})
+    add(group,"polygon",{points:points([[-9,5],[0,18],[9,5]]),
+      fill:"#208f39",stroke:"#aaffb1","stroke-width":0.9})
+    add(group,"rect",{x:x-10,y:y-5,width:20,height:10,rx:1,
+      fill:"#06462a",stroke:"#7dff9d","stroke-width":1.4})
+    add(group,"rect",{x:x-4,y:y-3,width:8,height:6,
+      fill:"#041d12",stroke:"#a4ffa7","stroke-width":0.9})
+    add(group,"text",{x:x+16,y:y-17,fill:selected?"#dcffb8":"#99edaf",
+      "font-family":"monospace","font-size":13,"paint-order":"stroke",
+      stroke:"#04101f","stroke-width":4},base.name.toUpperCase())
+  }
+}
+
 function renderBody(svg,body,selectedId){
   const selected=body.id===selectedId
   const group=add(svg,"g",{
@@ -142,7 +171,8 @@ function renderBody(svg,body,selectedId){
   return group
 }
 
-export function drawSolarAtlas(svg,{focus="system",selectedId="earth",navigation=null,waypoint=null}={}){
+export function drawSolarAtlas(svg,{focus="system",selectedId="earth",navigation=null,
+  waypoint=null,selectedStarbaseId=null}={}){
   if(!svg)return
   const layer=svg.querySelector("#nav-solar-content")
   if(!layer)return
@@ -150,7 +180,8 @@ export function drawSolarAtlas(svg,{focus="system",selectedId="earth",navigation
   const layout=solarLayout(focus)
   renderOrbits(layer,layout,focus)
   renderVoyage(layer,layout,navigation,focus)
-  if(waypoint)renderWaypoint(layer,waypoint,focus)
+  if(waypoint && !selectedStarbaseId)renderWaypoint(layer,waypoint,focus)
+  renderStarbases(layer,navigation?.starbases,focus,selectedStarbaseId)
   // Orbit draw order first, then active bodies/labels above orbit lines.
   for(const body of layout)renderBody(layer,body,selectedId)
 }

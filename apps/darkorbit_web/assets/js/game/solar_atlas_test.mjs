@@ -91,3 +91,22 @@ test("server-owned transit draws travel vector and interpolated pilot marker",()
     assert.ok(Math.abs(Number(marker.attrs.cy)-(earth.y+mars.y)/2)<.0001)
   })
 })
+
+// A starbase is not an extra planet; the Atlas draws it as a separate
+// navigable object using the server-supplied coordinate.
+test("independent Green Starbase renders as a selected twin-pyramid Atlas marker",()=>{
+  withDocument(()=>{
+    const layer=fakeNode("g")
+    const svg={querySelector:q=>q==="#nav-solar-content"?layer:null}
+    const site={id:"sol:starbase:green",name:"Green Starbase",
+      kind:"starbase",position_km:{x:-9_957_476,y:-849_608,z:0}}
+    drawSolarAtlas(svg,{selectedId:"earth",selectedStarbaseId:site.id,
+      navigation:{system_id:"sol",status:"idle",starbases:[site]}})
+    const marker=layer.children.find(node=>node.attrs["data-starbase-id"]===site.id)
+    assert.ok(marker)
+    assert.equal(marker.attrs["aria-pressed"],"true")
+    assert.equal(marker.children.filter(n=>n.type==="polygon").length,2)
+    assert.equal(marker.children.filter(n=>n.type==="rect").length,2)
+    assert.equal(layer.children.filter(n=>n.attrs["data-body-id"]).length,10)
+  })
+})

@@ -62,6 +62,7 @@ export class NavigationComputer {
     this.solarFocus = "system"
     this.solarSelection = "earth"
     this.solarWaypoint = null
+    this.solarStarbaseSelected = null
     this.solarNavigation = null
     this.solarPending = false
     this.solarStatusMessage = "Connecting to the system navigation computer…"
@@ -81,16 +82,20 @@ export class NavigationComputer {
     this.solarSvg?.addEventListener("contextmenu", event => {
       event.preventDefault()
       const clicked=event.target?.closest?.("[data-body-id]")?.getAttribute("data-body-id")
+      const baseId=event.target?.closest?.("[data-starbase-id]")?.getAttribute("data-starbase-id")
+      const point=this.solarNavigation?.starbases?.find(s=>s.id===baseId)?.position_km
       this.openSolarContextMenu(clicked,event.clientX,event.clientY,
-        clicked ? null : this.solarPointForEvent(event))
+        clicked ? null : point || this.solarPointForEvent(event))
     })
     this.solarSvg?.addEventListener("keydown",event => {
       if(event.key!=="ContextMenu" && !(event.key==="F10"&&event.shiftKey))return
       event.preventDefault()
       const rect=this.solarSvg.getBoundingClientRect()
       const clicked=event.target?.closest?.("[data-body-id]")?.getAttribute("data-body-id")
+      const baseId=event.target?.closest?.("[data-starbase-id]")?.getAttribute("data-starbase-id")
+      const basePoint=this.solarNavigation?.starbases?.find(s=>s.id===baseId)?.position_km
       this.openSolarContextMenu(clicked,rect.left+rect.width/2,rect.top+rect.height/2,
-        clicked ? null : this.solarPointForEvent({
+        clicked ? null : basePoint || this.solarPointForEvent({
           clientX:rect.left+rect.width/2,clientY:rect.top+rect.height/2}))
     })
     this.solarMenu?.addEventListener("click",event => {
@@ -99,6 +104,9 @@ export class NavigationComputer {
       if(!action || !target)return
       this.closeSolarContextMenu()
       if(typeof target==="string")this.selectSolarBody(target)
+      else if(this.solarNavigation?.starbases?.some(s=>
+        s.id==="sol:starbase:green" && s.position_km?.x===target.x &&
+        s.position_km?.y===target.y))this.selectSolarStarbase("sol:starbase:green")
       else this.selectSolarWaypoint(target)
       if(action==="analyze"){
         const detail=this.root.querySelector("#nav-solar-analysis")
@@ -136,7 +144,9 @@ export class NavigationComputer {
     this.root.querySelector("#nav-solar-chart")?.addEventListener("click", event => {
       this.closeSolarContextMenu()
       const id = event.target?.closest?.("[data-body-id]")?.getAttribute("data-body-id")
+      const baseId=event.target?.closest?.("[data-starbase-id]")?.getAttribute("data-starbase-id")
       if(id)this.selectSolarBody(id)
+      else if(baseId)this.selectSolarStarbase(baseId)
       else{
         const point=this.solarPointForEvent(event)
         if(point)this.selectSolarWaypoint(point)
@@ -145,9 +155,11 @@ export class NavigationComputer {
     this.solarSvg?.addEventListener("keydown", event => {
       if(!["Enter"," "].includes(event.key))return
       const id=event.target?.closest?.("[data-body-id]")?.getAttribute("data-body-id")
-      if(!id)return
+      const baseId=event.target?.closest?.("[data-starbase-id]")?.getAttribute("data-starbase-id")
+      if(!id&&!baseId)return
       event.preventDefault()
-      this.selectSolarBody(id)
+      if(baseId)this.selectSolarStarbase(baseId)
+      else this.selectSolarBody(id)
     })
     this.root.querySelector("#nav-system-bodies")?.addEventListener("click",event=>{
       const id=event.target?.closest?.("[data-body-id]")?.dataset.bodyId
@@ -306,6 +318,7 @@ export class NavigationComputer {
     if(!findSolarBody(id))return
     this.solarSelection=id
     this.solarWaypoint=null
+    this.solarStarbaseSelected=null
     const targetPanel=this.root.querySelector("#nav-target-panel")
     if(targetPanel)targetPanel.hidden=false
     if(this.solarFocus==="inner"&&findSolarBody(id).au>1.524){
@@ -314,10 +327,19 @@ export class NavigationComputer {
     if(this.isOpen&&this.view==="system")this.draw(0,true)
   }
 
+  selectSolarStarbase(id) {
+    const starbase=this.solarNavigation?.starbases?.find(s=>s.id===id)
+    if(!starbase?.position_km)return
+    this.selectSolarWaypoint(starbase.position_km)
+    this.solarStarbaseSelected=id
+    if(this.isOpen&&this.view==="system")this.renderSolarView()
+  }
+
   selectSolarWaypoint(point) {
     if(!canNavigateSolar(point,{system_id:"sol",status:"idle"},
         true,false))return
     this.solarWaypoint=point
+    this.solarStarbaseSelected=null
     const targetPanel=this.root.querySelector("#nav-target-panel")
     if(targetPanel)targetPanel.hidden=false
     if(this.isOpen&&this.view==="system")this.draw(0,true)
@@ -499,6 +521,7 @@ export class NavigationComputer {
       const target=this.solarWaypoint || this.solarSelection
       button.disabled=!canNavigateSolar(target,nav,connected,this.solarPending)
       button.textContent=traveling?"Transit in progress":
+        this.solarStarbaseSelected?"Set course to Green Starbase":
         this.solarWaypoint?"Set course to free waypoint":
         `Set course to ${name(this.solarSelection)}`
     }
@@ -518,12 +541,14 @@ export class NavigationComputer {
     drawSolarAtlas(this.solarSvg,{
       focus:this.solarFocus,selectedId:this.solarSelection,
       navigation:this.solarNavigation,waypoint:this.solarWaypoint,
+      selectedStarbaseId:this.solarStarbaseSelected,
     })
     renderSolarDetails(this.root,this.solarSelection)
     if(this.solarWaypoint){
       const set=(id,text)=>{const node=this.root.querySelector(id);if(node)node.textContent=text}
-      set("#nav-solar-name","Free waypoint")
-      set("#nav-solar-type","SOL game-kilometre position")
+      set("#nav-solar-name",this.solarStarbaseSelected?"GREEN STARBASE":"Free waypoint")
+      set("#nav-solar-type",this.solarStarbaseSelected?
+        "Independent starbase · approach-only" : "SOL game-kilometre position")
       set("#nav-solar-distance",`X ${number(this.solarWaypoint.x)} · Y ${number(this.solarWaypoint.y)}`)
       set("#nav-solar-period",`Z ${number(this.solarWaypoint.z)} game km`)
     }
