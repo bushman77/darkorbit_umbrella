@@ -13,6 +13,7 @@ export class GreenStarbaseInterior {
     this.lights = []
     this.doorOpen = 0
     this.lastUpdatedAt = null
+    this.attendantsLoaded = false
     this.build()
   }
 
@@ -95,6 +96,8 @@ export class GreenStarbaseInterior {
       add(new T.PlaneGeometry(width, width * 160 / 768),
         surface, x, y, z)
     }
+
+    this.addSign = sign
 
     // The original open arrival hangar is retained. The former opaque rear
     // wall is now split around a real, traversable services airlock.
@@ -258,9 +261,48 @@ export class GreenStarbaseInterior {
     this.lights.push(overhead)
   }
 
-  // This animation never grants room access or updates the player position.
-  // A restored pilot inside the airlock sees the same door open in both eyes.
-  update(pose, time) {
+  // All characters are lightweight local models. MapServer controls their
+  // identity and location; the HMD has no dialogue or service authority.
+  buildAttendants(attendants) {
+    if (this.attendantsLoaded || !Array.isArray(attendants) ||
+        attendants.length === 0) return
+    this.attendantsLoaded = true
+    const T = this.THREE
+    for (const npc of attendants) {
+      if (!npc || !Number.isFinite(npc.x) || !Number.isFinite(npc.z) ||
+          !Number.isInteger(npc.color) || typeof npc.name !== "string" ||
+          typeof npc.role !== "string" || typeof npc.id !== "string") continue
+      const uniform = new T.MeshStandardMaterial({
+        color: npc.color, roughness: 0.74, metalness: 0.16,
+      })
+      const visor = new T.MeshBasicMaterial({color: 0xb6ffe2})
+      const shadow = new T.MeshStandardMaterial({color: 0x15352f})
+      this.materials.push(uniform, visor, shadow)
+      const part = (size, surface, dx, y, dz, label) => {
+        const geometry = new T.BoxGeometry(...size)
+        const mesh = new T.Mesh(geometry, surface)
+        mesh.position.set(npc.x + dx, y, npc.z + dz)
+        mesh.name = "attendant:" + npc.id + ":" + label
+        this.geometries.push(geometry)
+        this.node.add(mesh)
+      }
+      // Local floor top is -4.75. Attendants stand behind service counters.
+      part([0.9, 2.8, 0.9], shadow, -0.7, -3.30, 0, "left-leg")
+      part([0.9, 2.8, 0.9], shadow, 0.7, -3.30, 0, "right-leg")
+      part([2.6, 4.2, 1.6], uniform, 0, 0.2, 0, "torso")
+      part([0.7, 3.3, 0.9], uniform, -1.65, -0.1, 0, "left-arm")
+      part([0.7, 3.3, 0.9], uniform, 1.65, -0.1, 0, "right-arm")
+      part([1.9, 1.9, 1.8], shadow, 0, 3.4, 0, "head")
+      part([1.7, 0.45, 0.12], visor, 0, 3.6, 0.97, "visor")
+      part([1.7, 0.28, 0.14], visor, 0, 0.7, 0.85, "badge")
+      this.addSign?.(npc.name, npc.x, 10.1, npc.z + 1.2, 15)
+      this.addSign?.(npc.role.toUpperCase(), npc.x, 7.6, npc.z + 1.2, 14)
+    }
+  }
+
+  // Door movement and NPCs remain presentation-only, never authoritative.
+  update(pose, time, attendants = []) {
+    this.buildAttendants(attendants)
     const near = pose && Number.isFinite(pose.x) &&
       Number.isFinite(pose.z) && Math.abs(pose.x) <= 14 &&
       pose.z < -69 && pose.z > -111

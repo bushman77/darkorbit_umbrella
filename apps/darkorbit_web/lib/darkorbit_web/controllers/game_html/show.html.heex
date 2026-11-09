@@ -50,10 +50,35 @@
         <p class="font-bold tracking-wider text-emerald-300">STATION DIRECTORY</p>
         <p class="mt-2">Concourse: Repairs · Trade Exchange · Outfitting · Resupply</p>
         <p class="mt-2">Far end: Mission Office · Communications</p>
-        <p class="mt-2 text-slate-500">Rooms are walkable; transactions and personnel arrive in a later stage.</p>
+        <p class="mt-2 text-slate-500">Station attendants are present at each kiosk. Press E nearby to talk; purchases and repairs remain offline.</p>
       </div>
       <p id="starbase-launch-feedback" role="status" aria-live="polite" class="mt-6 text-xs text-emerald-300">Ready for departure.</p>
       <button id="starbase-launch" type="button" class="nav-button nav-primary mt-3 w-full">Launch from Green Starbase</button>
+    </div>
+  </section>
+
+  <%!-- Desktop-only role-specific station attendant dialogue. MapServer
+       validates the current docked pilot's room and distance on each turn. --%>
+  <div id="station-npc-prompt" style="display: none"
+       class="pointer-events-none absolute bottom-36 left-1/2 z-[105] -translate-x-1/2 rounded-lg border border-emerald-300/60 bg-slate-950/90 px-4 py-2 text-center font-mono text-xs text-emerald-100 shadow-xl">
+    Press <kbd class="font-bold text-white">E</kbd> to speak with
+    <span id="station-npc-prompt-name" class="text-emerald-300"></span>
+  </div>
+  <section id="station-npc-dialogue" style="display: none" role="dialog"
+           aria-modal="true" aria-labelledby="station-npc-name"
+           class="pointer-events-none absolute inset-0 z-[135] items-center justify-center p-4">
+    <div class="pointer-events-auto w-full max-w-lg rounded-2xl border border-emerald-400/60 bg-slate-950/95 p-6 font-mono text-emerald-100 shadow-2xl backdrop-blur-xl">
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <div id="station-npc-role" class="text-xs font-bold uppercase tracking-widest text-emerald-400">STATION ATTENDANT</div>
+          <h2 id="station-npc-name" class="mt-2 text-xl font-bold text-white">Contact</h2>
+        </div>
+        <button id="station-npc-close" type="button"
+                class="nav-button rounded border border-emerald-700/70 px-3 py-2 text-xs">Close [Esc]</button>
+      </div>
+      <p id="station-npc-message" class="mt-5 min-h-20 text-sm leading-relaxed text-slate-200" aria-live="polite"></p>
+      <div id="station-npc-options" class="mt-4 grid gap-2"></div>
+      <p class="mt-4 text-xs text-slate-500">Dialogue is server-authorized. No credits, cargo, or ship systems are modified here.</p>
     </div>
   </section>
 

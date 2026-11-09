@@ -938,6 +938,23 @@ Source: [Symbrella `symbolic_generation`](https://github.com/bushman77/Symbrella
 - [ ] After live confirmation, proceed to Green Starbase Stage 6 services,
   beginning with repair pricing and credit-backed settlement.
 
+### Green Starbase station attendants and dialogue V1 (2026-11-08)
+
+- [x] Publish a server-owned fixed roster of six named kiosk contacts with
+  room ID, job title and coordinates as compact world snapshot metadata.
+- [x] Render low-poly attendant figures and in-world name/job labels in the
+  shared desktop / paired SBS scene, without extra asset downloads.
+- [x] Add a desktop-only E-to-talk prompt and keyboard-accessible response
+  panel with distinct scripted topics for each role.
+- [x] Validate docked session, matching room, physical range and permitted
+  dialogue topic in MapServer on every dialogue request.
+- [x] Repair contact reports live map-owned hull/shield values. No dialogue
+  directly mutates money, cargo, equipment, missions or ship condition.
+- [ ] Run Elixir, Phoenix and Node tests on the laptop and playtest all six
+  kiosks, range/collision limits and HMD rendering.
+- [ ] Wire real kiosk transactions, NPC schedules and larger dialogue trees
+  in separate server-authorized milestones.
+
 ### Green Starbase rear airlock and station directory (2026-11-08)
 
 - [x] Replace the formerly solid decorative hangar back wall with a real

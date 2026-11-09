@@ -41,6 +41,7 @@ import {
 import {ownStationWarning, stationWarningView} from "./station_warning.mjs"
 import {dockingHoldFromEvent, syncDockingHold, dockingSeconds} from "./starbase_docking_countdown.mjs"
 import {StationWalkingControls} from "./station_walking_controls.mjs"
+import {nearestStationAttendant} from "./station_attendants.mjs"
 import {validOrbitalMapId, shouldEnterOrbitalRegion} from "./orbital_regions.mjs"
 import {tacticalEncounterAction} from "./solar_encounter_actions.mjs"
 
@@ -105,6 +106,11 @@ class SpaceClient {
     this.lastFrame = performance.now()
     this.docked = false
     this.stationPosition = null
+    this.stationAttendants = []
+    this.stationNpcDialogOpen = false
+    this.stationNpcId = null
+    this.stationNpcBusy = false
+    this.stationNpcRequestSeq = 0
     this.stationDockingHold = null
     this.stationDockingSeconds = null
     this.lastDockingCountdownLabel = null
@@ -149,7 +155,7 @@ class SpaceClient {
     // Registered before flight handlers so docked WASD never controls the ship.
     this.stationWalking = new StationWalkingControls({
       active: () => this.docked && !this.navComputer?.isOpen &&
-        this.channel?.state === "joined",
+        !this.stationNpcDialogOpen && this.channel?.state === "joined",
       canvas: this.canvas,
       sendWalk: input => this.channel?.push("station_walk", input),
       sendLook: input => this.channel?.push("station_look", input),
@@ -320,6 +326,7 @@ class SpaceClient {
       solarResumeCruise: done => this.solarResumeCruise(done),
       solarHail: (contactId, done) => this.solarHail(contactId, done),
       onOpen: () => {
+        this.closeStationNpc({focus: false})
         this.stationWalking?.release()
         this.exitMouseSteering({silent: true})
         this.helmet?.setCombat(false)
@@ -394,6 +401,15 @@ class SpaceClient {
       () => this.requestStarbaseDock())
     this.root.querySelector("#starbase-launch")?.addEventListener("click",
       () => this.launchFromStarbase())
+    this.root.querySelector("#station-npc-close")?.addEventListener("click",
+      () => this.closeStationNpc())
+    this.root.querySelector("#station-npc-dialogue")?.addEventListener("click", event => {
+      const topic = event.target?.closest?.("[data-station-topic]")?.dataset.stationTopic
+      if (topic && this.stationNpcDialogOpen && this.stationNpcId) {
+        this.askStationNpc(this.stationNpcId, topic)
+      }
+    })
+    window.addEventListener("keydown", event => this.handleStationNpcKey(event), true)
     this.connect()
     requestAnimationFrame(time => this.frame(time))
   }
@@ -1412,6 +1428,7 @@ class SpaceClient {
   }
 
   setDocked(docked) {
+    if (!docked) this.closeStationNpc({focus: false})
     const wasDocked = this.docked
     if (wasDocked && !docked) this.stationWalking?.release()
     this.docked = Boolean(docked)
@@ -1437,6 +1454,9 @@ class SpaceClient {
   }
 
   applyStationPosition(map) {
+    if (Array.isArray(map.station_attendants)) {
+      this.stationAttendants = map.station_attendants
+    }
     const pose = map.station_avatars?.find(
       avatar => entityKey(avatar.player_id) === this.selfId)
     this.stationPosition = this.docked && pose || null
@@ -1452,6 +1472,129 @@ class SpaceClient {
       display.textContent = "Current area: " +
         (names[this.stationPosition?.room_id] || "Main Hangar")
     }
+    if (this.stationNpcDialogOpen &&
+        this.nearbyStationNpc()?.id !== this.stationNpcId) {
+      this.closeStationNpc({focus: false})
+    }
+    this.updateStationNpcPrompt()
+  }
+
+  nearbyStationNpc() {
+    return this.docked ?
+      nearestStationAttendant(this.stationPosition, this.stationAttendants) : null
+  }
+
+  updateStationNpcPrompt() {
+    const prompt = this.root.querySelector("#station-npc-prompt")
+    if (!prompt) return
+    const npc = !this.stationNpcDialogOpen && !this.navComputer?.isOpen &&
+      this.channel?.state === "joined" && this.nearbyStationNpc()
+    prompt.style.display = npc ? "block" : "none"
+    if (npc) {
+      const label = this.root.querySelector("#station-npc-prompt-name")
+      if (label) label.textContent = npc.name + " · " + npc.role
+    }
+  }
+
+  handleStationNpcKey(event) {
+    if (this.stationNpcDialogOpen) {
+      if (event.code === "Escape") {
+        event.preventDefault()
+        event.stopImmediatePropagation()
+        this.closeStationNpc()
+      } else if (["KeyW", "KeyA", "KeyS", "KeyD",
+                  "ArrowLeft", "ArrowRight", "KeyM", "KeyE"].includes(event.code)) {
+        event.preventDefault()
+        event.stopImmediatePropagation()
+      }
+      return
+    }
+    if (event.code !== "KeyE" || event.repeat || !this.docked ||
+        this.navComputer?.isOpen || this.channel?.state !== "joined" ||
+        event.target?.closest?.("input,textarea,select,button,[contenteditable='true']")) return
+    const npc = this.nearbyStationNpc()
+    if (!npc) return
+    event.preventDefault()
+    event.stopImmediatePropagation()
+    this.askStationNpc(npc.id, "greeting")
+  }
+
+  askStationNpc(id, topic) {
+    if (!this.docked || this.stationNpcBusy || this.channel?.state !== "joined" ||
+        this.nearbyStationNpc()?.id !== id) return
+    const fresh = !this.stationNpcDialogOpen
+    if (fresh) {
+      this.stationNpcDialogOpen = true
+      this.stationNpcId = id
+      this.stationWalking?.release()
+      if (document.pointerLockElement === this.canvas) document.exitPointerLock?.()
+      const modal = this.root.querySelector("#station-npc-dialogue")
+      if (modal) modal.style.display = "flex"
+      const message = this.root.querySelector("#station-npc-message")
+      if (message) message.textContent = "Opening station communications…"
+      this.root.querySelector("#station-npc-options")?.replaceChildren()
+      this.root.querySelector("#station-npc-close")?.focus({preventScroll: true})
+      this.updateStationNpcPrompt()
+    }
+    this.stationNpcBusy = true
+    const seq = ++this.stationNpcRequestSeq
+    this.channel.push("station_talk", {attendant_id: id, topic}, 5000)
+      .receive("ok", response => {
+        if (!this.stationNpcDialogOpen || seq !== this.stationNpcRequestSeq) return
+        this.stationNpcBusy = false
+        if (this.nearbyStationNpc()?.id !== id) {
+          this.closeStationNpc({focus: false})
+          return
+        }
+        this.showStationNpcResponse(response)
+      })
+      .receive("error", reply => {
+        if (!this.stationNpcDialogOpen || seq !== this.stationNpcRequestSeq) return
+        this.stationNpcBusy = false
+        const node = this.root.querySelector("#station-npc-message")
+        if (node) node.textContent = "Contact unavailable: " +
+          String(reply?.reason || "unknown error").replaceAll("_", " ")
+      })
+      .receive("timeout", () => {
+        if (!this.stationNpcDialogOpen || seq !== this.stationNpcRequestSeq) return
+        this.stationNpcBusy = false
+        const node = this.root.querySelector("#station-npc-message")
+        if (node) node.textContent = "Station communications timed out."
+      })
+  }
+
+  showStationNpcResponse(response) {
+    const name = this.root.querySelector("#station-npc-name")
+    const role = this.root.querySelector("#station-npc-role")
+    const message = this.root.querySelector("#station-npc-message")
+    const choices = this.root.querySelector("#station-npc-options")
+    if (name) name.textContent = String(response.name || "Station Attendant")
+    if (role) role.textContent = String(response.role || "Service Desk")
+    if (message) message.textContent = String(response.message || "")
+    if (!choices) return
+    choices.replaceChildren()
+    for (const option of response.topics || []) {
+      if (typeof option.id !== "string" || typeof option.label !== "string") continue
+      const button = document.createElement("button")
+      button.type = "button"
+      button.className = "nav-button rounded-lg border border-emerald-600/60 px-3 py-2 text-left text-sm"
+      button.dataset.stationTopic = option.id
+      button.textContent = option.label
+      choices.appendChild(button)
+    }
+  }
+
+  closeStationNpc({focus = true} = {}) {
+    if (!this.stationNpcDialogOpen) return
+    this.stationNpcDialogOpen = false
+    this.stationNpcBusy = false
+    this.stationNpcId = null
+    this.stationNpcRequestSeq++
+    const modal = this.root.querySelector("#station-npc-dialogue")
+    if (modal) modal.style.display = "none"
+    this.stationWalking?.release()
+    this.updateStationNpcPrompt()
+    if (focus) this.canvas?.focus({preventScroll: true})
   }
 
   clearDockingCountdown() {

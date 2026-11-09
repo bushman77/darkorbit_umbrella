@@ -666,7 +666,7 @@ export class StereoSpaceView {
     this.updateDockingCountdown(docked ? null : client.stationDockingSeconds)
     this.interiorActive = docked
     if (docked) {
-      this.hangar.update(client.stationPosition, time)
+      this.hangar.update(client.stationPosition, time, client.stationAttendants)
       // Station camera is an anchored viewpoint inside the actual hangar.
       // The headset still adds its own local, recentered head quaternion.
       if (this.camera.parent !== this.hangarScene) this.hangarScene.add(this.camera)

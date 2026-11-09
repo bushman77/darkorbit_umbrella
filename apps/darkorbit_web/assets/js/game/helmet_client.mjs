@@ -56,6 +56,7 @@ export class HelmetClient {
     this.mapId = null
     this.docked = false
     this.stationPosition = null
+    this.stationAttendants = []
     this.stationDockingHold = null
     this.stationDockingSeconds = null
     this.screenWake = new HelmetScreenWake()
@@ -537,6 +538,7 @@ export class HelmetClient {
     this.mapId = null
     this.docked = false
     this.stationPosition = null
+    this.stationAttendants = []
     this.stationDockingHold = null
     this.stationDockingSeconds = null
     this.beams = []
@@ -567,6 +569,8 @@ export class HelmetClient {
     this.stationPosition = this.docked ?
       map.station_avatars?.find(avatar => key(avatar.player_id) === this.selfId) || null
       : null
+    this.stationAttendants = Array.isArray(map.station_attendants) ?
+      map.station_attendants : []
     this.stationDockingHold = this.docked ? null :
       syncDockingHold(this.stationDockingHold, map, this.selfId, performance.now())
     if (wasDocked !== this.docked) {

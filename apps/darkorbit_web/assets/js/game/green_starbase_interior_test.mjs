@@ -143,3 +143,28 @@ test("Mission Office and Communications door-edge lights clear the front wall fa
     [-21.1, -10.9, 10.9, 21.1])
   interior.dispose()
 })
+
+test("all six replicated kiosk staff render as distinct local figures", () => {
+  const scene = {children: [], add(x) {this.children.push(x)},
+    remove(x) {this.children = this.children.filter(n => n !== x)}}
+  const room = new GreenStarbaseInterior(THREE, scene)
+  const attendants = [
+    ["repair", -49, -143], ["trade", 49, -143],
+    ["outfitting", -49, -181], ["resupply", 49, -181],
+    ["missions", -16, -211], ["comms", 16, -211],
+  ].map(([id, x, z]) => ({
+    id, x, z, name: "Contact " + id, role: "Station Service",
+    color: 0x68b98a,
+  }))
+  room.update({x: 0, z: 43}, 100, attendants)
+  for (const npc of attendants) {
+    const parts = room.node.children.filter(x =>
+      x.name?.startsWith("attendant:" + npc.id + ":"))
+    assert.equal(parts.length, 8)
+    assert.ok(parts.some(x => x.at[0] === npc.x && x.at[2] === npc.z))
+  }
+  const count = room.node.children.length
+  room.update({x: 0, z: 43}, 200, attendants)
+  assert.equal(room.node.children.length, count, "not reconstructed per frame")
+  room.dispose()
+})

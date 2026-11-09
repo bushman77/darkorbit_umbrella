@@ -50,6 +50,12 @@ test("the five-second docking countdown is rendered in both SBS eyes", () => {
   assert.doesNotMatch(helmet, /channel\.push\("station_dock"/)
 })
 
+test("the SBS viewer receives the immutable kiosk roster without station authority", () => {
+  assert.match(helmet, /this\.stationAttendants = Array\.isArray\(map\.station_attendants\)/)
+  assert.match(view, /this\.hangar\.update\(client\.stationPosition, time, client\.stationAttendants\)/)
+  assert.doesNotMatch(helmet, /channel\.push\("station_talk"/)
+})
+
 test("desktop and SBS render the same server-owned walking pose", () => {
   assert.match(view, /const position = client\.stationPosition/)
   // The viewport now interpolates the server-owned walking pose instead of
