@@ -140,6 +140,48 @@ defmodule Core.World.GreenStarbaseDockingIntegrationTest do
     assert :ok = World.disconnect(session.id, ctx.opts)
   end
 
+  test "dialogue requires the correct docked room and physical kiosk proximity", ctx do
+    at_starbase!()
+    session = connect!(ctx, at(0, 0, -10))
+    assert {:error, :not_docked} =
+      World.station_talk(session.id, "trade", "greeting", ctx.opts)
+    assert {:ok, %{docked: true}} = World.dock(session.id, ctx.opts)
+    assert {:error, :station_attendant_out_of_range} =
+      World.station_talk(session.id, "trade", "greeting", ctx.opts)
+    assert {:error, :unknown_station_attendant} =
+      World.station_talk(session.id, "fake", "greeting", ctx.opts)
+
+    # Walk the authenticated avatar through the physical airlock, down the
+    # concourse and through the Trade Exchange doorway near z=-129.
+    assert {:ok, _} = World.station_walk(session.id,
+      %{"forward" => 1, "strafe" => 0, "turn" => 0}, ctx.opts)
+    for _ <- 1..123, do: assert {:ok, _} = World.tick(ctx.opts[:map_id], ctx.opts)
+    assert {:ok, _} = World.station_walk(session.id,
+      %{"forward" => 0, "strafe" => 1, "turn" => 0}, ctx.opts)
+    for _ <- 1..35, do: assert {:ok, _} = World.tick(ctx.opts[:map_id], ctx.opts)
+    assert {:ok, _} = World.station_walk(session.id,
+      %{"forward" => 1, "strafe" => 0, "turn" => 0}, ctx.opts)
+    for _ <- 1..4, do: assert {:ok, _} = World.tick(ctx.opts[:map_id], ctx.opts)
+    assert {:ok, %{station_position: %{room_id: "trade_exchange"}}} =
+      World.ship_condition(session.id, ctx.opts)
+
+    assert {:ok, %{name: "Tarek Sol", role: "Trade Broker", topics: topics}} =
+      World.station_talk(session.id, "trade", "greeting", ctx.opts)
+    assert Enum.any?(topics, &(&1.id == "prices"))
+    assert {:ok, %{message: message}} =
+      World.station_talk(session.id, "trade", "prices", ctx.opts)
+    assert message =~ "not connected"
+    assert {:error, :invalid_station_topic} =
+      World.station_talk(session.id, "trade", "pay_99999_credits", ctx.opts)
+    assert {:error, :station_attendant_out_of_range} =
+      World.station_talk(session.id, "repair", "condition", ctx.opts)
+
+    assert {:ok, _} = World.launch(session.id, ctx.opts)
+    assert {:error, :not_docked} =
+      World.station_talk(session.id, "trade", "greeting", ctx.opts)
+    assert :ok = World.disconnect(session.id, ctx.opts)
+  end
+
   test "server rejects requests outside the bay and away from the SOL waypoint", ctx do
     session = connect!(ctx, at(0, 0, -45))
     assert {:error, :not_at_starbase} = World.dock(session.id, ctx.opts)

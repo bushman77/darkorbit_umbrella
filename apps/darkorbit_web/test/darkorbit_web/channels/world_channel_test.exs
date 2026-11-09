@@ -141,6 +141,26 @@ defmodule DarkorbitWeb.WorldChannelTest do
     leave_and_wait(fresh)
   end
 
+  test "station dialogue channel cannot be used from open space or forged input" do
+    account = verified_player_account_fixture()
+    {:ok, socket} = authenticated_socket(account)
+    {:ok, _reply, joined} =
+      subscribe_and_join(socket, WorldChannel, "world:1-1")
+
+    ref = push(joined, "station_talk", %{
+      "attendant_id" => "trade", "topic" => "greeting",
+      "room_id" => "trade_exchange", "x" => 49, "z" => -143
+    })
+    assert_reply ref, :error, %{reason: "not_docked"}
+
+    invalid = push(joined, "station_talk", %{
+      "attendant_id" => ["trade"], "topic" => "greeting"
+    })
+    assert_reply invalid, :error, %{reason: "invalid_station_dialogue"}
+
+    leave_and_wait(joined)
+  end
+
   test "station walking is refused before a pilot has physically docked" do
     account = verified_player_account_fixture()
     {:ok, socket} = authenticated_socket(account)

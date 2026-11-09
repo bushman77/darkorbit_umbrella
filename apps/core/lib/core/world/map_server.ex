@@ -21,6 +21,7 @@ defmodule Core.World.MapServer do
   alias Core.World.GreenStarbaseSafety
   alias Core.World.GreenStarbaseDocking
   alias Core.World.StationInterior
+  alias Core.World.StationAttendants
   alias Core.Universe.{FreeFlightRegion, GreenStarbase}
   alias Core.World.EventSink
   alias Core.World.MapDefinition
@@ -79,6 +80,10 @@ defmodule Core.World.MapServer do
 
   def station_look(registry, map_id, session_id, entity_id, input),
     do: call_map(registry, map_id, {:station_look, session_id, entity_id, input})
+
+  def station_talk(registry, map_id, session_id, entity_id, attendant_id, topic),
+    do: call_map(registry, map_id,
+      {:station_talk, session_id, entity_id, attendant_id, topic})
 
   @doc "Server-only restore from the previously validated durable dock record."
   def restore_station_position(registry, map_id, session_id, entity_id, pose),
@@ -413,6 +418,18 @@ defmodule Core.World.MapServer do
     else
       error -> {:reply, error, state}
     end
+  end
+
+  # Never trust client room/coordinates for an NPC conversation. MapServer
+  # reads the current position of the authenticated docked pilot instead.
+  def handle_call({:station_talk, session_id, entity_id, attendant_id, topic},
+                  _from, state) do
+    result =
+      with {:ok, ship} <- parked_station_ship(state, session_id, entity_id) do
+        pose = Map.get(state.station_avatars, entity_id, StationInterior.initial())
+        StationAttendants.talk(pose, ship, attendant_id, topic)
+      end
+    {:reply, result, state}
   end
 
   def handle_call({:restore_station_position, session_id, entity_id, pose},
@@ -2288,6 +2305,8 @@ defmodule Core.World.MapServer do
       station_avatars: state.station_avatars
         |> Enum.map(fn {id, pose} -> Map.put(pose, :player_id, id) end)
         |> Enum.sort_by(& &1.player_id),
+      station_attendants: if(String.starts_with?(state.definition.id, "sol:free_"),
+        do: StationAttendants.public(), else: []),
       # A late-joining desktop/HMD can display the remaining hold without
       # restarting the five-second timer. No private ship state is included.
       docking_holds: state.docking_holds

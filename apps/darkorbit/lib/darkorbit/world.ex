@@ -170,6 +170,11 @@ defmodule Darkorbit.World do
   def station_look(session_id, input) when is_map(input),
     do: Simulation.station_look(session_id, input)
 
+  @doc "Talk to a nearby station attendant; no client-supplied location."
+  def station_talk(session_id, attendant_id, topic)
+      when is_binary(attendant_id) and is_binary(topic),
+      do: Simulation.station_talk(session_id, attendant_id, topic)
+
   @doc "Settle any live combat and persist map-owned damage before disconnecting."
   def disconnect(session_id) do
     with :ok <- settle_on_disconnect(session_id),

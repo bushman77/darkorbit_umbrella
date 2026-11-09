@@ -77,6 +77,14 @@ defmodule Core.World do
     end
   end
 
+  def station_talk(session_id, attendant_id, topic, opts \\ []) do
+    with {:ok, session} <- fetch_session(
+           Keyword.get(opts, :sessions, SessionManager), session_id) do
+      MapServer.station_talk(Keyword.get(opts, :registry, Core.World.Registry),
+        session.map_id, session.id, session.entity_id, attendant_id, topic)
+    end
+  end
+
   def restore_station_position(session_id, pose, opts \\ []) do
     with {:ok, session} <- fetch_session(
            Keyword.get(opts, :sessions, SessionManager), session_id) do

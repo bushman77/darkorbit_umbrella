@@ -227,6 +227,18 @@ defmodule DarkorbitWeb.WorldChannel do
   def handle_in("station_look", _input, socket),
     do: {:reply, {:error, %{reason: "invalid_station_look"}}, socket}
 
+  def handle_in("station_talk",
+                %{"attendant_id" => id, "topic" => topic}, socket)
+      when is_binary(id) and is_binary(topic) do
+    case World.station_talk(socket.assigns.world_session_id, id, topic) do
+      {:ok, response} -> {:reply, {:ok, response}, socket}
+      {:error, reason} -> {:reply, {:error, %{reason: error_reason(reason)}}, socket}
+    end
+  end
+
+  def handle_in("station_talk", _payload, socket),
+    do: {:reply, {:error, %{reason: "invalid_station_dialogue"}}, socket}
+
   def handle_in("station_launch", _payload, socket) do
     case World.launch(socket.assigns.world_session_id) do
       {:ok, status} -> {:reply, {:ok, status}, socket}
