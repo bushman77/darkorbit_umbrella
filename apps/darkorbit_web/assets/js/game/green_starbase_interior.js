@@ -28,6 +28,7 @@ export class GreenStarbaseInterior {
     this.doorOpen = 0
     this.lastUpdatedAt = null
     this.attendantsLoaded = false
+    this.signTexts = []
     this.build()
   }
 
@@ -84,6 +85,7 @@ export class GreenStarbaseInterior {
     // Optional local in-world signage: generated on each device, never
     // streamed as textures. Node tests can construct the bare geometry.
     const sign = (text, x, y, z, width = 15) => {
+      this.signTexts.push(text)
       if (typeof document === "undefined" || !T.CanvasTexture ||
           !T.PlaneGeometry) return
       const canvas = document.createElement("canvas")
@@ -110,8 +112,6 @@ export class GreenStarbaseInterior {
       add(new T.PlaneGeometry(width, width * 160 / 768),
         surface, x, y, z)
     }
-
-    this.addSign = sign
 
     // The original open arrival hangar is retained. The former opaque rear
     // wall is now split around a real, traversable services airlock.
@@ -220,12 +220,12 @@ export class GreenStarbaseInterior {
     // Both service wings have two rooms. Open portals lie at z=-129 and -170.
     // The walls not occupied by a doorway remain solid.
     const wings = [
-      {side: -1, z: -130, title: "REPAIRS", surface: maintenance},
-      {side: 1, z: -130, title: "TRADE EXCHANGE", surface: commerce},
-      {side: -1, z: -168, title: "OUTFITTING", surface: equipment},
-      {side: 1, z: -168, title: "RESUPPLY", surface: maintenance},
+      {side: -1, z: -130, surface: maintenance},
+      {side: 1, z: -130, surface: commerce},
+      {side: -1, z: -168, surface: equipment},
+      {side: 1, z: -168, surface: maintenance},
     ]
-    for (const {side, z, title, surface} of wings) {
+    for (const {side, z, surface} of wings) {
       // Meet the concourse slab at x=+/-35 without a 1-unit overlap.
       const x = side * 49
       const front = z + 17
@@ -238,8 +238,7 @@ export class GreenStarbaseInterior {
       // Concourse owns the inner wall around both doors. Another pair
       // here at x=+/-34 would be exactly coplanar and flicker.
       box([11, 0.24, 7], light, [side * 36.5, -4.55, gateZ])
-      // The label is readable from the corridor and remains stereoscopic.
-      sign(title, side * 30.5, 20, gateZ, 12.5)
+      // Keep service entrances clear; the directory identifies each room.
       box([16, 2.2, 5], supports, [x, -3.4, z - 9])
       box([11, 3.4, 0.35], glass, [x, 0.2, z - 6.3])
       for (const lamp of [-9, 9]) {
@@ -349,8 +348,8 @@ export class GreenStarbaseInterior {
       detail([0.36, 0.3, 0.18], visor, -0.57, 1.32, 0.95, "insignia")
       detail([0.24, 0.12, 0.30], shadow, -1.39, -1.32, 0.30, "left-cuff")
       detail([0.24, 0.12, 0.30], shadow, 1.39, -1.32, 0.30, "right-cuff")
-      this.addSign?.(npc.name, npc.x, 10.1, npc.z + 1.2, 15)
-      this.addSign?.(npc.role.toUpperCase(), npc.x, 7.6, npc.z + 1.2, 14)
+      // The nearby E-to-talk prompt displays the server-owned name and role;
+      // floating nameplates used to obscure the counter and NPCs.
     }
   }
 
@@ -379,7 +378,7 @@ export class GreenStarbaseInterior {
       }
       this.node.add(model)
       this.importedCharacters.push(model)
-      // Keep the two existing name/role signs and the game interactions.
+      // Keep the server-authorized E-to-talk interaction unchanged.
       for (const mesh of this.node.children) {
         if (mesh.name?.startsWith("attendant:repair:") ||
             mesh.name?.startsWith("uniform:repair:")) mesh.visible = false
