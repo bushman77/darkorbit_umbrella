@@ -36,7 +36,7 @@ test("Blender metre-scale GLB is centered, feet-grounded, and faces the repair c
   disposeStationCharacter(model)
 })
 
-test("Green Starbase swaps Mara's visual but keeps labels and the other attendants", async () => {
+test("Green Starbase swaps Mara's visual and keeps all attendant interactions", async () => {
   const scene = new THREE.Scene()
   let requested = null
   let resolveModel
