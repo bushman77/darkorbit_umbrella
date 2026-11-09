@@ -115,6 +115,22 @@ defmodule Core.World.GreenStarbaseDockingIntegrationTest do
     assert :ok = World.disconnect(session.id, ctx.opts)
   end
 
+  test "room transition is server-owned and saved alongside the parked ship", ctx do
+    at_starbase!()
+    session = connect!(ctx, at(0, 0, -10))
+    assert {:ok, %{docked: true}} = World.dock(session.id, ctx.opts)
+    assert {:ok, _} = World.station_walk(session.id,
+      %{"forward" => 1, "strafe" => 0, "turn" => 0}, ctx.opts)
+    for _ <- 1..105, do: assert {:ok, _} = World.tick(ctx.opts[:map_id], ctx.opts)
+    assert {:ok, %{station_position: %{room_id: room, z: z}}} =
+      World.ship_condition(session.id, ctx.opts)
+    assert room == "concourse"
+    assert z < -106
+    assert {:ok, snap} = World.snapshot(ctx.opts[:map_id], ctx.opts)
+    assert [%{room_id: "concourse", player_id: @pilot}] = snap.station_avatars
+    assert :ok = World.disconnect(session.id, ctx.opts)
+  end
+
   test "server rejects requests outside the bay and away from the SOL waypoint", ctx do
     session = connect!(ctx, at(0, 0, -45))
     assert {:error, :not_at_starbase} = World.dock(session.id, ctx.opts)

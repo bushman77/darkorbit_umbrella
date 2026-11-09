@@ -162,7 +162,7 @@ defmodule Darkorbit.PilotLocationTest do
     {:ok, entry} = Core.Universe.FreeFlightRegion.entry(account.id, voyage)
     site = Core.Universe.GreenStarbase.local_site()
     pose = %Position{x: site.x, y: site.y - 80.0, z: site.z}
-    station_position = %{room_id: "main_hangar", x: 12.5, z: -35.0, yaw: 1.2}
+    station_position = %{room_id: "mission_office", x: -16.0, z: -201.0, yaw: 1.2}
     condition = %{ship_instance_id: ship.id, position: pose,
       attitude: %{yaw: 0.0, pitch: 0.0, roll: 0.0}, docked: true,
       station_position: station_position}

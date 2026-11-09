@@ -938,6 +938,25 @@ Source: [Symbrella `symbolic_generation`](https://github.com/bushman77/Symbrella
 - [ ] After live confirmation, proceed to Green Starbase Stage 6 services,
   beginning with repair pricing and credit-backed settlement.
 
+### Green Starbase rear airlock and station directory (2026-11-08)
+
+- [x] Replace the formerly solid decorative hangar back wall with a real
+  locally animated sliding door that opens as the pilot approaches.
+- [x] Extend the MapServer-owned walking topology through a narrow airlock
+  into a central concourse and six distinct walkable service rooms.
+- [x] Build matching geometric walls, door apertures, raised signage, lit
+  floors and counters for repair, trading, outfitting, resupply, missions
+  and communications without downloading new assets.
+- [x] Validate physically connected room transitions with bounded sweep
+  collision, and persist room ID, walking position and heading using the
+  existing authenticated location checkpoint and read-only SBS replication.
+- [x] Show a compact station directory and live current-room label on the
+  desktop; no fake purchase/repair/mission actions are enabled.
+- [ ] On Pop!_OS: run tests, check passage through the small door, all six
+  rooms, logout/reconnect from a service room, and verify phone SBS visuals.
+- [ ] Add real NPC conversations and service transactions later, each with
+  server-side permission and PostgreSQL consistency.
+
 ### Green Starbase authoritative station walking V1 (2026-11-08)
 
 - [x] Add per-pilot server-owned station walking pose and bounded WASD,

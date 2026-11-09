@@ -43,13 +43,14 @@
     <div class="pointer-events-auto w-full max-w-sm rounded-2xl border border-emerald-500/55 bg-slate-950/90 p-5 font-mono shadow-2xl backdrop-blur-xl">
       <div class="mb-4 text-xs font-semibold tracking-[0.25em] text-emerald-400">SPACE NOVA / STATION INTERIOR</div>
       <h2 id="starbase-docked-title" class="text-2xl font-bold tracking-wide text-emerald-200">GREEN STARBASE</h2>
-      <p class="mt-2 text-sm text-slate-300">Docking clamps engaged. Explore the hangar while your ship remains secured.</p>
+      <p class="mt-2 text-sm text-slate-300">Your ship is secure. Walk to the small illuminated door at the back of the hangar to enter the station.</p>
       <p class="mt-2 text-xs text-emerald-300">W/S walk · A/D strafe · arrows turn · click hangar for mouse-look · Esc releases mouse</p>
-      <div class="mt-4 grid grid-cols-2 gap-2">
-        <div class="rounded-lg border border-emerald-700/40 p-4 text-center text-sm text-slate-400">Ship repairs <span class="block text-xs">Coming soon</span></div>
-        <div class="rounded-lg border border-emerald-700/40 p-4 text-center text-sm text-slate-400">Equipment &amp; resupply <span class="block text-xs">Coming soon</span></div>
-        <div class="rounded-lg border border-emerald-700/40 p-4 text-center text-sm text-slate-400">Station trading <span class="block text-xs">Coming soon</span></div>
-        <div class="rounded-lg border border-emerald-700/40 p-4 text-center text-sm text-slate-400">Missions <span class="block text-xs">Coming soon</span></div>
+      <p id="starbase-current-room" class="mt-3 rounded border border-emerald-700/50 px-3 py-2 text-xs text-emerald-200" role="status">Current area: Main Hangar</p>
+      <div class="mt-4 text-xs text-slate-400">
+        <p class="font-bold tracking-wider text-emerald-300">STATION DIRECTORY</p>
+        <p class="mt-2">Concourse: Repairs · Trade Exchange · Outfitting · Resupply</p>
+        <p class="mt-2">Far end: Mission Office · Communications</p>
+        <p class="mt-2 text-slate-500">Rooms are walkable; transactions and personnel arrive in a later stage.</p>
       </div>
       <p id="starbase-launch-feedback" role="status" aria-live="polite" class="mt-6 text-xs text-emerald-300">Ready for departure.</p>
       <button id="starbase-launch" type="button" class="nav-button nav-primary mt-3 w-full">Launch from Green Starbase</button>

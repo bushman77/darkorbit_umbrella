@@ -60,3 +60,31 @@ test("one local static SBS hangar has an open flight entrance, station surfaces 
   assert.equal(geometry.disposed, true)
   assert.equal(material.disposed, true)
 })
+
+test("the actual rear door slides aside when a docked pilot approaches", () => {
+  const scene = {children: [], add(node) {this.children.push(node)},
+    remove(node) {this.children = this.children.filter(n => n !== node)}}
+  const station = new GreenStarbaseInterior(THREE, scene)
+  const left = station.doorLeft
+  const right = station.doorRight
+  station.update({room_id: "main_hangar", x: 0, z: -75}, 100)
+  station.update({room_id: "main_hangar", x: 0, z: -75}, 200)
+  assert.ok(left.at[0] < -3.95)
+  assert.ok(right.at[0] > 3.95)
+  station.update({room_id: "concourse", x: 0, z: -150}, 300)
+  assert.ok(station.doorOpen < 1)
+  station.dispose()
+})
+
+test("the concourse and six service rooms are built locally without streaming assets", () => {
+  const scene = {children: [], add(node) {this.children.push(node)},
+    remove(node) {this.children = this.children.filter(n => n !== node)}}
+  const station = new GreenStarbaseInterior(THREE, scene)
+  const surfaces = station.geometries.map(g => g.args)
+  assert.ok(surfaces.some(a => a[0] === 70 && a[2] === 84))
+  assert.ok(surfaces.some(a => a[0] === 28 && a[2] === 34))
+  assert.ok(surfaces.some(a => a[0] === 24 && a[2] === 27))
+  assert.equal(station.lights.length, 2)
+  station.dispose()
+  assert.equal(station.lights.length, 0)
+})

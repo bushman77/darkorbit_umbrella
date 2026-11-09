@@ -1440,6 +1440,18 @@ class SpaceClient {
     const pose = map.station_avatars?.find(
       avatar => entityKey(avatar.player_id) === this.selfId)
     this.stationPosition = this.docked && pose || null
+    const display = this.root.querySelector("#starbase-current-room")
+    if (display) {
+      const names = {
+        main_hangar: "Main Hangar", airlock: "Access Airlock",
+        concourse: "Station Concourse", repair_bay: "Repair Facility",
+        trade_exchange: "Trade Exchange", outfitting: "Equipment & Outfitting",
+        resupply: "Resupply", mission_office: "Mission Office",
+        communications: "Communications & Personnel",
+      }
+      display.textContent = "Current area: " +
+        (names[this.stationPosition?.room_id] || "Main Hangar")
+    }
   }
 
   clearDockingCountdown() {
