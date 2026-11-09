@@ -146,7 +146,9 @@ export class GreenStarbaseInterior {
     box([0.32, 19, 0.78], light, [7.85, 5.5, -83.0])
 
     // Short, physically connected airlock from the hangar to the concourse.
-    floor(18, 26, 0, -93.5)
+    // Hangar floor ends at z=-86 and concourse starts at -103.
+    // Fill the gap, rather than overlapping both slab surfaces (z-fighting).
+    floor(18, 17, 0, -94.5)
     wallZ(-9, -106.5, -82)
     wallZ(9, -106.5, -82)
     for (const z of [-99, -92, -86]) {
@@ -204,7 +206,8 @@ export class GreenStarbaseInterior {
       {side: 1, z: -168, title: "RESUPPLY", surface: maintenance},
     ]
     for (const {side, z, title, surface} of wings) {
-      const x = side * 48
+      // Meet the concourse slab at x=+/-35 without a 1-unit overlap.
+      const x = side * 49
       const front = z + 17
       const back = z - 17
       const gateZ = z === -130 ? -129 : -170
@@ -212,9 +215,8 @@ export class GreenStarbaseInterior {
       wallX(front, x - 14, x + 14, surface)
       wallX(back, x - 14, x + 14, surface)
       wallZ(side * 63, back, front, surface)
-      const inner = side * 34
-      wallZ(inner, back, gateZ - 5, surface)
-      wallZ(inner, gateZ + 5, front, surface)
+      // Concourse owns the inner wall around both doors. Another pair
+      // here at x=+/-34 would be exactly coplanar and flicker.
       box([11, 0.24, 7], light, [side * 36.5, -4.55, gateZ])
       // The label is readable from the corridor and remains stereoscopic.
       sign(title, side * 30.5, 20, gateZ, 12.5)
@@ -236,8 +238,8 @@ export class GreenStarbaseInterior {
       wallZ(sideX[0], -214, -187, surface)
       wallZ(sideX[1], -214, -187, surface)
       wallX(-214, ...sideX, surface)
-      wallX(-187, sideX[0], x - 5, surface)
-      wallX(-187, x + 5, sideX[1], surface)
+      // The concourse already owns the office doorway wall at z=-186.5.
+      // An almost-coincident wall here shimmered in perspective.
       sign(title, x, 19.8, -190, 16)
       box([14, 2.5, 5], supports, [x, -3.4, -208])
       box([11, 3, 0.25], glass, [x, 0.1, -205.3])

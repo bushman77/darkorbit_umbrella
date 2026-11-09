@@ -88,3 +88,36 @@ test("the concourse and six service rooms are built locally without streaming as
   station.dispose()
   assert.equal(station.lights.length, 0)
 })
+
+test("floors, ceilings and shared interior walls have no coplanar duplicates", () => {
+  const scene = {children: [], add(o) {this.children.push(o)},
+    remove(o) {this.children = this.children.filter(n => n !== o)}}
+  const interior = new GreenStarbaseInterior(THREE, scene)
+  const boxes = interior.node.children.map(node => ({
+    x: node.at?.[0], y: node.at?.[1], z: node.at?.[2],
+    w: node.geometry?.args?.[0], h: node.geometry?.args?.[1],
+    d: node.geometry?.args?.[2],
+  }))
+  const range = (c, size) => [c - size / 2, c + size / 2]
+  const overlap = (a, b) => Math.min(a[1], b[1]) - Math.max(a[0], b[0]) > 0.0001
+  for (let i = 0; i < boxes.length; i++) {
+    for (let j = i + 1; j < boxes.length; j++) {
+      const a = boxes[i], b = boxes[j]
+      const sameSlab = (a.y === -5.5 || a.y === 33) && a.y === b.y &&
+        (a.h === 1.5 || a.h === 2) && (b.h === 1.5 || b.h === 2)
+      if (sameSlab) assert.ok(
+        !(overlap(range(a.x, a.w), range(b.x, b.w)) &&
+          overlap(range(a.z, a.d), range(b.z, b.d))),
+        "coplanar floor/ceiling overlap")
+      const vertical = a.y === 13 && b.y === 13 && a.h === 39 && b.h === 39
+      if (!vertical) continue
+      const duplicateSide = a.w === 2 && b.w === 2 && a.x === b.x &&
+        overlap(range(a.z, a.d), range(b.z, b.d))
+      const duplicateRear = a.d === 2 && b.d === 2 && a.z === b.z &&
+        overlap(range(a.x, a.w), range(b.x, b.w))
+      assert.ok(!duplicateSide && !duplicateRear,
+        "duplicate coplanar vertical wall")
+    }
+  }
+  interior.dispose()
+})
