@@ -32,7 +32,7 @@ test("Blender metre-scale GLB is centered, feet-grounded, and faces the repair c
   assert.equal(model.position.z, mara.z)
   assert.ok(Math.abs(bounds.min.y - (-4.65)) < 0.001)
   assert.ok(Math.abs((bounds.max.y - bounds.min.y) - 8.5) < 0.001)
-  assert.ok(Math.abs(model.rotation.y - Math.PI) < 0.001)
+  assert.equal(model.rotation.y, 0)
   disposeStationCharacter(model)
 })
 
