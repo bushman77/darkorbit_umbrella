@@ -240,7 +240,8 @@ export class GreenStarbaseInterior {
       box([11, 0.24, 7], light, [side * 36.5, -4.55, gateZ])
       // Keep service entrances clear; the directory identifies each room.
       box([16, 2.2, 5], supports, [x, -3.4, z - 9])
-      box([11, 3.4, 0.35], glass, [x, 0.2, z - 6.3])
+      // The old 11x3.4 upright monitor obscured the staff. The shared
+      // modular-art layer supplies a low tablet on each counter instead.
       for (const lamp of [-9, 9]) {
         box([5.5, 0.3, 1], light, [x + lamp, 30.7, z])
       }
@@ -261,7 +262,8 @@ export class GreenStarbaseInterior {
       // An almost-coincident wall here shimmered in perspective.
       sign(title, x, 19.8, -190, 16)
       box([14, 2.5, 5], supports, [x, -3.4, -208])
-      box([11, 3, 0.25], glass, [x, 0.1, -205.3])
+      // Office counters use the same compact modular-art tablets rather
+      // than an additional upright monitor between pilot and attendant.
       box([12, 0.3, 1], light, [x, 30.5, -201])
     }
 
