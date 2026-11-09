@@ -1,3 +1,15 @@
+## Green Starbase modular graphics pass (2026-11-08)
+
+- [x] Retain existing server-authoritative station rooms, doorways, NPC kiosks and SBS pairing.
+- [x] Introduce a shared local Three.js modular-art layer with tiled PBR metal floors,
+      segmented wall skins, vents, conduits, recessed light strips, equipment racks,
+      kiosks and Green Starbase signage.
+- [x] Keep this visual layer separate from the walkable bounds, avoiding simulated
+      client-side collision authority or adding asset-stream traffic to Phoenix.
+- [ ] Validate rendering/frame pacing on Pop!_OS Tauri and Galaxy S21 SBS.
+- [ ] Import and curate actual Quaternius CC0 modular meshes after asset selection,
+      respecting the runtime size/draw-call budget and current collision topology.
+
 # 🚀 Darkorbit Umbrella – Roadmap
 
 ## 🎯 Vision
