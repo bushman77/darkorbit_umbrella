@@ -6,8 +6,8 @@ export const STATION_CHARACTER_ASSETS = Object.freeze({
 
 // Blender exports metres; the station's procedural characters are ~9 local
 // units high. Fit from the exported bounds instead of assuming Blender scale
-// or origin. The root is expected to face glTF's -Z; turn toward +Z (the
-// service counter / approaching pilot).
+// or origin. Mara's current Blender export already faces the repair kiosk
+// visitors without an additional 180-degree yaw.
 export function positionStationCharacter(THREE, gltf, npc, {
   floorY = -4.65, height = 8.5,
 } = {}) {
@@ -30,7 +30,7 @@ export function positionStationCharacter(THREE, gltf, npc, {
   anchor.name = "station-character:" + npc.id
   anchor.userData.nonInteractive = true
   anchor.position.set(npc.x, floorY, npc.z)
-  anchor.rotation.y = Math.PI
+  anchor.rotation.y = 0
 
   const fitted = new THREE.Group()
   fitted.scale.setScalar(scale)
