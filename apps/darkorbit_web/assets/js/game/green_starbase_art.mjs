@@ -204,15 +204,8 @@ export function buildGreenStarbaseArt({
     box([1.6, 0.48, 0.23], green, [x, -1.4, -184.56])
   }
 
-  // Large legible signs on the corridor facing rather than flat on side
-  // walls. From the airlock these face the pilot instead of edge-on.
-  for (const [title, x, z] of [
-    ["REPAIRS", -22, -123], ["TRADE EXCHANGE", 22, -123],
-    ["OUTFITTING", -22, -160], ["RESUPPLY", 22, -160],
-  ]) {
-    box([19, 3.8, 0.35], inset, [x, 22.0, z])
-    sign(title, x, 22.0, z + 0.22, 18.4)
-  }
+  // Floating service-room banners obstructed kiosks and attendants.
+  // Keep room labels in the station directory and HUD instead.
 
   // Industrial kiosks, screen terminals, rear-rack supplies and cargo
   // storage remain behind the existing counters (not in the passage).
@@ -234,7 +227,7 @@ export function buildGreenStarbaseArt({
     }
     box([2.3, 0.18, 0.12], amber, [x, 1.65, z + 0.80])
   }
-  const kiosk = (x, z, role) => {
+  const kiosk = (x, z) => {
     box([15.6, 0.22, 0.25], gunmetal, [x, -1.9, z + 3.7])
     for (const dx of [-7.2, 7.2]) {
       box([0.65, 3.9, 0.7], gunmetal, [x + dx, -2.9, z + 3.7])
@@ -243,17 +236,17 @@ export function buildGreenStarbaseArt({
     box([9.6, 0.16, 0.6], cyan, [x, -2.7, z + 4.08])
     box([5.9, 2.9, 0.3], inset, [x, 2.0, z + 5.2])
     box([5.2, 2.2, 0.10], cyan, [x, 2.0, z + 5.39])
-    sign(role, x, 5.8, z + 5.45, 11.2)
+    // Work surface and nearby visitor sightline stay clear of signs.
     // Narrow rear offices use closer racks so they do not poke through walls.
     const rackOffset = Math.abs(x) === 16 ? 7.7 : 9.3
     if (!lowPower) shelves(x - rackOffset, z - 0.6)
     shelves(x + rackOffset, z - 0.6)
   }
-  for (const [x, z, role] of [
-    [-49, -141, "REPAIR"], [49, -141, "TRADE"],
-    [-49, -179, "EQUIPMENT"], [49, -179, "SUPPLIES"],
-    [-16, -209, "MISSIONS"], [16, -209, "COMMS"],
-  ]) kiosk(x, z, role)
+  for (const [x, z] of [
+    [-49, -141], [49, -141],
+    [-49, -179], [49, -179],
+    [-16, -209], [16, -209],
+  ]) kiosk(x, z)
 
   // Hazard marks and vent strips are baked into floor-surface geometry,
   // without installing invisible walls or changing walk collision.
