@@ -226,7 +226,7 @@ export class GreenStarbaseInterior {
     }
 
     // Rear offices: actual separate navigable rooms, not clickable fake
-    buttons. NPC conversations and missions can be added afterward.
+    // buttons. NPC conversations and missions can be added afterward.
     for (const {x, title, surface} of [
       {x: -16, title: "MISSION OFFICE", surface: administration},
       {x: 16, title: "COMMUNICATIONS", surface: commerce},
