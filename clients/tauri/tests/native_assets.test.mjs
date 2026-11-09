@@ -10,24 +10,37 @@ test("game source module imports use bundled Three.js, not a CDN", () => {
     'import * as THREE from "/game/vendor/three.module.js"')
   assert.equal(localizeGameImports("import {foo} from './foo.mjs'"),
     "import {foo} from './foo.mjs'")
+  assert.equal(localizeGameImports(
+    'import {GLTFLoader} from "three/addons/loaders/GLTFLoader.js"'),
+    'import {GLTFLoader} from "/game/vendor/loaders/GLTFLoader.js"')
 })
 
 test("desktop packaging stages renderer and assets without build-time network access", async () => {
   const temp = await mkdtemp(path.join(tmpdir(), "space-nova-stage-"))
   const client = path.join(temp, "clients/tauri")
   const game = path.join(temp, "apps/darkorbit_web/assets/js/game")
-  const vendor = path.join(temp, "apps/darkorbit_web/assets/node_modules/three/build")
+  const vendor = path.join(temp, "apps/darkorbit_web/assets/node_modules/three")
   const images = path.join(temp, "apps/darkorbit_web/priv/static/images/game/ships")
+  const station = path.join(temp, "apps/darkorbit_web/priv/static/images/game/station")
   try {
-    for (const dir of [path.join(client, "ui"), game, vendor, images]) {
+    for (const dir of [path.join(client, "ui"), game,
+      path.join(vendor, "build"), path.join(vendor, "examples/jsm/loaders"),
+      path.join(vendor, "examples/jsm/utils"), images, station]) {
       await mkdir(dir, {recursive: true})
     }
     await writeFile(path.join(client, "ui/index.html"), "launcher")
     await writeFile(path.join(game, "stereo_view.js"), 'import * as THREE from "three"')
     await writeFile(path.join(game, "stereo_view_test.mjs"), "must not ship")
-    await writeFile(path.join(vendor, "three.module.js"), "export {}")
-    await writeFile(path.join(vendor, "three.core.js"), "export {}")
+    await writeFile(path.join(vendor, "build/three.module.js"), "export {}")
+    await writeFile(path.join(vendor, "build/three.core.js"), "export {}")
+    await writeFile(path.join(vendor, "examples/jsm/loaders/GLTFLoader.js"),
+      "import {Group} from 'three'; export class GLTFLoader {}")
+    await writeFile(path.join(vendor, "examples/jsm/utils/BufferGeometryUtils.js"),
+      "import {Group} from 'three'")
+    await writeFile(path.join(vendor, "examples/jsm/utils/SkeletonUtils.js"),
+      "import {Group} from 'three'")
     await writeFile(path.join(images, "local-scout.svg"), "<svg></svg>")
+    await writeFile(path.join(station, "mara_venn.glb"), "local-blender-model")
     const destination = path.join(client, "dist/ui")
     const result = await stageClient({sourceRoot: temp, client, destination, includeNativeGame: false})
     assert.equal(result.modules, 1)
@@ -36,6 +49,12 @@ test("desktop packaging stages renderer and assets without build-time network ac
       /game\/vendor\/three.module.js/)
     assert.equal(await readFile(path.join(destination, "images/game/ships/local-scout.svg"), "utf8"),
       "<svg></svg>")
+    assert.equal(await readFile(path.join(destination, "images/game/station/mara_venn.glb"), "utf8"),
+      "local-blender-model", "desktop bundles the Blender GLB without a runtime download")
+    assert.match(await readFile(path.join(destination, "game/vendor/loaders/GLTFLoader.js"), "utf8"),
+      /vendor\/three\.module\.js/, "loader imports the same local Three.js instance")
+    assert.match(await readFile(path.join(destination, "game/vendor/utils/SkeletonUtils.js"), "utf8"),
+      /vendor\/three\.module\.js/)
     await assert.rejects(readFile(path.join(destination, "game/stereo_view_test.mjs")))
   } finally {
     await rm(temp, {recursive: true, force: true})
