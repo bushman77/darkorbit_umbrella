@@ -192,3 +192,22 @@ test("modular art changes the playable station without touching the authoritativ
   mobile.dispose()
   assert.equal(scene.children.length, 0)
 })
+
+test("service counters have no overhead banners or floating attendant labels", () => {
+  const scene = {children: [], add(node) {this.children.push(node)},
+    remove(node) {this.children = this.children.filter(n => n !== node)}}
+  const room = new GreenStarbaseInterior(THREE, scene)
+  room.update({x: 0, z: 43}, 100, [
+    {id: "repair", x: -49, z: -143, name: "Mara Venn",
+      role: "Repair Engineer", color: 0x68b98a},
+    {id: "trade", x: 49, z: -143, name: "Tarek Sol",
+      role: "Trade Broker", color: 0x68b98a},
+  ])
+  assert.deepEqual([...room.signTexts].sort(), [
+    "STATION ACCESS", "CONCOURSE", "SERVICE DIRECTORY",
+    "MISSION OFFICE", "COMMUNICATIONS", "SPACE NOVA", "GREEN STARBASE",
+  ].sort(), "only entry, directory and wall-mounted wayfinding should remain")
+  assert.equal(room.node.children.some(mesh =>
+    mesh.name?.startsWith("station-sign:service:")), false)
+  room.dispose()
+})
