@@ -220,6 +220,13 @@ defmodule DarkorbitWeb.WorldChannel do
     end
   end
 
+  # Non-map input must not crash the authenticated channel process.
+  def handle_in("station_walk", _input, socket),
+    do: {:reply, {:error, %{reason: "invalid_station_controls"}}, socket}
+
+  def handle_in("station_look", _input, socket),
+    do: {:reply, {:error, %{reason: "invalid_station_look"}}, socket}
+
   def handle_in("station_launch", _payload, socket) do
     case World.launch(socket.assigns.world_session_id) do
       {:ok, status} -> {:reply, {:ok, status}, socket}
@@ -484,6 +491,19 @@ defmodule DarkorbitWeb.WorldChannel do
     {:noreply, socket}
   end
 
+  # Auto-docking happens in MapServer without a client request. Persist its
+  # confirmed berth promptly here (outside the physics tick) so a crash or
+  # restart doesn't accidentally return the pilot to open space.
+  def handle_info({:station_docked, %{entity_id: player_id} = payload},
+                  %{assigns: %{current_player_id: player_id}} = socket) do
+    case World.checkpoint_location(socket.assigns.world_session_id) do
+      :ok -> :ok
+      {:error, reason} -> Logger.warning("Station dock checkpoint: #{inspect(reason)}")
+    end
+    push(socket, "station_docked", payload)
+    {:noreply, socket}
+  end
+
   def handle_info({event, payload}, socket)
       when event in [
              :entity_left,
@@ -507,19 +527,6 @@ defmodule DarkorbitWeb.WorldChannel do
              :entity_destroyed
            ] do
     :ok = push(socket, Atom.to_string(event), payload)
-    {:noreply, socket}
-  end
-
-  # Auto-docking happens in MapServer without a client request. Persist its
-  # confirmed berth promptly here (outside the physics tick) so a crash or
-  # restart doesn't accidentally return the pilot to open space.
-  def handle_info({:station_docked, %{entity_id: player_id} = payload},
-                  %{assigns: %{current_player_id: player_id}} = socket) do
-    case World.checkpoint_location(socket.assigns.world_session_id) do
-      :ok -> :ok
-      {:error, reason} -> Logger.warning("Station dock checkpoint: #{inspect(reason)}")
-    end
-    push(socket, "station_docked", payload)
     {:noreply, socket}
   end
 

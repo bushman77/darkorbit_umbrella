@@ -52,8 +52,11 @@ test("the five-second docking countdown is rendered in both SBS eyes", () => {
 
 test("desktop and SBS render the same server-owned walking pose", () => {
   assert.match(view, /const position = client\.stationPosition/)
-  assert.match(view, /this\.camera\.position\.set\(x, 2\.6, z\)/)
-  assert.match(view, /this\.camera\.rotation\.set\(0, -yaw, 0, "YXZ"\)/)
+  // The viewport now interpolates the server-owned walking pose instead of
+  // snapping straight to the latest 100-ms network snapshot.
+  assert.match(view, /this\.camera\.position\.set\(this\.stationViewPose\.x, 2\.6, this\.stationViewPose\.z\)/)
+  assert.match(view, /this\.camera\.rotation\.set\(0, -this\.stationViewPose\.yaw, 0, "YXZ"\)/)
+  assert.match(view, /this\.stationViewPose\.x \+= \(targetX - this\.stationViewPose\.x\) \* blend/)
   assert.match(view, /this\.camera\.quaternion\.multiply\(this\.helmetHeadRotation\)/)
   assert.match(helmet, /this\.stationPosition = this\.docked \?/)
   assert.doesNotMatch(helmet, /channel\.push\("station_walk"|"station_look"/)

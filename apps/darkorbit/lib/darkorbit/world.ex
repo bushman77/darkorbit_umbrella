@@ -158,6 +158,18 @@ defmodule Darkorbit.World do
 
   defdelegate docking_status(session_id), to: Simulation
 
+  @doc """
+  Accept bounded station-walking axes for the authenticated docked session.
+  The map process owns the avatar coordinates and collision; only the desktop
+  pilot's world channel can invoke this API.
+  """
+  def station_walk(session_id, input) when is_map(input),
+    do: Simulation.station_walk(session_id, input)
+
+  @doc "Apply a bounded station heading change, not a client-supplied pose."
+  def station_look(session_id, input) when is_map(input),
+    do: Simulation.station_look(session_id, input)
+
   @doc "Settle any live combat and persist map-owned damage before disconnecting."
   def disconnect(session_id) do
     with :ok <- settle_on_disconnect(session_id),
