@@ -6,7 +6,7 @@ defmodule Core.World.StationInteriorTest do
     pose = Room.initial()
     assert {:ok, input} = Room.controls(%{"forward" => 1, "strafe" => 0, "turn" => 0})
     moved = Room.step(pose, input, 0.1)
-    assert_in_delta moved.z, 42.2, 0.0001
+    assert_in_delta moved.z, 41.6, 0.0001
     assert moved.x == pose.x
     far = Enum.reduce(1..2_000, pose, fn _, acc -> Room.step(acc, input, 0.1) end)
     assert far.z == -74.0

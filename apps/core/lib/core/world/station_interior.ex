@@ -8,7 +8,7 @@ defmodule Core.World.StationInterior do
   geometry model without changing the flight simulation.
   """
   @room "main_hangar"
-  @walk_speed 8.0
+  @walk_speed 14.0
   @turn_speed 1.8
   @xmin -25.0
   @xmax 25.0
