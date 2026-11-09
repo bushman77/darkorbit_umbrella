@@ -15,9 +15,9 @@ Place the original Blender export at **mara_venn.glb** in this directory.
 Export only the character meshes, materials, and any required rig/parents.
 Exclude Blender cameras, lights, reference images and helper geometry.
 Export **GLB (glTF 2.0 binary)** with material textures embedded. Keep the model
-upright, feet at ground level, and default facing toward glTF -Z; the runtime
-automatically rescales the mesh to 8.5 station units and turns it toward the
-repair kiosk's approaching pilots. Avoid Draco/meshopt compression until
+upright, feet at ground level, and facing toward the repair kiosk visitors.
+The runtime automatically rescales it to 8.5 station units and applies no
+additional yaw for Mara's current Blender export. Avoid Draco/meshopt compression until
 their decoders are bundled.
 
 For the current mobile SBS experiment aim for <= 20k triangles, <= 5 MB GLB,
