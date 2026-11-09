@@ -1,11 +1,15 @@
 import {greenStarbaseInteriorVisible} from "./green_starbase_interior_state.mjs"
+import {buildGreenStarbaseArt} from "./green_starbase_art.mjs"
 
 // Shared lightweight Three.js station interior. The docked ship has no actor
 // here: the pilot's authenticated room pose is replicated by MapServer, and
 // both the desktop and paired SBS viewer render the same local geometry.
 export class GreenStarbaseInterior {
-  constructor(THREE, scene) {
+  constructor(THREE, scene, {lowPower} = {}) {
     this.scene = scene
+    this.lowPower = typeof lowPower === "boolean" ? lowPower :
+      typeof navigator !== "undefined" &&
+      /Android|iPhone|iPad/i.test(navigator.userAgent || "")
     this.THREE = THREE
     this.materials = []
     this.geometries = []
@@ -34,18 +38,18 @@ export class GreenStarbaseInterior {
       return m
     }
 
-    const steel = material(0x122d2a)
-    const decking = material(0x183e35)
-    const bulkhead = material(0x071c19)
-    const supports = material(0x1c7351)
-    const rail = material(0x64b56f)
-    const light = material(0x76ffb0, 0x76ffb0)
+    const steel = material(0x293940)
+    const decking = material(0x23343b)
+    const bulkhead = material(0x172831)
+    const supports = material(0x45535b)
+    const rail = material(0x506e67)
+    const light = material(0x74eec4, 0x74eec4)
     const amber = material(0xffc46b, 0xffc46b)
-    const glass = material(0x092b28, 0x0e5142)
-    const commerce = material(0x237b79)
-    const maintenance = material(0x4b8b5b)
-    const equipment = material(0x6d8f48)
-    const administration = material(0x4d627f)
+    const glass = material(0x184d55, 0x184d55)
+    const commerce = material(0x2e6770)
+    const maintenance = material(0x465d57)
+    const equipment = material(0x576d51)
+    const administration = material(0x36485c)
 
     const add = (geometry, surface, x, y, z, rotation = null) => {
       this.geometries.push(geometry)
@@ -252,10 +256,16 @@ export class GreenStarbaseInterior {
       box([12, 0.3, 1], light, [x, 30.5, -201])
     }
 
-    const ambient = new T.HemisphereLight(0x79ffd2, 0x040b0c, 2.4)
+    this.art = buildGreenStarbaseArt({
+      THREE: T, box, add, sign,
+      materials: this.materials, textures: this.textures,
+      lowPower: this.lowPower,
+    })
+
+    const ambient = new T.HemisphereLight(0xc7e6dd, 0x101820, 1.65)
     this.scene.add(ambient)
     this.lights.push(ambient)
-    const overhead = new T.DirectionalLight(0x8dffb1, 2.3)
+    const overhead = new T.DirectionalLight(0xe2f5eb, 2.2)
     overhead.position.set(-12, 28, 17)
     this.scene.add(overhead)
     this.lights.push(overhead)
@@ -273,28 +283,62 @@ export class GreenStarbaseInterior {
           !Number.isInteger(npc.color) || typeof npc.name !== "string" ||
           typeof npc.role !== "string" || typeof npc.id !== "string") continue
       const uniform = new T.MeshStandardMaterial({
-        color: npc.color, roughness: 0.74, metalness: 0.16,
+        color: npc.color, roughness: 0.8, metalness: 0.12,
       })
-      const visor = new T.MeshBasicMaterial({color: 0xb6ffe2})
-      const shadow = new T.MeshStandardMaterial({color: 0x15352f})
-      this.materials.push(uniform, visor, shadow)
-      const part = (size, surface, dx, y, dz, label) => {
-        const geometry = new T.BoxGeometry(...size)
+      const skin = new T.MeshStandardMaterial({
+        color: npc.id === "comms" || npc.id === "trade" ? 0xa97857 : 0xd3a17f,
+        roughness: 0.95, metalness: 0.0,
+      })
+      const hair = new T.MeshStandardMaterial({
+        color: npc.id === "outfitting" || npc.id === "missions" ?
+          0x6b4e36 : 0x263038, roughness: 0.9, metalness: 0.0,
+      })
+      const visor = new T.MeshBasicMaterial({color: 0x8de8cf})
+      const shadow = new T.MeshStandardMaterial({
+        color: 0x192930, roughness: 0.8,
+      })
+      this.materials.push(uniform, skin, hair, visor, shadow)
+      const primitive = (kind, dims) => {
+        if (kind === "head" && T.SphereGeometry) {
+          return new T.SphereGeometry(dims[0], 12, 10)
+        }
+        if (kind === "tube" && T.CylinderGeometry) {
+          return new T.CylinderGeometry(dims[0], dims[1], dims[2], 10)
+        }
+        return new T.BoxGeometry(...dims.slice(0, 3))
+      }
+      const part = (kind, dimensions, surface, dx, y, dz, label) => {
+        const geometry = primitive(kind, dimensions)
         const mesh = new T.Mesh(geometry, surface)
         mesh.position.set(npc.x + dx, y, npc.z + dz)
         mesh.name = "attendant:" + npc.id + ":" + label
         this.geometries.push(geometry)
         this.node.add(mesh)
       }
-      // Local floor top is -4.75. Attendants stand behind service counters.
-      part([0.9, 2.8, 0.9], shadow, -0.7, -3.30, 0, "left-leg")
-      part([0.9, 2.8, 0.9], shadow, 0.7, -3.30, 0, "right-leg")
-      part([2.6, 4.2, 1.6], uniform, 0, 0.2, 0, "torso")
-      part([0.7, 3.3, 0.9], uniform, -1.65, -0.1, 0, "left-arm")
-      part([0.7, 3.3, 0.9], uniform, 1.65, -0.1, 0, "right-arm")
-      part([1.9, 1.9, 1.8], shadow, 0, 3.4, 0, "head")
-      part([1.7, 0.45, 0.12], visor, 0, 3.6, 0.97, "visor")
-      part([1.7, 0.28, 0.14], visor, 0, 0.7, 0.85, "badge")
+      // Round, tapered bodies instead of eight rectangular block pieces.
+      // The feet rest on the shared local floor (-4.75).
+      part("tube", [0.43, 0.40, 2.85], shadow, -0.60, -3.25, 0, "left-leg")
+      part("tube", [0.43, 0.40, 2.85], shadow, 0.60, -3.25, 0, "right-leg")
+      part("tube", [1.30, 0.83, 4.35], uniform, 0, 0.25, 0, "torso")
+      part("tube", [0.37, 0.33, 3.1], uniform, -1.37, 0.12, 0, "left-arm")
+      part("tube", [0.37, 0.33, 3.1], uniform, 1.37, 0.12, 0, "right-arm")
+      part("head", [0.95, 1.8, 1.8], skin, 0, 3.35, 0.03, "head")
+      part("head", [0.98, 1.8, 1.8], hair, 0, 3.95, -0.29, "hair")
+      part("box", [1.1, 0.22, 0.12], visor, 0, 0.82, 1.01, "badge")
+      // Extra uniform trim is visual-only, separate from the eight-part
+      // character identity set used by the shared SBS geometry tests.
+      const detail = (dims, surface, dx, y, dz, name) => {
+        const g = new T.BoxGeometry(...dims)
+        const m = new T.Mesh(g, surface)
+        m.position.set(npc.x + dx, y, npc.z + dz)
+        m.name = "uniform:" + npc.id + ":" + name
+        this.geometries.push(g)
+        this.node.add(m)
+      }
+      detail([2.0, 0.25, 1.56], shadow, 0, -1.75, 0, "belt")
+      detail([0.36, 0.3, 0.18], visor, -0.57, 1.32, 0.95, "insignia")
+      detail([0.24, 0.12, 0.30], shadow, -1.39, -1.32, 0.30, "left-cuff")
+      detail([0.24, 0.12, 0.30], shadow, 1.39, -1.32, 0.30, "right-cuff")
       this.addSign?.(npc.name, npc.x, 10.1, npc.z + 1.2, 15)
       this.addSign?.(npc.role.toUpperCase(), npc.x, 7.6, npc.z + 1.2, 14)
     }
