@@ -10,11 +10,22 @@ export const repoRoot = path.resolve(clientRoot, "../..")
 export const outputRoot = path.join(clientRoot, "dist", "ui")
 const moduleExtensions = new Set([".js", ".mjs"])
 const localThreeImport = '"/game/vendor/three.module.js"'
+const localGltfImport = '"/game/vendor/loaders/GLTFLoader.js"'
+const threeFiles = [
+  ["build/three.module.js", "three.module.js"],
+  ["build/three.core.js", "three.core.js"],
+  ["examples/jsm/loaders/GLTFLoader.js", "loaders/GLTFLoader.js"],
+  ["examples/jsm/utils/BufferGeometryUtils.js", "utils/BufferGeometryUtils.js"],
+  ["examples/jsm/utils/SkeletonUtils.js", "utils/SkeletonUtils.js"],
+]
 
 export function localizeGameImports(source) {
   // Avoid changing strings or user-generated content elsewhere in game files:
   // only quoted ES module specifiers in import/from statements are touched.
   return source.replace(
+    /(\bfrom\s*|\bimport\s*)["']three\/addons\/loaders\/GLTFLoader\.js["']/g,
+    (_match, prefix) => prefix + localGltfImport,
+  ).replace(
     /(\bfrom\s*|\bimport\s*)["']three["']/g,
     (_match, prefix) => prefix + localThreeImport,
   )
@@ -29,14 +40,14 @@ export async function stageClient({
   const uiSource = path.join(client, "ui")
   const gameSource = path.join(sourceRoot, "apps/darkorbit_web/assets/js/game")
   const gameImages = path.join(sourceRoot, "apps/darkorbit_web/priv/static/images/game")
-  const threeSource = path.join(sourceRoot, "apps/darkorbit_web/assets/node_modules/three/build")
+  const threeSource = path.join(sourceRoot, "apps/darkorbit_web/assets/node_modules/three")
   const vendor = path.join(destination, "game", "vendor")
 
   // Refuse to stage a partial runtime. Installing the web assets' locked npm
   // dependencies is an explicit build prerequisite (and a CI step).
-  for (const name of ["three.module.js", "three.core.js"]) {
+  for (const [sourcePath] of threeFiles) {
     try {
-      await readFile(path.join(threeSource, name))
+      await readFile(path.join(threeSource, sourcePath))
     } catch {
       throw new Error(
         "Three.js vendor files are missing. Run: npm ci --prefix apps/darkorbit_web/assets",
@@ -63,8 +74,12 @@ export async function stageClient({
   }
 
   await mkdir(vendor, {recursive: true})
-  for (const name of ["three.module.js", "three.core.js"]) {
-    await cp(path.join(threeSource, name), path.join(vendor, name))
+  for (const [sourcePath, destinationPath] of threeFiles) {
+    const target = path.join(vendor, destinationPath)
+    await mkdir(path.dirname(target), {recursive: true})
+    const source = await readFile(path.join(threeSource, sourcePath), "utf8")
+    // Addon sources import the same Three.js instance as the main renderer.
+    await writeFile(target, localizeGameImports(source))
   }
   await mkdir(path.join(destination, "images"), {recursive: true})
   await cp(gameImages, path.join(destination, "images", "game"), {recursive: true})
