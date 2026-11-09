@@ -1,6 +1,7 @@
 import test from "node:test"
 import assert from "node:assert/strict"
 import {GreenStarbaseInterior} from "./green_starbase_interior.js"
+import {STARBASE_ART_VERSION} from "./green_starbase_art.mjs"
 import {greenStarbaseInteriorVisible, pilotDockedInWorld} from
   "./green_starbase_interior_state.mjs"
 
@@ -49,7 +50,9 @@ test("one local static SBS hangar has an open flight entrance, station surfaces 
   const room = new GreenStarbaseInterior(THREE, scene)
   assert.equal(scene.children.includes(room.node), true)
   assert.equal(room.node.userData.nonInteractive, true)
-  assert.ok(room.node.children.length > 45)
+  assert.ok(room.node.children.length > 300)
+  assert.equal(room.art.version, STARBASE_ART_VERSION)
+  assert.equal(room.art.floorAreas, 9)
   assert.ok(room.geometries.some(g => g.args[0] === 84 && g.args[2] === 156))
   assert.ok(room.materials.length >= 7)
   assert.equal(room.node.children.every(child => child instanceof Mesh), true)
@@ -167,4 +170,25 @@ test("all six replicated kiosk staff render as distinct local figures", () => {
   room.update({x: 0, z: 43}, 200, attendants)
   assert.equal(room.node.children.length, count, "not reconstructed per frame")
   room.dispose()
+})
+
+test("modular art changes the playable station without touching the authoritative room topology", () => {
+  const scene = {children: [], add(node) {this.children.push(node)},
+    remove(node) {this.children = this.children.filter(n => n !== node)}}
+  const desktop = new GreenStarbaseInterior(THREE, scene, {lowPower: false})
+  assert.equal(desktop.art.version, "modular-industrial-v1")
+  assert.equal(desktop.art.floorAreas, 9)
+  assert.equal(desktop.art.quality, "desktop")
+  assert.ok(desktop.node.children.length > 350)
+  assert.ok(desktop.node.children.length < 750,
+    "desktop modular detail must respect a bounded draw-call budget")
+  const mobile = new GreenStarbaseInterior(THREE, scene, {lowPower: true})
+  assert.equal(mobile.art.quality, "mobile")
+  assert.ok(mobile.node.children.length < desktop.node.children.length,
+    "SBS handset should receive fewer decorative meshes")
+  assert.ok(mobile.node.children.length < 500,
+    "SBS station should use fewer than 500 static mesh objects")
+  desktop.dispose()
+  mobile.dispose()
+  assert.equal(scene.children.length, 0)
 })
