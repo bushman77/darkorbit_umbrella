@@ -211,3 +211,28 @@ test("service counters have no overhead banners or floating attendant labels", (
     mesh.name?.startsWith("station-sign:service:")), false)
   room.dispose()
 })
+
+test("all six service desks use small side tablets instead of upright monitors", () => {
+  for (const lowPower of [false, true]) {
+    const scene = {children: [], add(node) {this.children.push(node)},
+      remove(node) {this.children = this.children.filter(n => n !== node)}}
+    const room = new GreenStarbaseInterior(THREE, scene, {lowPower})
+    const tablets = room.node.children.filter(node =>
+      node.name?.startsWith("station-service-tablet:"))
+    assert.equal(tablets.length, 6, "each desk receives one low terminal")
+    for (const tablet of tablets) {
+      assert.deepEqual(tablet.geometry.args, [2.4, 0.30, 1.3])
+      assert.equal(tablet.at[1], -2.14, "tablet stays below the attendant's face")
+    }
+    const obsoleteScreens = room.node.children.filter(node => {
+      const [w, h, d] = node.geometry?.args || []
+      return (w === 5.9 && h === 2.9 && d === 0.3) ||
+        (w === 5.2 && h === 2.2 && d === 0.1) ||
+        (w === 11 && h === 3.4 && d === 0.35) ||
+        (w === 11 && h === 3 && d === 0.25)
+    })
+    assert.equal(obsoleteScreens.length, 0,
+      "no former tall kiosk or office display may remain")
+    room.dispose()
+  }
+})
