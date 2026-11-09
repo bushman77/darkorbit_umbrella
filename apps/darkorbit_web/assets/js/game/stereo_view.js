@@ -1,4 +1,5 @@
 import * as THREE from "three"
+import {GLTFLoader} from "three/addons/loaders/GLTFLoader.js"
 import {pointerNdc, toScene, toWorld} from "./stereo_math.mjs"
 import {stereoViewports, applyTransientStereoOffset} from "./stereo_viewport.mjs"
 import {cockpitHudFit, HUD_GEOMETRY} from "./stereo_layout.mjs"
@@ -124,7 +125,11 @@ export class StereoSpaceView {
     // from tactical entities and must not inherit ship camera/physics state.
     this.hangarScene = new THREE.Scene()
     this.hangarScene.background = new THREE.Color(0x03140e)
-    this.hangar = new GreenStarbaseInterior(THREE, this.hangarScene)
+    this.hangar = new GreenStarbaseInterior(THREE, this.hangarScene, {
+      // Optional local character asset. The GLB is packaged with the desktop
+      // client; the paired SBS display fetches it once as a static file.
+      loadGltf: url => new GLTFLoader().loadAsync(url),
+    })
     this.interiorActive = false
     this.stationViewPose = null
     this.stationLastFrameAt = null
