@@ -234,8 +234,12 @@ export function buildGreenStarbaseArt({
       box([0.28, 1.8, 0.18], green, [x + dx, -2.4, z + 4.13])
     }
     box([9.6, 0.16, 0.6], cyan, [x, -2.7, z + 4.08])
-    box([5.9, 2.9, 0.3], inset, [x, 2.0, z + 5.2])
-    box([5.2, 2.2, 0.10], cyan, [x, 2.0, z + 5.39])
+    // Compact, low-profile service tablet at one end of the counter,
+    // rather than a tall screen in the pilot's sightline to the attendant.
+    const tablet = box([2.4, 0.30, 1.3], inset,
+      [x + 4.3, -2.14, z + 3.5])
+    tablet.name = "station-service-tablet:" + x + ":" + z
+    box([2.0, 0.05, 0.9], cyan, [x + 4.3, -1.95, z + 3.5])
     // Work surface and nearby visitor sightline stay clear of signs.
     // Narrow rear offices use closer racks so they do not poke through walls.
     const rackOffset = Math.abs(x) === 16 ? 7.7 : 9.3
