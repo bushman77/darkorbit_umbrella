@@ -115,16 +115,25 @@ defmodule Core.World.GreenStarbaseDockingIntegrationTest do
     assert :ok = World.disconnect(session.id, ctx.opts)
   end
 
-  test "room transition is server-owned and saved alongside the parked ship", ctx do
+  test "room transition is server-owned and included in the parked ship report", ctx do
     at_starbase!()
     session = connect!(ctx, at(0, 0, -10))
     assert {:ok, %{docked: true}} = World.dock(session.id, ctx.opts)
     assert {:ok, _} = World.station_walk(session.id,
       %{"forward" => 1, "strafe" => 0, "turn" => 0}, ctx.opts)
+
+    # At 14 units/s and 100 ms per tick, the pilot travels 1.4 units per
+    # tick. After 105 ticks, z is near -104: still inside the airlock.
     for _ <- 1..105, do: assert {:ok, _} = World.tick(ctx.opts[:map_id], ctx.opts)
-    assert {:ok, %{station_position: %{room_id: room, z: z}}} =
+    assert {:ok, %{station_position: %{room_id: "airlock", z: airlock_z}}} =
       World.ship_condition(session.id, ctx.opts)
-    assert room == "concourse"
+    assert_in_delta airlock_z, -104.0, 0.1
+
+    # Continue walking through the threshold; do not weaken server collision
+    # or expect a concourse transition before physically reaching its door.
+    for _ <- 1..7, do: assert {:ok, _} = World.tick(ctx.opts[:map_id], ctx.opts)
+    assert {:ok, %{station_position: %{room_id: "concourse", z: z}}} =
+      World.ship_condition(session.id, ctx.opts)
     assert z < -106
     assert {:ok, snap} = World.snapshot(ctx.opts[:map_id], ctx.opts)
     assert [%{room_id: "concourse", player_id: @pilot}] = snap.station_avatars
