@@ -181,9 +181,12 @@ export class GreenStarbaseInterior {
     wallX(-186.5, -35, -21)
     wallX(-186.5, -11, 11)
     wallX(-186.5, 21, 35)
+    // Slim door-edge strips sit entirely in front of the wall's concourse
+    // face (wall center z=-186.5, thickness 2 => near face z=-185.5).
+    // The old strips ended on exactly that face, causing depth flicker.
     for (const x of [-16, 16]) {
-      box([1, 21, 1], light, [x - 5.1, 7, -186])
-      box([1, 21, 1], light, [x + 5.1, 7, -186])
+      box([0.45, 21, 0.35], light, [x - 5.1, 7, -185.15])
+      box([0.45, 21, 0.35], light, [x + 5.1, 7, -185.15])
       box([11, 1.1, 1], supports, [x, 17.5, -186])
     }
     for (const z of [-116, -140, -164, -181]) {

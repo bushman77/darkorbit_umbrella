@@ -121,3 +121,25 @@ test("floors, ceilings and shared interior walls have no coplanar duplicates", (
   }
   interior.dispose()
 })
+
+
+test("Mission Office and Communications door-edge lights clear the front wall face", () => {
+  const scene = {children: [], add(o) {this.children.push(o)},
+    remove(o) {this.children = this.children.filter(n => n !== o)}}
+  const interior = new GreenStarbaseInterior(THREE, scene)
+  const trim = interior.node.children.filter(node =>
+    node.at?.[2] === -185.15 && node.geometry?.args?.[1] === 21)
+  assert.equal(trim.length, 4)
+  for (const mesh of trim) {
+    const [width, height, depth] = mesh.geometry.args
+    assert.equal(width, 0.45)
+    assert.equal(height, 21)
+    assert.equal(depth, 0.35)
+    // Concourse-facing surface of the rear wall sits at z=-185.5.
+    // The light's rear face must be strictly in front of it.
+    assert.ok(mesh.at[2] - depth / 2 > -185.5)
+  }
+  assert.deepEqual(trim.map(mesh => mesh.at[0]).sort((a, b) => a - b),
+    [-21.1, -10.9, 10.9, 21.1])
+  interior.dispose()
+})
