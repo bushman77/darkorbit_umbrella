@@ -1,16 +1,26 @@
 import {greenStarbaseInteriorVisible} from "./green_starbase_interior_state.mjs"
 import {buildGreenStarbaseArt} from "./green_starbase_art.mjs"
+import {
+  STATION_CHARACTER_ASSETS, positionStationCharacter,
+  disposeStationCharacter,
+} from "./station_character_models.mjs"
 
 // Shared lightweight Three.js station interior. The docked ship has no actor
 // here: the pilot's authenticated room pose is replicated by MapServer, and
 // both the desktop and paired SBS viewer render the same local geometry.
 export class GreenStarbaseInterior {
-  constructor(THREE, scene, {lowPower} = {}) {
+  constructor(THREE, scene, {lowPower, loadGltf = null} = {}) {
     this.scene = scene
     this.lowPower = typeof lowPower === "boolean" ? lowPower :
       typeof navigator !== "undefined" &&
       /Android|iPhone|iPad/i.test(navigator.userAgent || "")
     this.THREE = THREE
+    // Optional, injected only by the live renderer. A missing GLB or loader
+    // must never stop the station from displaying its procedural attendants.
+    this.loadGltf = loadGltf
+    this.modelAttempted = false
+    this.importedCharacters = []
+    this.disposed = false
     this.materials = []
     this.geometries = []
     this.textures = []
@@ -344,9 +354,47 @@ export class GreenStarbaseInterior {
     }
   }
 
+  // Replace only Mara's procedural figure, after receiving the authoritative
+  // repair-attendant roster. Missing/broken assets leave the fallback intact.
+  requestCharacterModel(attendants) {
+    if (this.modelAttempted || this.disposed ||
+        typeof this.loadGltf !== "function") return
+    const npc = attendants.find(person => person?.id === "repair" &&
+      Number.isFinite(person.x) && Number.isFinite(person.z))
+    if (!npc) return
+    const url = STATION_CHARACTER_ASSETS[npc.id]
+    if (!url) return
+    this.modelAttempted = true
+    Promise.resolve().then(() => this.loadGltf(url)).then(gltf => {
+      if (this.disposed) {
+        disposeStationCharacter(gltf?.scene)
+        return
+      }
+      let model
+      try {
+        model = positionStationCharacter(this.THREE, gltf, npc)
+      } catch (error) {
+        disposeStationCharacter(gltf?.scene)
+        throw error
+      }
+      this.node.add(model)
+      this.importedCharacters.push(model)
+      // Keep the two existing name/role signs and the game interactions.
+      for (const mesh of this.node.children) {
+        if (mesh.name?.startsWith("attendant:repair:") ||
+            mesh.name?.startsWith("uniform:repair:")) mesh.visible = false
+      }
+    }).catch(error => {
+      // Asset is optional while Mara is still being exported in Blender.
+      // Only one request is made per station scene; no retry per frame.
+      console.info("Space Nova: using repair attendant fallback", error?.message)
+    })
+  }
+
   // Door movement and NPCs remain presentation-only, never authoritative.
   update(pose, time, attendants = []) {
     this.buildAttendants(attendants)
+    this.requestCharacterModel(attendants)
     const near = pose && Number.isFinite(pose.x) &&
       Number.isFinite(pose.z) && Math.abs(pose.x) <= 14 &&
       pose.z < -69 && pose.z > -111
@@ -360,6 +408,9 @@ export class GreenStarbaseInterior {
   }
 
   dispose() {
+    this.disposed = true
+    this.importedCharacters.forEach(disposeStationCharacter)
+    this.importedCharacters = []
     this.scene.remove(this.node)
     this.lights.forEach(light => this.scene.remove(light))
     this.geometries.forEach(geometry => geometry.dispose())
