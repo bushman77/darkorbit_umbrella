@@ -45,7 +45,8 @@ defmodule DarkorbitWeb.NativeClientCors do
   # bundled Tauri origins as well as the configured HTTPS host and local dev.
   def socket_origin_allowed?(
         %URI{} = uri,
-        dev_origins \\ Application.get_env(:darkorbit_web, :native_dev_socket_origins, [])
+        dev_origins \\ Application.get_env(:darkorbit_web, :native_dev_socket_origins, []),
+        hmd_hosts \\ DarkorbitWeb.HelmetNetwork.hosts()
       ) do
     native? =
       (uri.scheme == "tauri" and uri.host == "localhost") or
@@ -56,21 +57,33 @@ defmodule DarkorbitWeb.NativeClientCors do
       |> Keyword.get(:url, [])
       |> Keyword.get(:host, "localhost")
 
-    public? = uri.scheme == "https" and uri.host == public_host and uri.port in [443, 4000]
+    public? =
+      uri.scheme == "https" and
+        uri.host == public_host and
+        uri.port in [443, 4000]
+
     dev? =
       uri.host in ["localhost", "127.0.0.1"] and
-        uri.scheme in ["http", "https"] and uri.port == 4000
+        uri.scheme in ["http", "https"] and
+        uri.port == 4000
 
-    # Tauri dev runs the packaged UI on its own loopback origin (port 1430
-    # on Pop!_OS). Accept only explicitly configured origins in development;
-    # production never configures this allowlist.
+    # Allow explicitly configured Tauri development origins.
     tauri_dev? = URI.to_string(uri) in dev_origins
-    # Explicit opt-in for trusted phone-only LAN TLS. This is absent in
-    # production and allows only the exact configured host and port.
+
+    # Allow the explicitly configured HTTPS LAN origin for the helmet.
     helmet_lan? =
       URI.to_string(uri) ==
         Application.get_env(:darkorbit_web, :helmet_dev_lan_https_origin, "")
 
-    native? or public? or dev? or tauri_dev? or helmet_lan?
+    # Allow HTTP connections from discovered HMD LAN hosts only when
+    # explicitly enabled in development.
+    hmd_lan? =
+      Application.get_env(:darkorbit_web, :allow_hmd_lan_socket_origin, false) == true and
+        uri.scheme == "http" and
+        uri.port == 4000 and
+        is_binary(uri.host) and
+        uri.host in hmd_hosts
+
+    native? or public? or dev? or tauri_dev? or helmet_lan? or hmd_lan?
   end
 end
