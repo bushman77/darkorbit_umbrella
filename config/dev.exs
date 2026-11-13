@@ -73,6 +73,12 @@ config :darkorbit_web, registration_email_enabled: true,
 # Production does not load config/dev.exs.
 config :darkorbit_web, native_dev_socket_origins: ["http://127.0.0.1:1430"]
 
+# HMD pairing uses the laptop's discovered LAN address (e.g. 192.168.x.x)
+# but /socket has its own origin check. In development only, accept HTTP
+# WebSocket origins matching this machine's active HMD LAN host list.
+# Production does not load this setting.
+config :darkorbit_web, allow_hmd_lan_socket_origin: true
+
 # Enable dev routes for dashboard and mailbox
 config :darkorbit_web, dev_routes: true
 

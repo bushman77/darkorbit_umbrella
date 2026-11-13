@@ -45,7 +45,8 @@ defmodule DarkorbitWeb.NativeClientCors do
   # bundled Tauri origins as well as the configured HTTPS host and local dev.
   def socket_origin_allowed?(
         %URI{} = uri,
-        dev_origins \\ Application.get_env(:darkorbit_web, :native_dev_socket_origins, [])
+        dev_origins \\ Application.get_env(:darkorbit_web, :native_dev_socket_origins, []),
+        hmd_hosts \\ DarkorbitWeb.HelmetNetwork.hosts()
       ) do
     native? =
       (uri.scheme == "tauri" and uri.host == "localhost") or
@@ -66,6 +67,15 @@ defmodule DarkorbitWeb.NativeClientCors do
     # production never configures this allowlist.
     tauri_dev? = URI.to_string(uri) in dev_origins
 
-    native? or public? or dev? or tauri_dev?
+    # HMD pairing already discovers the laptop's own LAN interfaces. Allow
+    # browser WebSockets from only those exact hosts, and only when explicitly
+    # enabled in development. Don't accept arbitrary RFC1918/private origins,
+    # and never enable plaintext LAN origins in a production release.
+    hmd_lan? =
+      Application.get_env(:darkorbit_web, :allow_hmd_lan_socket_origin, false) == true and
+        uri.scheme == "http" and uri.port == 4000 and
+        is_binary(uri.host) and uri.host in hmd_hosts
+
+    native? or public? or dev? or tauri_dev? or hmd_lan?
   end
 end
