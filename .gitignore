@@ -31,3 +31,6 @@ erl_crash.dump
 
 # Generated Space Nova release packages
 /dist/releases/
+
+# Local headset HTTPS certificates and private keys; never commit.
+/apps/darkorbit_web/priv/cert/

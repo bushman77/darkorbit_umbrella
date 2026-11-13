@@ -49,29 +49,91 @@ if System.get_env("DARKORBIT_DEV_HTTPS") == "1" do
     ]
 end
 
-# Optional private-LAN HMD HTTPS on a SEPARATE port. Keep the Tauri
-# localhost HTTP listener on :4000 so the native launcher is unaffected.
-# Only enable on a trusted LAN with a certificate signed by a CA trusted by
-# the Android phone. Never transfer the CA private key to the device.
-if System.get_env("DARKORBIT_DEV_LAN_HTTPS") == "1" do
-  host = System.fetch_env!("DARKORBIT_DEV_LAN_HOST")
-  case :inet.parse_address(String.to_charlist(host)) do
-    {:ok, {a, b, c, d}} when a in 1..255 and b in 0..255 and
-                             c in 0..255 and d in 1..254 -> :ok
-    _ -> raise "DARKORBIT_DEV_LAN_HOST must be an explicit valid LAN IPv4 address"
+# The Galaxy headset requires a secure context for orientation sensors.
+# Always run its separate HTTPS listener on port 4443 in development.
+# Tauri keeps the ordinary HTTP listener on port 4000. No launch flags needed.
+# Use a certificate trusted by Android with the LAN address in its SAN.
+#
+# Prefer an explicit host override for unusual networks; otherwise discover the
+# laptop's active private Wi-Fi/LAN IP, prioritizing Wi-Fi over wired/VPN.
+# This is intentionally restricted to the dev config: production TLS is
+# terminated independently by Caddy.
+lan_host =
+  case System.get_env("DARKORBIT_DEV_LAN_HOST") do
+    host when is_binary(host) and host != "" ->
+      String.trim(host)
+
+    _ ->
+      interfaces =
+        case :inet.getifaddrs() do
+          {:ok, found} -> found
+          {:error, reason} -> raise "Could not discover headset LAN IP: #{inspect(reason)}"
+        end
+
+      candidates =
+        for {interface, attrs} <- interfaces,
+            :up in Keyword.get(attrs, :flags, []),
+            {:addr, {a, b, c, d}} <- attrs,
+            a == 10 or (a == 172 and b in 16..31) or
+              (a == 192 and b == 168) or (a == 100 and b in 64..127) do
+          name = to_string(interface)
+          priority =
+            cond do
+              String.match?(name, ~r/^(wl|wlan|wifi)/i) -> 0
+              String.match?(name, ~r/^(en|eth)/i) -> 1
+              String.match?(name, ~r/^(usb|rndis)/i) -> 2
+              String.match?(name, ~r/^(tailscale|wg|tun|tap)/i) -> 3
+              String.match?(name, ~r/^(docker|veth|br-|virbr|podman)/i) -> 9
+              true -> 4
+            end
+
+          {priority, {a, b, c, d}}
+        end
+
+      case candidates |> Enum.sort_by(&elem(&1, 0)) |> List.first() do
+        {_, address} -> address |> :inet.ntoa() |> to_string()
+        nil ->
+          raise "No active private LAN IPv4 for the headset. " <>
+                  "Connect Wi-Fi or set DARKORBIT_DEV_LAN_HOST to the laptop's LAN IP."
+      end
   end
-  cert_dir = Path.expand("../apps/darkorbit_web/priv/cert", __DIR__)
 
-  config :darkorbit_web, DarkorbitWeb.Endpoint,
-    https: [
-      ip: {0, 0, 0, 0}, port: 4443, cipher_suite: :strong,
-      certfile: Path.join(cert_dir, "localhost.pem"),
-      keyfile: Path.join(cert_dir, "localhost-key.pem")
-    ]
+case :inet.parse_address(String.to_charlist(lan_host)) do
+  {:ok, {a, b, c, d}}
+      when b in 0..255 and c in 0..255 and d in 1..254 and
+             (a == 10 or (a == 172 and b in 16..31) or
+                (a == 192 and b == 168) or (a == 100 and b in 64..127)) ->
+    :ok
 
-  config :darkorbit_web, :helmet_dev_lan_https_origin,
-    "https://" <> host <> ":4443"
+  _ ->
+    raise "Headset HTTPS needs a private LAN IPv4 address; got #{inspect(lan_host)}"
 end
+
+cert_dir = Path.expand("../apps/darkorbit_web/priv/cert", __DIR__)
+certfile = Path.join(cert_dir, "localhost.pem")
+keyfile = Path.join(cert_dir, "localhost-key.pem")
+
+unless File.regular?(certfile) and File.regular?(keyfile) do
+  raise """
+  Headset HTTPS is mandatory in local development, but the TLS certificate
+  or key is missing from #{cert_dir}.
+  Generate a locally trusted certificate with mkcert containing localhost,
+  127.0.0.1 and #{lan_host}; trust the issuing CA on the phone.
+  Never commit certificate private keys.
+  """
+end
+
+config :darkorbit_web, DarkorbitWeb.Endpoint,
+  https: [
+    ip: {0, 0, 0, 0},
+    port: 4443,
+    cipher_suite: :strong,
+    certfile: certfile,
+    keyfile: keyfile
+  ]
+
+config :darkorbit_web, :helmet_dev_lan_https_origin,
+  "https://" <> lan_host <> ":4443"
 
 # Reload browser tabs when matching files change.
 config :darkorbit_web, DarkorbitWeb.Endpoint,
