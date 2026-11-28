@@ -1,3 +1,8 @@
+## 2026-11-28 — SBS token comparison maintenance
+
+- Replaced the deprecated ring comparison API in both invitation and session token verification with subtle::ConstantTimeEq; retained ring secure randomness and the existing token lifetime, single-use and TLS checks. Promoted the already locked subtle 2.6.1 to a direct dependency, without updating other Cargo packages.
+- Added token comparison regression coverage (matching, mismatched, truncated and extended tokens). Cargo/Mix unavailable in editing environment; locked build, Rust tests, Mix precommit and manual SBS pairing remain pending. No release or deployment.
+
 ## 2026-11-27 — Station attendant gestures
 
 - Any clip in a station GLB that is not the idle and not ai3d's `ai3d_pose_test` is now treated as a gesture: a one-shot performed over the idle every 14-30 seconds, weighted in and out on a smoothstep so it never pops, with the idle still playing underneath so the attendant never snaps to a different base pose. Timing is seeded from the attendant's contact key, so two attendants in a room do not gesture together and the same pilot sees the same behaviour on every visit.

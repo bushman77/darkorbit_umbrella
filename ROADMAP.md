@@ -1,3 +1,8 @@
+## 2026-11-28 — SBS token comparison maintenance
+
+- Replaced the deprecated ring comparison API in both invitation and session token verification with subtle::ConstantTimeEq; retained ring secure randomness and the existing token lifetime, single-use and TLS checks. Promoted the already locked subtle 2.6.1 to a direct dependency, without updating other Cargo packages.
+- Added token comparison regression coverage (matching, mismatched, truncated and extended tokens). Cargo/Mix unavailable in editing environment; locked build, Rust tests, Mix precommit and manual SBS pairing remain pending. No release or deployment.
+
 ## 2026-11-27 — Docked repair HUD synchronization
 
 - Local native playtest reported stale upper-left hull after complimentary repair. The server already returns its repaired parked condition; the native client now renders those confirmed values independently of the dialogue lifecycle. Join includes the authenticated ship's private condition, including docked reconnects; fitting reuses the same HUD presenter. Stale flight entities cannot overwrite docked health. No gameplay economy or repair authorization changes.

@@ -1,6 +1,7 @@
 //! TLS-only headset LAN relay, started on demand by the native HMD panel.
 //! No arbitrary asset bridge or control commands. Invitations are single-use.
-use ring::{constant_time, rand::{SecureRandom, SystemRandom}};
+use ring::rand::{SecureRandom, SystemRandom};
+use subtle::ConstantTimeEq;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, Map};
 use std::{
@@ -521,12 +522,17 @@ fn sanitize_world(raw: &Value) -> Result<Value, String> {
     Ok(map)
 }
 
+// Tokens are generated as fixed-length hex strings. Compare their contents
+// without data-dependent early exit; lengths are not secret.
+fn tokens_match(expected: &str, candidate: &str) -> bool {
+    bool::from(expected.as_bytes().ct_eq(candidate.as_bytes()))
+}
+
 async fn authorized_session(shared: &Shared, candidate: Option<&str>) -> bool {
     if !shared.verified.load(Ordering::Acquire) {return false}
     let expected = shared.session.lock().await;
     expected.as_deref().is_some_and(|secret| candidate.is_some_and(|value|
-        constant_time::verify_slices_are_equal(
-            secret.as_bytes(), value.as_bytes()).is_ok()))
+        tokens_match(secret, value)))
 }
 
 async fn serve(listener: TcpListener, tls: TlsAcceptor, shared: Arc<Shared>, address: SocketAddr) {
@@ -575,8 +581,7 @@ async fn serve_one(socket: TcpStream, acceptor: TlsAcceptor,
             let correct = Instant::now() < shared.expires &&
                 secret.as_deref().is_some_and(|expected|
                     bearer.is_some_and(|candidate|
-                        constant_time::verify_slices_are_equal(
-                            expected.as_bytes(), candidate.as_bytes()).is_ok()));
+                        tokens_match(expected, candidate)));
             if correct { *secret = None; }
             drop(secret);
             if correct {
@@ -699,6 +704,17 @@ async fn respond<S: AsyncWrite + Unpin>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn token_comparison_accepts_only_matching_values() {
+        let expected = "0123456789abcdef".repeat(3);
+        assert!(tokens_match(&expected, &expected));
+        assert!(!tokens_match(&expected, &format!("f{}", &expected[1..])));
+        assert!(!tokens_match(&expected, &format!("{}0", &expected[..47])));
+        assert!(!tokens_match(&expected, &expected[..47]));
+        assert!(!tokens_match(&expected, ""));
+        assert!(!tokens_match(&expected, &format!("{expected}0")));
+    }
     #[test]
     fn local_tls_selects_ring_without_requiring_a_global_crypto_provider() {
         // Reproduces the previously panicking initial configuration step:
